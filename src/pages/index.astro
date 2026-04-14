@@ -24,7 +24,6 @@ const totalMarkers = config.nodes.reduce((sum, n) => sum + n.markers.length, 0)
 	</div>
 
 	<!-- ══════════ VIGNETTE / GRAIN OVERLAY ══════════ -->
-	<div id="vignette-overlay"></div>
 
 	<!-- ══════════ HEADER ══════════ -->
 	<header id="header">
@@ -338,8 +337,8 @@ const totalMarkers = config.nodes.reduce((sum, n) => sum + n.markers.length, 0)
 		pointer-events: none;
 		background: radial-gradient(
 			ellipse at center,
-			transparent 60%,
-			rgba(0, 0, 0, 0.15) 100%
+			transparent 80%,
+			rgba(0, 0, 0, 0.05) 100%
 		);
 	}
 

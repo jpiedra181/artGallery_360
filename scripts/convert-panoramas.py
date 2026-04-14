@@ -85,8 +85,9 @@ def convert_hdr(src_path: str) -> None:
     h, w = img_hdr.shape[:2]
     print(f"  Resolución original: {w} × {h}")
 
-    # Tone mapping Reinhard
-    tonemap = cv2.createTonemapReinhard(gamma=1.0, intensity=0.0, light_adapt=0.8, color_adapt=0.0)
+    # Tone mapping Reinhard con gamma 2.2 (corrección sRGB estándar)
+    # + intensidad positiva para levantar la exposición general
+    tonemap = cv2.createTonemapReinhard(gamma=2.2, intensity=0.8, light_adapt=0.8, color_adapt=0.0)
     img_ldr = tonemap.process(img_hdr.astype(np.float32))
 
     # Clamp y convertir a 8-bit
