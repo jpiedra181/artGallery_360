@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 80" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C9A84C"/>
+      <stop offset="50%" stop-color="#E8D48B"/>
+      <stop offset="100%" stop-color="#C9A84C"/>
+    </linearGradient>
+  </defs>
+  <!-- Decorative line -->
+  <line x1="0" y1="72" x2="280" y2="72" stroke="url(#gold)" stroke-width="0.5" opacity="0.6"/>
+  <!-- GS monogram -->
+  <text x="12" y="52" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="700" fill="url(#gold)" letter-spacing="2">GS</text>
+  <!-- Separator -->
+  <line x1="82" y1="18" x2="82" y2="58" stroke="url(#gold)" stroke-width="0.5" opacity="0.5"/>
+  <!-- Gallery name -->
+  <text x="96" y="36" font-family="Georgia, 'Times New Roman', serif" font-size="20" font-weight="400" fill="#E8D48B" letter-spacing="4">GALERIA</text>
+  <text x="96" y="58" font-family="Georgia, 'Times New Roman', serif" font-size="20" font-weight="400" fill="#E8D48B" letter-spacing="6">SERENA</text>
+</svg>

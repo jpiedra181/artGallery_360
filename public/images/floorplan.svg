@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300" fill="none">
+  <defs>
+    <style>
+      .wall { stroke: #C9A84C; stroke-width: 2; fill: none; }
+      .wall-fill { fill: rgba(201,168,76,0.06); }
+      .door { stroke: #C9A84C; stroke-width: 1.5; stroke-dasharray: 6 3; }
+      .label { font-family: Georgia, serif; fill: #C9A84C; font-size: 13px; text-anchor: middle; letter-spacing: 2px; }
+      .sublabel { font-family: 'Helvetica Neue', sans-serif; fill: rgba(201,168,76,0.5); font-size: 9px; text-anchor: middle; letter-spacing: 1px; }
+      .furniture { stroke: rgba(201,168,76,0.3); stroke-width: 1; fill: none; }
+      .dim { font-family: 'Helvetica Neue', sans-serif; fill: rgba(201,168,76,0.35); font-size: 8px; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="600" height="300" fill="transparent"/>
+
+  <!-- Sala Esculturas (left) -->
+  <rect x="40" y="50" width="220" height="200" class="wall wall-fill" rx="2"/>
+  <!-- Pedestals -->
+  <rect x="90" y="100" width="24" height="24" class="furniture" rx="2"/>
+  <rect x="160" y="90" width="24" height="24" class="furniture" rx="2"/>
+  <rect x="120" y="170" width="24" height="24" class="furniture" rx="2"/>
+  <rect x="195" y="160" width="24" height="24" class="furniture" rx="2"/>
+  <circle cx="75" cy="190" r="10" class="furniture"/>
+  <text x="150" y="145" class="label">ESCULTURAS</text>
+  <text x="150" y="160" class="sublabel">SALA I</text>
+
+  <!-- Passageway -->
+  <line x1="260" y1="120" x2="340" y2="120" class="door"/>
+  <line x1="260" y1="180" x2="340" y2="180" class="door"/>
+  <line x1="260" y1="50" x2="260" y2="120" class="wall"/>
+  <line x1="260" y1="180" x2="260" y2="250" class="wall"/>
+  <line x1="340" y1="50" x2="340" y2="120" class="wall"/>
+  <line x1="340" y1="180" x2="340" y2="250" class="wall"/>
+  <text x="300" y="155" class="sublabel">PASILLO</text>
+
+  <!-- Sala Pinturas (right) -->
+  <rect x="340" y="50" width="220" height="200" class="wall wall-fill" rx="2"/>
+  <!-- Paintings on walls (small rectangles) -->
+  <rect x="360" y="68" width="30" height="20" class="furniture" rx="1"/>
+  <rect x="410" y="68" width="40" height="20" class="furniture" rx="1"/>
+  <rect x="500" y="68" width="35" height="20" class="furniture" rx="1"/>
+  <rect x="360" y="214" width="40" height="20" class="furniture" rx="1"/>
+  <rect x="460" y="214" width="30" height="20" class="furniture" rx="1"/>
+  <rect x="542" y="100" width="4" height="30" class="furniture" rx="1"/>
+  <rect x="542" y="170" width="4" height="30" class="furniture" rx="1"/>
+  <text x="450" y="145" class="label">PINTURAS</text>
+  <text x="450" y="160" class="sublabel">SALA II</text>
+
+  <!-- Dimensions -->
+  <text x="150" y="270" class="dim">12.0 m</text>
+  <text x="450" y="270" class="dim">12.0 m</text>
+  <text x="300" y="270" class="dim">4.5 m</text>
+
+  <!-- Entry arrow -->
+  <line x1="150" y1="252" x2="150" y2="260" stroke="rgba(201,168,76,0.3)" stroke-width="1"/>
+  <polygon points="145,260 155,260 150,268" fill="rgba(201,168,76,0.3)"/>
+  <text x="150" y="285" class="sublabel">ENTRADA</text>
+</svg>

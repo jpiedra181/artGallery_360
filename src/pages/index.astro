@@ -1,0 +1,1125 @@
+---
+import Layout from "../layouts/Layout.astro"
+import { tourConfig } from "../data/tour-config"
+
+const config = tourConfig
+const totalMarkers = config.nodes.reduce((sum, n) => sum + n.markers.length, 0)
+---
+
+<Layout title={`${config.brand.name} — Tour Virtual 360°`}>
+	<!-- ══════════ LOADING SCREEN ══════════ -->
+	<div id="loading-screen">
+		<div class="loading-inner">
+			<img
+				src={config.brand.logo}
+				alt={config.brand.name}
+				class="loading-logo"
+			/>
+			<p class="loading-tagline">{config.brand.tagline}</p>
+			<div class="loading-bar-track">
+				<div class="loading-bar-fill" id="loading-bar"></div>
+			</div>
+			<p class="loading-pct" id="loading-pct">0 %</p>
+		</div>
+	</div>
+
+	<!-- ══════════ VIGNETTE / GRAIN OVERLAY ══════════ -->
+	<div id="vignette-overlay"></div>
+
+	<!-- ══════════ HEADER ══════════ -->
+	<header id="header">
+		<a href="/" class="header-brand">
+			<img
+				src={config.brand.logo}
+				alt={config.brand.name}
+				class="header-logo"
+			/>
+		</a>
+		<div class="header-center">
+			<span class="room-indicator" id="room-indicator"></span>
+		</div>
+		<div class="header-right">
+			<!-- Obras counter -->
+			<div class="obras-counter" id="obras-counter">
+				<svg
+					width="16"
+					height="16"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+					></path><circle cx="12" cy="12" r="3"></circle></svg
+				>
+				<span id="obras-count">0</span> / <span>{totalMarkers}</span>
+			</div>
+			<!-- Audio guide button -->
+			<button class="header-btn" id="btn-audio" title="Audioguía">
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					><path d="M9 18V5l12-2v13"></path><circle
+						cx="6"
+						cy="18"
+						r="3"></circle><circle cx="18" cy="16" r="3"
+					></circle></svg
+				>
+			</button>
+			<!-- Fullscreen -->
+			<button
+				class="header-btn"
+				id="btn-fullscreen"
+				title="Pantalla completa"
+			>
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					><polyline points="15 3 21 3 21 9"></polyline><polyline
+						points="9 21 3 21 3 15"></polyline><line
+						x1="21"
+						y1="3"
+						x2="14"
+						y2="10"></line><line x1="3" y1="21" x2="10" y2="14"
+					></line></svg
+				>
+			</button>
+			<!-- Menu hamburger -->
+			<button class="header-btn" id="btn-menu" title="Menú">
+				<svg
+					width="18"
+					height="18"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><line x1="3" y1="6" x2="21" y2="6"></line><line
+						x1="3"
+						y1="12"
+						x2="21"
+						y2="12"></line><line x1="3" y1="18" x2="21" y2="18"
+					></line></svg
+				>
+			</button>
+		</div>
+	</header>
+
+	<!-- ══════════ SIDE MENU ══════════ -->
+	<div id="side-menu" class="side-menu">
+		<div class="menu-header">
+			<h2>{config.brand.name}</h2>
+			<button class="menu-close" id="menu-close">
+				<svg
+					width="20"
+					height="20"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><line x1="18" y1="6" x2="6" y2="18"></line><line
+						x1="6"
+						y1="6"
+						x2="18"
+						y2="18"></line></svg
+				>
+			</button>
+		</div>
+		<nav class="menu-nav">
+			<p class="menu-section-title">Salas</p>
+			{
+				config.nodes.map((node) => (
+					<button class="menu-room-btn" data-node-id={node.id}>
+						<img
+							src={node.thumbnail}
+							alt={node.name}
+							class="menu-room-thumb"
+						/>
+						<div>
+							<span class="menu-room-name">{node.name}</span>
+							<span class="menu-room-count">
+								{node.markers.length} obras
+							</span>
+						</div>
+					</button>
+				))
+			}
+		</nav>
+		<div class="menu-footer">
+			<p class="menu-contact-label">Contacto</p>
+			<p class="menu-contact">{config.brand.contact.phone}</p>
+			<p class="menu-contact">{config.brand.contact.email}</p>
+		</div>
+	</div>
+
+	<!-- ══════════ VIEWER CONTAINER ══════════ -->
+	<div id="viewer"></div>
+
+	<!-- ══════════ ZOOM CONTROLS ══════════ -->
+	<div class="zoom-controls" id="zoom-controls">
+		<button class="zoom-btn" id="btn-zoom-in" title="Acercar">
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				><line x1="12" y1="5" x2="12" y2="19"></line><line
+					x1="5"
+					y1="12"
+					x2="19"
+					y2="12"></line></svg
+			>
+		</button>
+		<button class="zoom-btn" id="btn-zoom-out" title="Alejar">
+			<svg
+				width="18"
+				height="18"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				><line x1="5" y1="12" x2="19" y2="12"></line></svg
+			>
+		</button>
+	</div>
+
+	<!-- ══════════ FLOORPLAN MINIMAP ══════════ -->
+	<div class="minimap" id="minimap">
+		<div class="minimap-header">
+			<span class="minimap-title">Plano</span>
+			<button
+				class="minimap-toggle"
+				id="minimap-toggle"
+				title="Expandir plano"
+			>
+				<svg
+					width="14"
+					height="14"
+					viewBox="0 0 24 24"
+					fill="none"
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					><polyline points="15 3 21 3 21 9"></polyline><polyline
+						points="9 21 3 21 3 15"></polyline></svg
+				>
+			</button>
+		</div>
+		<div class="minimap-body">
+			<img
+				src={config.floorplan.image}
+				alt="Plano de la galería"
+				class="minimap-img"
+			/>
+			{
+				config.nodes.map((node) => (
+					<button
+						class="minimap-dot"
+						data-node-id={node.id}
+						style={`left: ${node.floorplanPosition.left}; top: ${node.floorplanPosition.top};`}
+						title={node.name}
+					>
+						<span class="minimap-dot-ring" />
+					</button>
+				))
+			}
+		</div>
+	</div>
+
+	<!-- ══════════ INFO PANEL (slides from right) ══════════ -->
+	<div class="info-panel" id="info-panel">
+		<button class="info-panel-close" id="info-panel-close">
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+				stroke-linecap="round"
+				><line x1="18" y1="6" x2="6" y2="18"></line><line
+					x1="6"
+					y1="6"
+					x2="18"
+					y2="18"></line></svg
+			>
+		</button>
+		<div class="info-panel-content">
+			<h2 class="info-panel-title" id="info-panel-title"></h2>
+			<div class="info-panel-divider"></div>
+			<div class="info-panel-desc" id="info-panel-desc"></div>
+		</div>
+	</div>
+</Layout>
+
+<!-- ══════════════════════════════════════════════════════════════
+     STYLES
+     ══════════════════════════════════════════════════════════════ -->
+<style>
+	/* ─── Loading Screen ───────────────────────────────────────── */
+	#loading-screen {
+		position: fixed;
+		inset: 0;
+		z-index: 9999;
+		background: var(--color-bg);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition:
+			opacity 0.6s ease,
+			visibility 0.6s ease;
+	}
+	#loading-screen.hidden {
+		opacity: 0;
+		visibility: hidden;
+		pointer-events: none;
+	}
+	.loading-inner {
+		text-align: center;
+		animation: fadeIn 0.8s ease;
+	}
+	.loading-logo {
+		width: 200px;
+		margin-bottom: 24px;
+		opacity: 0.9;
+	}
+	.loading-tagline {
+		font-family: var(--font-sans);
+		font-size: 13px;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+		margin-bottom: 40px;
+	}
+	.loading-bar-track {
+		width: 200px;
+		height: 2px;
+		background: var(--color-border);
+		border-radius: 1px;
+		margin: 0 auto 12px;
+	}
+	.loading-bar-fill {
+		height: 100%;
+		width: 0%;
+		background: var(--color-gold);
+		border-radius: 1px;
+		transition: width 0.3s ease;
+	}
+	.loading-pct {
+		font-family: var(--font-sans);
+		font-size: 12px;
+		color: var(--color-text-muted);
+		letter-spacing: 2px;
+	}
+
+	/* ─── Vignette Overlay ─────────────────────────────────────── */
+	#vignette-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 5;
+		pointer-events: none;
+		background: radial-gradient(
+			ellipse at center,
+			transparent 60%,
+			rgba(0, 0, 0, 0.15) 100%
+		);
+	}
+
+	/* ─── Header ───────────────────────────────────────────────── */
+	#header {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		z-index: 100;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 16px 24px;
+		height: 64px;
+		background: linear-gradient(
+			180deg,
+			rgba(14, 13, 12, 0.8) 0%,
+			transparent 100%
+		);
+		animation: fadeIn 0.8s ease 0.3s both;
+	}
+	.header-brand {
+		display: flex;
+		align-items: center;
+		text-decoration: none;
+	}
+	.header-logo {
+		height: 36px;
+		width: auto;
+	}
+	.header-center {
+		flex: 1;
+		text-align: center;
+	}
+	.room-indicator {
+		font-family: var(--font-sans);
+		font-size: 12px;
+		font-weight: 500;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+		background: var(--glass);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		border: 1px solid var(--glass-border);
+		border-radius: 20px;
+		padding: 6px 18px;
+		display: inline-block;
+	}
+	.header-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.header-btn {
+		width: 40px;
+		height: 40px;
+		border: none;
+		border-radius: 50%;
+		background: var(--glass);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		border: 1px solid var(--glass-border);
+		color: var(--color-gold-light);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: var(--transition);
+	}
+	.header-btn:hover {
+		background: rgba(201, 168, 76, 0.15);
+		border-color: var(--color-gold-dim);
+	}
+	.header-btn.active {
+		background: rgba(201, 168, 76, 0.2);
+		border-color: var(--color-gold);
+	}
+
+	.obras-counter {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-family: var(--font-sans);
+		font-size: 12px;
+		font-weight: 500;
+		color: var(--color-gold-light);
+		letter-spacing: 1px;
+		background: var(--glass);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		border: 1px solid var(--glass-border);
+		border-radius: 20px;
+		padding: 6px 14px;
+		margin-right: 4px;
+	}
+
+	/* ─── Side Menu ────────────────────────────────────────────── */
+	.side-menu {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 200;
+		width: 340px;
+		max-width: 90vw;
+		background: var(--glass);
+		backdrop-filter: blur(24px);
+		-webkit-backdrop-filter: blur(24px);
+		border-left: 1px solid var(--glass-border);
+		transform: translateX(100%);
+		transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		display: flex;
+		flex-direction: column;
+	}
+	.side-menu.open {
+		transform: translateX(0);
+	}
+	.menu-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20px 24px;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.menu-header h2 {
+		font-family: var(--font-serif);
+		font-size: 20px;
+		font-weight: 600;
+		color: var(--color-gold-light);
+		letter-spacing: 1px;
+	}
+	.menu-close {
+		width: 36px;
+		height: 36px;
+		border: none;
+		border-radius: 50%;
+		background: transparent;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: var(--transition);
+	}
+	.menu-close:hover {
+		color: var(--color-gold-light);
+		background: rgba(255, 255, 255, 0.05);
+	}
+	.menu-nav {
+		flex: 1;
+		overflow-y: auto;
+		padding: 20px 16px;
+	}
+	.menu-section-title {
+		font-family: var(--font-sans);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+		padding: 0 8px;
+		margin-bottom: 12px;
+	}
+	.menu-room-btn {
+		width: 100%;
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 12px;
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--color-text);
+		cursor: pointer;
+		transition: var(--transition);
+		text-align: left;
+	}
+	.menu-room-btn:hover {
+		background: rgba(201, 168, 76, 0.08);
+		border-color: var(--color-border);
+	}
+	.menu-room-btn.active {
+		background: rgba(201, 168, 76, 0.12);
+		border-color: var(--color-gold-dim);
+	}
+	.menu-room-thumb {
+		width: 64px;
+		height: 44px;
+		border-radius: 6px;
+		object-fit: cover;
+	}
+	.menu-room-name {
+		display: block;
+		font-weight: 500;
+		font-size: 14px;
+		margin-bottom: 2px;
+	}
+	.menu-room-count {
+		font-size: 12px;
+		color: var(--color-text-muted);
+	}
+	.menu-footer {
+		padding: 20px 24px;
+		border-top: 1px solid var(--color-border);
+	}
+	.menu-contact-label {
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+		margin-bottom: 8px;
+	}
+	.menu-contact {
+		font-size: 13px;
+		color: var(--color-text-muted);
+		margin-bottom: 4px;
+	}
+
+	/* ─── Viewer ───────────────────────────────────────────────── */
+	#viewer {
+		width: 100%;
+		height: 100vh;
+	}
+
+	/* ─── Zoom Controls ────────────────────────────────────────── */
+	.zoom-controls {
+		position: fixed;
+		right: 24px;
+		bottom: 24px;
+		z-index: 100;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		animation: slideInUp 0.6s ease 0.5s both;
+	}
+	.zoom-btn {
+		width: 40px;
+		height: 40px;
+		border: none;
+		border-radius: var(--radius-sm);
+		background: var(--glass);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		border: 1px solid var(--glass-border);
+		color: var(--color-gold-light);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: var(--transition);
+	}
+	.zoom-btn:hover {
+		background: rgba(201, 168, 76, 0.15);
+		border-color: var(--color-gold-dim);
+	}
+
+	/* ─── Minimap ──────────────────────────────────────────────── */
+	.minimap {
+		position: fixed;
+		left: 24px;
+		bottom: 24px;
+		z-index: 100;
+		width: 200px;
+		background: var(--glass);
+		backdrop-filter: blur(16px);
+		-webkit-backdrop-filter: blur(16px);
+		border: 1px solid var(--glass-border);
+		border-radius: var(--radius);
+		overflow: hidden;
+		transition:
+			width 0.4s ease,
+			height 0.4s ease;
+		animation: slideInLeft 0.6s ease 0.5s both;
+	}
+	.minimap.expanded {
+		width: 360px;
+	}
+	.minimap-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 10px 14px;
+		border-bottom: 1px solid var(--color-border);
+	}
+	.minimap-title {
+		font-family: var(--font-sans);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 3px;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+	}
+	.minimap-toggle {
+		width: 24px;
+		height: 24px;
+		border: none;
+		border-radius: 4px;
+		background: transparent;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: var(--transition);
+	}
+	.minimap-toggle:hover {
+		color: var(--color-gold-light);
+		background: rgba(255, 255, 255, 0.05);
+	}
+	.minimap-body {
+		position: relative;
+		padding: 12px;
+	}
+	.minimap-img {
+		width: 100%;
+		height: auto;
+		display: block;
+		border-radius: 4px;
+	}
+	.minimap-dot {
+		position: absolute;
+		width: 18px;
+		height: 18px;
+		transform: translate(-50%, -50%);
+		border: none;
+		border-radius: 50%;
+		cursor: pointer;
+		background: var(--color-gold);
+		z-index: 2;
+		transition: var(--transition);
+	}
+	.minimap-dot:hover {
+		transform: translate(-50%, -50%) scale(1.3);
+	}
+	.minimap-dot.active {
+		background: #fff;
+		box-shadow: 0 0 0 3px var(--color-gold);
+	}
+	.minimap-dot-ring {
+		position: absolute;
+		inset: -4px;
+		border-radius: 50%;
+		border: 2px solid var(--color-gold);
+		opacity: 0;
+	}
+	.minimap-dot.active .minimap-dot-ring {
+		animation: pulse-ring 1.5s ease-out infinite;
+		opacity: 1;
+	}
+
+	/* ─── Info Panel ───────────────────────────────────────────── */
+	.info-panel {
+		position: fixed;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		z-index: 150;
+		width: 400px;
+		max-width: 92vw;
+		background: var(--glass);
+		backdrop-filter: blur(24px);
+		-webkit-backdrop-filter: blur(24px);
+		border-left: 1px solid var(--glass-border);
+		transform: translateX(100%);
+		transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+		display: flex;
+		flex-direction: column;
+	}
+	.info-panel.open {
+		transform: translateX(0);
+	}
+	.info-panel-close {
+		position: absolute;
+		top: 16px;
+		right: 16px;
+		width: 36px;
+		height: 36px;
+		border: none;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.05);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: var(--transition);
+		z-index: 2;
+	}
+	.info-panel-close:hover {
+		color: var(--color-gold-light);
+		background: rgba(255, 255, 255, 0.1);
+	}
+	.info-panel-content {
+		padding: 48px 32px 32px;
+		overflow-y: auto;
+		flex: 1;
+	}
+	.info-panel-title {
+		font-family: var(--font-serif);
+		font-size: 26px;
+		font-weight: 600;
+		color: var(--color-gold-light);
+		line-height: 1.3;
+		margin-bottom: 16px;
+	}
+	.info-panel-divider {
+		width: 40px;
+		height: 2px;
+		background: var(--color-gold);
+		margin-bottom: 20px;
+		border-radius: 1px;
+	}
+	.info-panel-desc {
+		font-family: var(--font-sans);
+		font-size: 14px;
+		line-height: 1.7;
+		color: var(--color-text);
+	}
+	.info-panel-desc :global(p) {
+		margin-bottom: 12px;
+	}
+	.info-panel-desc :global(strong) {
+		color: var(--color-gold-light);
+		font-weight: 500;
+	}
+	.info-panel-desc :global(em) {
+		font-style: italic;
+		color: var(--color-gold-light);
+	}
+
+	/* ─── Custom Markers ───────────────────────────────────────── */
+	:global(.marker-info),
+	:global(.marker-lightbox) {
+		cursor: pointer;
+		transition: transform 0.3s ease;
+	}
+	:global(.marker-info:hover),
+	:global(.marker-lightbox:hover) {
+		transform: scale(1.15);
+	}
+
+	/* ─── Responsive ───────────────────────────────────────────── */
+	@media (max-width: 640px) {
+		.minimap {
+			width: 150px;
+			left: 12px;
+			bottom: 12px;
+		}
+		.minimap.expanded {
+			width: 280px;
+		}
+		.zoom-controls {
+			right: 12px;
+			bottom: 12px;
+		}
+		#header {
+			padding: 12px 16px;
+		}
+		.header-logo {
+			height: 28px;
+		}
+		.obras-counter {
+			display: none;
+		}
+		.info-panel {
+			width: 100%;
+			max-width: 100vw;
+		}
+	}
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════
+     CLIENT-SIDE SCRIPT
+     ══════════════════════════════════════════════════════════════ -->
+<script>
+	//@ts-nocheck
+	import { Viewer } from "@photo-sphere-viewer/core"
+	import { MarkersPlugin } from "@photo-sphere-viewer/markers-plugin"
+	import { VirtualTourPlugin } from "@photo-sphere-viewer/virtual-tour-plugin"
+	import "@photo-sphere-viewer/core/index.css"
+	import "@photo-sphere-viewer/markers-plugin/index.css"
+	import "@photo-sphere-viewer/virtual-tour-plugin/index.css"
+	import lightGallery from "lightgallery"
+	import "lightgallery/css/lightgallery.css"
+
+	import { tourConfig } from "../data/tour-config"
+	import type {
+		TourMarker,
+		MarkerInfo,
+		MarkerLightbox,
+	} from "../data/tour-config"
+
+	// ─── State ──────────────────────────────────────────────────
+	const config = tourConfig
+	let currentNodeId = config.nodes[0].id
+	const seenMarkers = new Set<string>()
+	const totalMarkers = config.nodes.reduce(
+		(sum, n) => sum + n.markers.length,
+		0,
+	)
+
+	// ─── DOM refs ───────────────────────────────────────────────
+	const loadingScreen = document.getElementById("loading-screen")!
+	const loadingBar = document.getElementById("loading-bar")!
+	const loadingPct = document.getElementById("loading-pct")!
+	const roomIndicator = document.getElementById("room-indicator")!
+	const obrasCount = document.getElementById("obras-count")!
+	const infoPanel = document.getElementById("info-panel")!
+	const infoPanelTitle = document.getElementById("info-panel-title")!
+	const infoPanelDesc = document.getElementById("info-panel-desc")!
+	const minimap = document.getElementById("minimap")!
+	const sideMenu = document.getElementById("side-menu")!
+
+	// ─── Marker HTML builders ──────────────────────────────────
+	function markerInfoHTML(): string {
+		return `<div class="marker-info" style="
+      width:32px;height:32px;border-radius:50%;
+      background:rgba(201,168,76,0.2);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+      border:1.5px solid rgba(201,168,76,0.5);
+      display:flex;align-items:center;justify-content:center;
+      color:#E8D48B;font-family:Georgia,serif;font-size:15px;font-weight:700;font-style:italic;
+    ">i</div>`
+	}
+
+	function markerLightboxHTML(): string {
+		return `<div class="marker-lightbox" style="
+      width:32px;height:32px;border-radius:50%;
+      background:rgba(201,168,76,0.15);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+      border:1.5px solid rgba(201,168,76,0.4);
+      display:flex;align-items:center;justify-content:center;
+    "><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E8D48B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>`
+	}
+
+	// ─── Build virtual-tour nodes ──────────────────────────────
+	function buildVTNodes() {
+		return config.nodes.map((node) => ({
+			id: node.id,
+			panorama: node.panorama,
+			thumbnail: node.thumbnail,
+			name: node.name,
+			markers: node.markers.map((m: TourMarker) => ({
+				id: m.id,
+				position: m.position,
+				html:
+					m.type === "info" ? markerInfoHTML() : markerLightboxHTML(),
+				tooltip: m.tooltip,
+				size: { width: 32, height: 32 },
+				anchor: "center center" as const,
+				data: m,
+			})),
+			links: node.links.map((link) => ({
+				nodeId: link.nodeId,
+				position: link.position,
+				name: link.label,
+			})),
+		}))
+	}
+
+	// ─── Loading simulation ────────────────────────────────────
+	let loadProgress = 0
+	const loadInterval = setInterval(() => {
+		loadProgress = Math.min(loadProgress + Math.random() * 15, 90)
+		loadingBar.style.width = loadProgress + "%"
+		loadingPct.textContent = Math.round(loadProgress) + " %"
+	}, 200)
+
+	// ─── Initialize PSV ────────────────────────────────────────
+	const viewer = new Viewer({
+		container: document.getElementById("viewer")!,
+		navbar: false,
+		touchmoveTwoFingers: true,
+		mousewheelCtrlKey: true,
+		defaultZoomLvl: 50,
+		plugins: [
+			[MarkersPlugin, {}],
+			[
+				VirtualTourPlugin,
+				{
+					nodes: buildVTNodes(),
+					startNodeId: config.nodes[0].id,
+					renderMode: "3d",
+					transitionOptions: {
+						speed: "10rpm",
+						showLoader: false,
+					},
+				},
+			],
+		],
+	})
+
+	const markersPlugin = viewer.getPlugin(MarkersPlugin) as InstanceType<
+		typeof MarkersPlugin
+	>
+	const vtPlugin = viewer.getPlugin(VirtualTourPlugin) as InstanceType<
+		typeof VirtualTourPlugin
+	>
+
+	// ─── Loading complete ──────────────────────────────────────
+	viewer.addEventListener(
+		"ready",
+		() => {
+			clearInterval(loadInterval)
+			loadingBar.style.width = "100%"
+			loadingPct.textContent = "100 %"
+			setTimeout(() => {
+				loadingScreen.classList.add("hidden")
+			}, 400)
+			updateRoomUI(currentNodeId)
+		},
+		{ once: true },
+	)
+
+	// ─── Node change handler ───────────────────────────────────
+	vtPlugin.addEventListener("node-changed", (e: any) => {
+		currentNodeId = e.node.id
+		updateRoomUI(currentNodeId)
+		closeInfoPanel()
+		closeSideMenu()
+	})
+
+	// ─── Marker click handler ─────────────────────────────────
+	markersPlugin.addEventListener("select-marker", (e: any) => {
+		const data = e.marker.data as TourMarker | undefined
+		if (!data) return
+
+		// Track seen
+		seenMarkers.add(data.id)
+		obrasCount.textContent = String(seenMarkers.size)
+
+		if (data.type === "info") {
+			openInfoPanel(data as MarkerInfo)
+		} else if (data.type === "lightbox") {
+			openLightbox(data as MarkerLightbox)
+		}
+	})
+
+	// ─── UI Update ─────────────────────────────────────────────
+	function updateRoomUI(nodeId: string) {
+		const idx = config.nodes.findIndex((n) => n.id === nodeId)
+		const node = config.nodes[idx]
+		if (!node) return
+
+		roomIndicator.textContent = `${node.name}  \u00b7  ${idx + 1}/${config.nodes.length}`
+
+		// Minimap dots
+		document
+			.querySelectorAll<HTMLElement>(".minimap-dot")
+			.forEach((dot) => {
+				dot.classList.toggle("active", dot.dataset.nodeId === nodeId)
+			})
+
+		// Menu room buttons
+		document
+			.querySelectorAll<HTMLElement>(".menu-room-btn")
+			.forEach((btn) => {
+				btn.classList.toggle("active", btn.dataset.nodeId === nodeId)
+			})
+	}
+
+	// ─── Info Panel ────────────────────────────────────────────
+	function openInfoPanel(marker: MarkerInfo) {
+		infoPanelTitle.textContent = marker.title
+		infoPanelDesc.innerHTML = marker.description
+		infoPanel.classList.add("open")
+	}
+
+	function closeInfoPanel() {
+		infoPanel.classList.remove("open")
+	}
+
+	document
+		.getElementById("info-panel-close")!
+		.addEventListener("click", closeInfoPanel)
+
+	// ─── LightGallery ─────────────────────────────────────────
+	const lgContainer = document.createElement("div")
+	lgContainer.style.display = "none"
+	document.body.appendChild(lgContainer)
+
+	let lgInstance: ReturnType<typeof lightGallery> | null = null
+
+	function openLightbox(marker: MarkerLightbox) {
+		// Destruir instancia previa para evitar fugas
+		if (lgInstance) {
+			lgInstance.destroy()
+			lgInstance = null
+		}
+
+		// Crear nueva instancia con el elemento correcto
+		lgInstance = lightGallery(lgContainer, {
+			dynamic: true,
+			dynamicEl: [
+				{
+					src: marker.lightboxSrc,
+					subHtml: `<p>${marker.lightboxCaption}</p>`,
+				},
+			],
+			download: false,
+			counter: false,
+			closable: true,
+			hideControlOnEnd: true,
+		})
+
+		lgInstance.openGallery(0)
+	}
+
+	// ─── Zoom Controls ────────────────────────────────────────
+	document.getElementById("btn-zoom-in")!.addEventListener("click", () => {
+		viewer.zoom(viewer.getZoomLevel() + 15)
+	})
+	document.getElementById("btn-zoom-out")!.addEventListener("click", () => {
+		viewer.zoom(viewer.getZoomLevel() - 15)
+	})
+
+	// ─── Fullscreen ────────────────────────────────────────────
+	document.getElementById("btn-fullscreen")!.addEventListener("click", () => {
+		if (!document.fullscreenElement) {
+			document.documentElement.requestFullscreen().catch(() => {})
+		} else {
+			document.exitFullscreen().catch(() => {})
+		}
+	})
+
+	// ─── Side Menu ─────────────────────────────────────────────
+	function openSideMenu() {
+		sideMenu.classList.add("open")
+	}
+	function closeSideMenu() {
+		sideMenu.classList.remove("open")
+	}
+
+	document.getElementById("btn-menu")!.addEventListener("click", openSideMenu)
+	document
+		.getElementById("menu-close")!
+		.addEventListener("click", closeSideMenu)
+
+	document.querySelectorAll<HTMLElement>(".menu-room-btn").forEach((btn) => {
+		btn.addEventListener("click", () => {
+			const nodeId = btn.dataset.nodeId
+			if (nodeId && nodeId !== currentNodeId) {
+				vtPlugin.setCurrentNode(nodeId)
+			}
+			closeSideMenu()
+		})
+	})
+
+	// ─── Minimap navigation ───────────────────────────────────
+	document.querySelectorAll<HTMLElement>(".minimap-dot").forEach((dot) => {
+		dot.addEventListener("click", () => {
+			const nodeId = dot.dataset.nodeId
+			if (nodeId && nodeId !== currentNodeId) {
+				vtPlugin.setCurrentNode(nodeId)
+			}
+		})
+	})
+
+	// ─── Minimap expand/collapse ──────────────────────────────
+	document.getElementById("minimap-toggle")!.addEventListener("click", () => {
+		minimap.classList.toggle("expanded")
+	})
+
+	// ─── Audio guide button (UI ready, no audio) ─────────────
+	const btnAudio = document.getElementById("btn-audio")!
+	btnAudio.addEventListener("click", () => {
+		btnAudio.classList.toggle("active")
+	})
+
+	// ─── Close panels on Escape ───────────────────────────────
+	document.addEventListener("keydown", (e) => {
+		if (e.key === "Escape") {
+			closeInfoPanel()
+			closeSideMenu()
+		}
+	})
+
+	// ─── Close info panel on clicking viewer background ───────
+	viewer.addEventListener("click", () => {
+		closeInfoPanel()
+	})
+</script>
