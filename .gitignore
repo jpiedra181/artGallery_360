@@ -23,8 +23,14 @@ pnpm-debug.log*
 # jetbrains setting folder
 .idea/
 
-# HDR/EXR panoramas (heavy raw files)
-raw/*.hdr
-raw/*.HDR
-raw/*.exr
-raw/*.EXR
+# Blender working files: scenes, renders and downloaded sources are rebuilt
+# from blender/scripts (see README)
+blender/*.blend
+blender/*.blend1
+blender/renders/
+blender/sources/
+blender/textures/
+__pycache__/
+
+# local tooling output
+.playwright-mcp/

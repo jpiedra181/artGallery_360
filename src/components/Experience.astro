@@ -1,0 +1,518 @@
+---
+/**
+ * The whole exhibition. Rendered once per route (/ and /<room>/) so every
+ * URL works on its own, is crawlable and readable without JavaScript. The
+ * client script upgrades it into the immersive 360° experience and then
+ * navigates between routes without reloading.
+ */
+import Icon from "./Icon.astro";
+import assets from "../data/assets.json";
+import hubGeometry from "../data/hub-geometry.json";
+import { credits, hub, rooms, site, type RoomSlug } from "../data/rooms";
+
+interface Props {
+	route: "hub" | RoomSlug;
+}
+
+const { route } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const href = (slug: "hub" | RoomSlug) => (slug === "hub" ? base : `${base}${slug}/`);
+const asset = (p: string) => `${base}${p}`;
+
+type Still = { widths: number[]; avif: Record<string, string>; webp: Record<string, string>; lqip?: string } | null;
+type Art = { width: number; height: number; avif: Record<string, string>; webp: Record<string, string> };
+const scenes = (assets as { scenes: Record<string, { tiers: unknown; mask: string | null; still: Still }> }).scenes;
+const art = (assets as { art: Record<string, Art> }).art;
+
+const srcset = (set: Record<string, string>) =>
+	Object.entries(set)
+		.map(([w, url]) => `${asset(url)} ${w}w`)
+		.join(", ");
+
+const current = route === "hub" ? null : rooms.find((r) => r.slug === route)!;
+const posterScene = scenes[route] ?? scenes.hub;
+const poster = posterScene?.still ?? null;
+
+const artAlt: Record<RoomSlug, string> = {
+	wave: "Woodblock print: a towering blue wave curls over three long boats, its crest breaking into claw-like foam; Mount Fuji, small and snow-capped, sits in the distance.",
+	rain: "Woodblock print: people under hats and straw mats hurry across a long wooden bridge in heavy rain drawn as fine dark lines, while a raft drifts on the river below a dark band of cloud.",
+	stillness: "Oil painting: a green arched footbridge crosses a pond crowded with water lilies, framed by weeping willows and dense foliage in greens, pinks and violets.",
+	moonlight: "Oil painting: a full moon glows through a tunnel of clouds above a calm river; tall ships stand in silhouette and torches burn on barges to the right.",
+};
+
+// Data the client needs. Text stays in the HTML; only engine settings travel as JSON.
+const clientConfig = {
+	base,
+	route,
+	hub: { title: hub.title, effects: hub.effects, geometry: hubGeometry },
+	rooms: rooms.map((r) => ({
+		slug: r.slug,
+		numeral: r.numeral,
+		theme: r.theme,
+		title: r.title,
+		artist: r.artist,
+		view: r.view,
+		effects: r.effects,
+		audio: r.audio,
+		accent: r.accent,
+	})),
+	scenes: Object.fromEntries(Object.entries(scenes).map(([k, v]) => [k, { tiers: v.tiers, mask: v.mask }])),
+};
+---
+
+<a class="skip-link" href="#content">Skip to the description</a>
+
+<div class="stage" id="stage" data-route={route}>
+	<div class="viewer" id="viewer">
+		<!-- role, label and focusability are added by the script in immersive mode -->
+		<div class="look" id="look">
+			{
+				poster && (
+					<picture class="poster" id="poster">
+						<source type="image/avif" srcset={srcset(poster.avif)} sizes="100vw" />
+						<source type="image/webp" srcset={srcset(poster.webp)} sizes="100vw" />
+						<img
+							src={asset(poster.webp["1920"])}
+							alt=""
+							width="1920"
+							height="1200"
+							decoding="async"
+							fetchpriority="high"
+							style={poster.lqip ? `background-image: url(${poster.lqip})` : undefined}
+						/>
+					</picture>
+				)
+			}
+			<canvas id="canvas" aria-hidden="true"></canvas>
+		</div>
+		<p id="look-help" hidden>
+			Drag or swipe to look around, or use the arrow keys. Use plus and minus to zoom. Press Tab to reach the paintings and controls.
+		</p>
+
+		<nav class="spots" id="spots" aria-label="Paintings in the gallery" hidden={route !== "hub"}>
+			<ul>
+				{
+					rooms.map((room) => {
+						const g = hubGeometry.paintings.find((p) => p.id === room.slug)!;
+						return (
+							<li>
+								<a
+									class="spot"
+									href={href(room.slug)}
+									data-room={room.slug}
+									data-yaw={g.yaw}
+									data-pitch={g.frameBottom}
+									style={`--accent: ${room.accent}`}
+								>
+									<span class="spot-numeral" aria-hidden="true">
+										{room.numeral}
+									</span>
+									<span class="spot-text">
+										<span class="spot-theme">{room.theme}</span>
+										<span class="spot-artist">{room.artist}</span>
+									</span>
+									<span class="sr-only">
+										: enter {room.title}, by {room.artist}
+									</span>
+								</a>
+							</li>
+						);
+					})
+				}
+			</ul>
+		</nav>
+	</div>
+</div>
+
+<header class="bar" id="bar">
+	<a class="wordmark" href={href("hub")} data-nav="hub">
+		<span class="wordmark-name">Inside the Frame</span>
+		<span class="wordmark-room" id="wordmark-room" aria-hidden="true">
+			{current ? `Room ${current.numeral} — ${current.theme}` : site.volume}
+		</span>
+	</a>
+	<nav class="tools" aria-label="Experience settings">
+		<button class="tool" type="button" id="btn-sound" aria-pressed="false" hidden>
+			<Icon name="sound-off" class="when-off" />
+			<Icon name="sound-on" class="when-on" />
+			<span class="tool-label">Sound</span>
+		</button>
+		<button class="tool" type="button" id="btn-motion" aria-pressed="true" hidden>
+			<Icon name="motion-off" class="when-off" />
+			<Icon name="motion-on" class="when-on" />
+			<span class="tool-label">Animation</span>
+		</button>
+		<button class="tool" type="button" id="btn-gyro" aria-pressed="false" hidden>
+			<Icon name="compass" />
+			<span class="tool-label">Motion look</span>
+		</button>
+		<button class="tool" type="button" id="btn-fullscreen" aria-pressed="false" hidden>
+			<Icon name="expand" class="when-off" />
+			<Icon name="collapse" class="when-on" />
+			<span class="tool-label">Full screen</span>
+		</button>
+		<button class="tool tool-rooms" type="button" id="btn-guide" aria-haspopup="dialog" aria-controls="guide">
+			<Icon name="rooms" />
+			<span class="tool-label">Rooms</span>
+		</button>
+	</nav>
+</header>
+
+<main id="content" tabindex="-1">
+	<h1 class="sr-only" id="page-title">
+		{current ? `Room ${current.numeral} — ${current.theme}: ${current.title}` : `${site.name} — ${hub.title}`}
+	</h1>
+
+	<section class="intro" id="intro" aria-labelledby="intro-title">
+		<div class="intro-inner">
+			<p class="eyebrow">An interactive exhibition · {site.volume}</p>
+			<h2 class="intro-title" id="intro-title">Inside <em>the</em> Frame</h2>
+			<p class="intro-lede">{site.tagline}</p>
+			{
+				current && (
+					<p class="intro-room">
+						Starting in Room {current.numeral} — {current.theme}: <cite>{current.title}</cite>
+					</p>
+				)
+			}
+			<!-- shown from the first paint in immersive mode (no layout shift); hidden in the document -->
+			<div class="intro-actions" id="intro-actions">
+				<button class="btn btn-primary" type="button" data-enter="sound">
+					<Icon name="sound-on" />
+					Enter with sound
+				</button>
+				<button class="btn btn-quiet" type="button" data-enter="silent">Enter in silence</button>
+			</div>
+			<div class="intro-progress" id="intro-progress">
+				<div
+					class="progress"
+					role="progressbar"
+					aria-label="Loading the gallery"
+					aria-valuemin="0"
+					aria-valuemax="100"
+					aria-valuenow="0"
+				>
+					<span></span>
+				</div>
+			</div>
+			<p class="intro-hint" id="intro-hint">
+				Headphones recommended. Drag, swipe or use the arrow keys to look around.
+			</p>
+		</div>
+	</section>
+
+	<section class="hub" id="hub" data-route="hub" hidden={route !== "hub"} aria-labelledby="hub-title">
+		<div class="hub-inner">
+			<h2 class="hub-title" id="hub-title">{hub.title}</h2>
+			<p class="scene-text">{hub.scene}</p>
+			<ol class="room-list" role="list">
+				{
+					rooms.map((room) => {
+						const a = art[room.slug];
+						return (
+							<li style={`--accent: ${room.accent}`}>
+								<a class="room-link" href={href(room.slug)} data-nav={room.slug}>
+									{a && (
+										<picture>
+											<source type="image/avif" srcset={srcset(a.avif)} sizes="(min-width: 60em) 20vw, 40vw" />
+											<img
+												src={asset(a.webp["480"])}
+												srcset={srcset(a.webp)}
+												sizes="(min-width: 60em) 20vw, 40vw"
+												alt=""
+												width={a.width}
+												height={a.height}
+												loading="lazy"
+												decoding="async"
+											/>
+										</picture>
+									)}
+									<span class="room-link-meta">
+										Room {room.numeral} — {room.theme}
+									</span>
+									<span class="room-link-title">{room.title}</span>
+									<span class="room-link-artist">
+										{room.artist}, {room.date}
+									</span>
+								</a>
+							</li>
+						);
+					})
+				}
+			</ol>
+		</div>
+	</section>
+
+	{
+		rooms.map((room, i) => {
+			const a = art[room.slug];
+			const prev = rooms[(i + rooms.length - 1) % rooms.length];
+			const next = rooms[(i + 1) % rooms.length];
+			return (
+				<article
+					class="room"
+					id={`room-${room.slug}`}
+					data-route={room.slug}
+					hidden={route !== room.slug}
+					aria-labelledby={`room-${room.slug}-title`}
+					style={`--accent: ${room.accent}`}
+				>
+					<div class="room-card">
+						<p class="eyebrow">
+							Room {room.numeral} — {room.theme}
+						</p>
+						<h2 class="room-title" id={`room-${room.slug}-title`}>
+							{room.title}
+						</h2>
+						<p class="room-by">
+							{room.artist} · {room.date}
+						</p>
+						<div class="room-actions">
+							<button class="btn" type="button" data-details={room.slug} aria-expanded="true" aria-controls={`details-${room.slug}`}>
+								<Icon name="info" />
+								About this painting
+							</button>
+							<a class="btn btn-quiet" href={href("hub")} data-nav="hub">
+								<Icon name="arrow-left" />
+								Back to the gallery
+							</a>
+						</div>
+					</div>
+
+					{room.hotspots.length > 0 && (
+						<ul class="pois" aria-label="Things to look for" role="list">
+							{room.hotspots.map((h) => (
+								<li class="poi" data-yaw={h.yaw} data-pitch={h.pitch}>
+									<button class="poi-dot" type="button" aria-expanded="true" aria-controls={`poi-${room.slug}-${h.id}`}>
+										<span class="poi-ring" aria-hidden="true" />
+										<span class="sr-only">{h.title}</span>
+									</button>
+									<div class="poi-card" id={`poi-${room.slug}-${h.id}`}>
+										<h3 class="poi-title">{h.title}</h3>
+										<p>{h.text}</p>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+
+					<div class="details" id={`details-${room.slug}`} aria-labelledby={`details-${room.slug}-title`} role="region">
+						<div class="details-scroll">
+							<div class="details-head">
+								<h3 class="details-title" id={`details-${room.slug}-title`}>
+									About this painting
+								</h3>
+								<button class="icon-btn details-close" type="button" data-close-details={room.slug} aria-label="Close the description">
+									<Icon name="close" />
+								</button>
+							</div>
+							{a && (
+								<figure class="artwork">
+									<picture>
+										<source type="image/avif" srcset={srcset(a.avif)} sizes="(min-width: 48em) 26rem, 92vw" />
+										<img
+											src={asset(a.webp["960"])}
+											srcset={srcset(a.webp)}
+											sizes="(min-width: 48em) 26rem, 92vw"
+											alt={artAlt[room.slug]}
+											width={a.width}
+											height={a.height}
+											loading="lazy"
+											decoding="async"
+										/>
+									</picture>
+									<figcaption>
+										{room.artist}, <cite>{room.title}</cite>, {room.date}. {room.museum}.
+									</figcaption>
+								</figure>
+							)}
+							<p class="summary">{room.summary}</p>
+							{room.essay.map((p) => (
+								<p>{p}</p>
+							))}
+							<h4>Inside the painting</h4>
+							<p class="scene-text">{room.scene}</p>
+							<h4>The work</h4>
+							<dl class="facts">
+								<div>
+									<dt>Artist</dt>
+									<dd>
+										{room.artist} ({room.artistDates})
+									</dd>
+								</div>
+								<div>
+									<dt>Title</dt>
+									<dd>{room.catalogueTitle}</dd>
+								</div>
+								<div>
+									<dt>Date</dt>
+									<dd>{room.date}</dd>
+								</div>
+								<div>
+									<dt>Medium</dt>
+									<dd>{room.medium}</dd>
+								</div>
+								<div>
+									<dt>Size</dt>
+									<dd>{room.dimensions}</dd>
+								</div>
+								<div>
+									<dt>Collection</dt>
+									<dd>
+										{room.museum}. {room.credit}. {room.accession}.
+									</dd>
+								</div>
+								<div>
+									<dt>Image</dt>
+									<dd>Public domain, released by the museum under CC0.</dd>
+								</div>
+							</dl>
+							<p>
+								<a class="text-link" href={room.museumUrl} rel="noopener" target="_blank">
+									See it in the museum's collection
+									<span class="sr-only">(opens in a new tab)</span>
+									<Icon name="external" />
+								</a>
+							</p>
+							<nav class="pager" aria-label="Other rooms">
+								<a href={href(prev.slug)} data-nav={prev.slug} rel="prev">
+									<Icon name="arrow-left" />
+									<span>
+										<small>Previous room</small>
+										{prev.numeral} — {prev.theme}
+									</span>
+								</a>
+								<a href={href(next.slug)} data-nav={next.slug} rel="next">
+									<span>
+										<small>Next room</small>
+										{next.numeral} — {next.theme}
+									</span>
+									<Icon name="arrow-right" />
+								</a>
+							</nav>
+						</div>
+					</div>
+				</article>
+			);
+		})
+	}
+
+	<p class="hint" id="hint" aria-hidden="true" hidden></p>
+</main>
+
+<dialog class="guide" id="guide" aria-labelledby="guide-title">
+	<div class="guide-inner">
+		<div class="guide-head">
+			<h2 id="guide-title">Rooms</h2>
+			<button class="icon-btn" type="button" data-close-guide aria-label="Close">
+				<Icon name="close" />
+			</button>
+		</div>
+		<ol class="guide-rooms" role="list">
+			<li>
+				<a href={href("hub")} data-nav="hub" aria-current={route === "hub" ? "page" : undefined}>
+					<span class="guide-thumb guide-thumb-hub" aria-hidden="true"></span>
+					<span class="guide-text">
+						<span class="guide-meta">Start</span>
+						<span class="guide-name">{hub.title}</span>
+					</span>
+				</a>
+			</li>
+			{
+				rooms.map((room) => {
+					const a = art[room.slug];
+					return (
+						<li style={`--accent: ${room.accent}`}>
+							<a href={href(room.slug)} data-nav={room.slug} aria-current={route === room.slug ? "page" : undefined}>
+								<span class="guide-thumb" aria-hidden="true">
+									{a && (
+										<picture>
+											<source type="image/avif" srcset={srcset(a.avif)} sizes="6rem" />
+											<img src={asset(a.webp["480"])} alt="" width={a.width} height={a.height} loading="lazy" decoding="async" />
+										</picture>
+									)}
+								</span>
+								<span class="guide-text">
+									<span class="guide-meta">
+										Room {room.numeral} — {room.theme}
+									</span>
+									<span class="guide-name">{room.title}</span>
+									<span class="guide-artist">
+										{room.artist}, {room.date}
+									</span>
+								</span>
+							</a>
+						</li>
+					);
+				})
+			}
+		</ol>
+
+		<section class="guide-section" aria-labelledby="guide-controls">
+			<h3 id="guide-controls">How to explore</h3>
+			<dl class="controls">
+				<div>
+					<dt>Look around</dt>
+					<dd>Drag, swipe, or arrow keys</dd>
+				</div>
+				<div>
+					<dt>Zoom</dt>
+					<dd>Scroll, pinch, or + and −</dd>
+				</div>
+				<div>
+					<dt>Enter a painting</dt>
+					<dd>Select it, or Tab to its label and press Enter</dd>
+				</div>
+				<div>
+					<dt>Go back</dt>
+					<dd>“Back to the gallery” or your browser's back button</dd>
+				</div>
+			</dl>
+		</section>
+
+		<section class="guide-section" aria-labelledby="guide-about">
+			<h3 id="guide-about">About</h3>
+			<p>
+				{site.name} turns four public-domain paintings into places you can stand in. Each world was modelled, lit and
+				rendered in Blender, then brought to life in the browser by a small custom WebGL viewer that adds moving water,
+				rain and light, with a soundscape synthesised live in your browser.
+			</p>
+			<p>
+				Every room has a written description, so the exhibition can be followed without seeing it. Animation can be paused
+				at any time and respects your system's reduced-motion setting.
+			</p>
+			<h4>Credits</h4>
+			<ul class="credits">
+				{
+					rooms.map((r) => (
+						<li>
+							{r.artist}, <cite>{r.title}</cite> — {r.museum} (public domain, CC0)
+						</li>
+					))
+				}
+				<li>
+					Textures from Poly Haven (CC0):{" "}
+					{credits.textures.map((t, i) => (
+						<>
+							{i > 0 && ", "}
+							<a href={t.url} rel="noopener" target="_blank">
+								{t.name}
+							</a>{" "}
+							by {t.author}
+						</>
+					))}
+				</li>
+				<li>Type: Instrument Serif and Instrument Sans (SIL Open Font License)</li>
+			</ul>
+			<p class="byline">Concept, 3D, sound and code by {site.author}.</p>
+		</section>
+	</div>
+</dialog>
+
+<div class="sr-only" id="live" aria-live="polite" aria-atomic="true"></div>
+
+<script is:inline type="application/json" id="config" set:html={JSON.stringify(clientConfig)} />
+
+<script>
+	import "../scripts/app";
+</script>

@@ -1,2 +1,4 @@
+# Python tooling for the render pipeline (scripts/*.py)
+numpy>=2.0
 opencv-python-headless>=4.8
 Pillow>=10.0

@@ -1,0 +1,59 @@
+{
+  "eye": 1.6600000000000001,
+  "water": 1.6600000000000001,
+  "room": 4.2,
+  "paintings": [
+    {
+      "id": "wave",
+      "yaw": 0,
+      "pitch": 1.656,
+      "halfWidth": 17.137,
+      "top": 13.287,
+      "bottom": -10.11,
+      "frameBottom": -13.972,
+      "distance": 4.15,
+      "width": 2.5592,
+      "height": 1.72,
+      "centerY": 0.12
+    },
+    {
+      "id": "rain",
+      "yaw": 90,
+      "pitch": 1.656,
+      "halfWidth": 9.805,
+      "top": 15.424,
+      "bottom": -12.302,
+      "frameBottom": -16.071,
+      "distance": 4.15,
+      "width": 1.4344,
+      "height": 2.05,
+      "centerY": 0.12
+    },
+    {
+      "id": "stillness",
+      "yaw": 180,
+      "pitch": 1.666,
+      "halfWidth": 14.886,
+      "top": 14.867,
+      "bottom": -11.71,
+      "frameBottom": -12.94,
+      "distance": 4.125,
+      "width": 2.1931,
+      "height": 1.95,
+      "centerY": 0.12
+    },
+    {
+      "id": "moonlight",
+      "yaw": 270,
+      "pitch": 1.666,
+      "halfWidth": 16.805,
+      "top": 14.216,
+      "bottom": -11.043,
+      "frameBottom": -12.29,
+      "distance": 4.125,
+      "width": 2.4916,
+      "height": 1.85,
+      "centerY": 0.12
+    }
+  ]
+}

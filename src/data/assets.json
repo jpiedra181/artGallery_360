@@ -1,0 +1,224 @@
+{
+	"scenes": {
+		"hub": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/hub/pano-8k.avif",
+					"bytes": 359039
+				},
+				"4k": {
+					"avif": "scenes/hub/pano-4k.avif",
+					"bytes": 229334,
+					"webp": "scenes/hub/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/hub/pano-2k.avif",
+					"bytes": 70770,
+					"webp": "scenes/hub/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/hub/mask.webp",
+			"still": {
+				"widths": [
+					960,
+					1920
+				],
+				"avif": {
+					"960": "scenes/hub/still-960.avif",
+					"1920": "scenes/hub/still-1920.avif"
+				},
+				"webp": {
+					"960": "scenes/hub/still-960.webp",
+					"1920": "scenes/hub/still-1920.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRoQAAABXRUJQVlA4IHgAAADwBACdASogABQAPtFWpEwoJKOiMAgBABoJZwDH5CHhbTrluSzf/IIBU7S26cY9dEAA/u9liTgTLbPI95UkGSe1VCErH0wDWcV1QF/FMtdFHDz5MCh2Lb4bE3t2P/EmcUw4WwcP5NOU91fBIFI05dDPfahB4uGeAAA="
+			}
+		},
+		"wave": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/wave/pano-8k.avif",
+					"bytes": 373833
+				},
+				"4k": {
+					"avif": "scenes/wave/pano-4k.avif",
+					"bytes": 327396,
+					"webp": "scenes/wave/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/wave/pano-2k.avif",
+					"bytes": 118318,
+					"webp": "scenes/wave/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/wave/mask.webp",
+			"still": {
+				"widths": [
+					960,
+					1920
+				],
+				"avif": {
+					"960": "scenes/wave/still-960.avif",
+					"1920": "scenes/wave/still-1920.avif"
+				},
+				"webp": {
+					"960": "scenes/wave/still-960.webp",
+					"1920": "scenes/wave/still-1920.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRgIBAABXRUJQVlA4IPYAAADQBQCdASogABQAPtFYpE0oJSOiKA1RABoJYgC1CQdgqQy5bf9ZdJ+L7Dxudd+q7s3v4OrUSCD4AP5oxYD1NIbzC055alrOxISqktN1B2xDSAhBvTKJ9jtbwivs1H4MWt8K37nlEesztNsLnOXBAXAPbjYIxdCS6egsKTbEWosOObdPwE1T1yDFu3XjUHLTkAzMcW1pDqGRdQxX1o7HBAF4O3Rmq8IxGkYuiaQslYwfdlGfxj51PgxemiHpekv5Q+GXcC5mqFfODtBZQatsxDv6GjkwU4SAA9ICliKs3HrGdnOnfDFIUtUXko+lmvz5D9RAQFPhwAA="
+			}
+		},
+		"rain": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/rain/pano-8k.avif",
+					"bytes": 286893
+				},
+				"4k": {
+					"avif": "scenes/rain/pano-4k.avif",
+					"bytes": 256630,
+					"webp": "scenes/rain/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/rain/pano-2k.avif",
+					"bytes": 93238,
+					"webp": "scenes/rain/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/rain/mask.webp",
+			"still": {
+				"widths": [
+					960,
+					1920
+				],
+				"avif": {
+					"960": "scenes/rain/still-960.avif",
+					"1920": "scenes/rain/still-1920.avif"
+				},
+				"webp": {
+					"960": "scenes/rain/still-960.webp",
+					"1920": "scenes/rain/still-1920.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAADwBACdASogABQAPsFOnkunpCKht/qoAPAYCWIAygAh1xcam4NeRyz10RndjOaZByAA/UUbSKgiC8peRH//sUjWCosTOAk8qXpXfJ2A8U07YSdxXj9JOufkmv0Lwwms2JjUbWrrmFwQPhj5Z3/2YEfk7ED3HW70lRWkGiMpbpzJxiRgL/HWGAV6uDGbi5wnSRyjAAAA"
+			}
+		},
+		"stillness": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/stillness/pano-8k.avif",
+					"bytes": 2638169
+				},
+				"4k": {
+					"avif": "scenes/stillness/pano-4k.avif",
+					"bytes": 1136034,
+					"webp": "scenes/stillness/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/stillness/pano-2k.avif",
+					"bytes": 251672,
+					"webp": "scenes/stillness/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/stillness/mask.webp",
+			"still": {
+				"widths": [
+					960,
+					1920
+				],
+				"avif": {
+					"960": "scenes/stillness/still-960.avif",
+					"1920": "scenes/stillness/still-1920.avif"
+				},
+				"webp": {
+					"960": "scenes/stillness/still-960.webp",
+					"1920": "scenes/stillness/still-1920.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRg4BAABXRUJQVlA4IAIBAACQBQCdASogABQAPtFUo0uoJKMhsAgBABoJYgCo9YzawEKGuczA0PbhsBp5vI58Q4+87+uy0AD+rCEehZztAn+tJHGQZa7b3bhnWxtfjCcV0VKbEI2yJnlJC5+i/RY72jEwtOiwu7PRxT+Lxv6teepyRNwkYo/svsd5zF1XWc7O0Fyl1Z8DAsaHems86O0y6WdCPEbEK4v9EgN6SSYKeLo27mc6fDfaHy7RKk3YjasA4U8zsixfLqCoWgB86zX8L8NdqVTUsRHzcXgxJvCux07oXOSSD8wTgmDLckdi/W7FjHswYG61F6+dx0US53R0py+N0McvUbVRk2mTKIoczoTzkAA="
+			}
+		},
+		"moonlight": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/moonlight/pano-8k.avif",
+					"bytes": 101340
+				},
+				"4k": {
+					"avif": "scenes/moonlight/pano-4k.avif",
+					"bytes": 86794,
+					"webp": "scenes/moonlight/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/moonlight/pano-2k.avif",
+					"bytes": 33700,
+					"webp": "scenes/moonlight/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/moonlight/mask.webp",
+			"still": {
+				"widths": [
+					960,
+					1920
+				],
+				"avif": {
+					"960": "scenes/moonlight/still-960.avif",
+					"1920": "scenes/moonlight/still-1920.avif"
+				},
+				"webp": {
+					"960": "scenes/moonlight/still-960.webp",
+					"1920": "scenes/moonlight/still-1920.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRrQAAABXRUJQVlA4IKgAAADwBACdASogABQAPtFYpEuoJSOhsAgBABoJZQC90A7H2aFowVYq0oEnxsfq+eu4rAAA/omfvQY7p3meXpAdt1hC/L1euL7LstLsvjDZQ+tsD7iNA7ub+35piFZCret91kUqH96YqECxFC4mphag8NXwhAa9iKWz2D2szzB0tqYPdLHa/dmqLuinxHQQlxy7enm5ekrCslXvbp2IUQR5t7/1yrsk3AAAAAA="
+			}
+		}
+	},
+	"art": {
+		"wave": {
+			"width": 2400,
+			"height": 1613,
+			"avif": {
+				"480": "art/wave-480.avif",
+				"960": "art/wave-960.avif"
+			},
+			"webp": {
+				"480": "art/wave-480.webp",
+				"960": "art/wave-960.webp"
+			}
+		},
+		"rain": {
+			"width": 1335,
+			"height": 1908,
+			"avif": {
+				"480": "art/rain-480.avif",
+				"960": "art/rain-960.avif"
+			},
+			"webp": {
+				"480": "art/rain-480.webp",
+				"960": "art/rain-960.webp"
+			}
+		},
+		"stillness": {
+			"width": 2400,
+			"height": 2134,
+			"avif": {
+				"480": "art/stillness-480.avif",
+				"960": "art/stillness-960.avif"
+			},
+			"webp": {
+				"480": "art/stillness-480.webp",
+				"960": "art/stillness-960.webp"
+			}
+		},
+		"moonlight": {
+			"width": 2400,
+			"height": 1782,
+			"avif": {
+				"480": "art/moonlight-480.avif",
+				"960": "art/moonlight-960.avif"
+			},
+			"webp": {
+				"480": "art/moonlight-480.webp",
+				"960": "art/moonlight-960.webp"
+			}
+		}
+	}
+}

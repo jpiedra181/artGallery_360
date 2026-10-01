@@ -1,0 +1,15 @@
+---
+import Base from "../layouts/Base.astro";
+import Experience from "../components/Experience.astro";
+import { rooms, site, type Room } from "../data/rooms";
+
+export function getStaticPaths() {
+	return rooms.map((room) => ({ params: { room: room.slug }, props: { room } }));
+}
+
+const { room } = Astro.props as { room: Room };
+---
+
+<Base title={`${room.theme}: ${room.title} — ${site.name}`} description={`${room.artist}, ${room.date}. ${room.summary}`}>
+	<Experience route={room.slug} />
+</Base>

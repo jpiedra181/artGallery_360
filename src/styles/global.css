@@ -1,0 +1,1642 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Inside the Frame — global styles
+
+   Two modes:
+   • document (default): a readable, scrolling page. Used without JavaScript
+     or WebGL, and as the baseline everything else enhances.
+   • .immersive (on <html>): the fullscreen 360° experience.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+:root {
+	--ink: #07090b;
+	--ink-2: #0c1014;
+	--ink-3: #141a20;
+	--paper: #efe9de;
+	--paper-2: #c2bbae;
+	--paper-3: #968f83;
+	--line: rgb(239 233 222 / 0.13);
+	--line-strong: rgb(239 233 222 / 0.28);
+	--accent: #e3c48f;
+	--focus: #f4d7a1;
+	--surface: rgb(9 11 14 / 0.86);
+	--surface-solid: rgb(11 14 17 / 0.95);
+
+	--step--2: clamp(0.72rem, 0.7rem + 0.08vw, 0.76rem);
+	--step--1: clamp(0.8rem, 0.78rem + 0.1vw, 0.86rem);
+	--step-0: clamp(0.95rem, 0.91rem + 0.2vw, 1.06rem);
+	--step-1: clamp(1.12rem, 1.02rem + 0.45vw, 1.38rem);
+	--step-2: clamp(1.4rem, 1.2rem + 0.95vw, 2rem);
+	--step-3: clamp(1.85rem, 1.45rem + 1.9vw, 3rem);
+	--step-5: clamp(3rem, 1.8rem + 6.4vw, 7.6rem);
+
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.5rem;
+	--space-6: 2rem;
+	--space-7: 3rem;
+
+	--gutter: clamp(1rem, 0.6rem + 1.8vw, 2.25rem);
+	--radius: 14px;
+	--radius-lg: 22px;
+	--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+	--bar-h: calc(3.5rem + env(safe-area-inset-top, 0px));
+
+	--safe-t: env(safe-area-inset-top, 0px);
+	--safe-r: env(safe-area-inset-right, 0px);
+	--safe-b: env(safe-area-inset-bottom, 0px);
+	--safe-l: env(safe-area-inset-left, 0px);
+
+	color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	background: var(--ink);
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	min-height: 100dvh;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--font-text), system-ui, sans-serif;
+	font-size: var(--step-0);
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+img,
+picture,
+canvas,
+svg {
+	display: block;
+	max-width: 100%;
+}
+
+img {
+	height: auto;
+}
+
+button,
+input {
+	font: inherit;
+	color: inherit;
+}
+
+button {
+	cursor: pointer;
+}
+
+h1,
+h2,
+h3,
+h4 {
+	margin: 0;
+	font-weight: 400;
+	line-height: 1.12;
+	text-wrap: balance;
+}
+
+p {
+	margin: 0;
+	text-wrap: pretty;
+}
+
+a {
+	color: inherit;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+.sr-only {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+.icon {
+	width: 1.25em;
+	height: 1.25em;
+	flex: none;
+}
+
+/* ─── Focus ───────────────────────────────────────────────────────────────── */
+
+:focus {
+	outline: none;
+}
+
+:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 3px;
+	box-shadow: 0 0 0 6px rgb(0 0 0 / 0.6);
+	border-radius: 6px;
+}
+
+.skip-link {
+	position: fixed;
+	z-index: 100;
+	top: calc(var(--safe-t) + 0.75rem);
+	left: calc(var(--safe-l) + 0.75rem);
+	padding: 0.7rem 1.1rem;
+	background: var(--paper);
+	color: var(--ink);
+	border-radius: 999px;
+	font-weight: 600;
+	text-decoration: none;
+	transform: translateY(-160%);
+	transition: transform 0.2s var(--ease);
+}
+
+.skip-link:focus-visible {
+	transform: none;
+}
+
+/* ─── Shared components ───────────────────────────────────────────────────── */
+
+.eyebrow {
+	font-size: var(--step--1);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--paper-2);
+	font-weight: 500;
+}
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.55rem;
+	min-height: 2.875rem;
+	padding: 0.55rem 1.2rem;
+	border-radius: 999px;
+	border: 1px solid var(--line-strong);
+	background: rgb(239 233 222 / 0.07);
+	color: var(--paper);
+	font-size: var(--step--1);
+	font-weight: 500;
+	letter-spacing: 0.02em;
+	text-decoration: none;
+	white-space: nowrap;
+	transition:
+		background-color 0.25s var(--ease),
+		border-color 0.25s var(--ease),
+		color 0.25s var(--ease),
+		transform 0.25s var(--ease);
+}
+
+.btn:hover {
+	background: rgb(239 233 222 / 0.14);
+	border-color: rgb(239 233 222 / 0.45);
+}
+
+.btn:active {
+	transform: scale(0.98);
+}
+
+.btn-primary {
+	background: var(--paper);
+	border-color: var(--paper);
+	color: var(--ink);
+}
+
+.btn-primary:hover {
+	background: #fff;
+	border-color: #fff;
+}
+
+.btn-quiet {
+	background: transparent;
+}
+
+.icon-btn {
+	display: inline-grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: rgb(239 233 222 / 0.04);
+	transition: background-color 0.2s var(--ease);
+}
+
+.icon-btn:hover {
+	background: rgb(239 233 222 / 0.12);
+}
+
+.text-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	color: var(--accent);
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
+}
+
+.text-link .icon {
+	width: 1em;
+	height: 1em;
+}
+
+.progress {
+	position: relative;
+	height: 2px;
+	width: 100%;
+	background: var(--line);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.progress > span {
+	position: absolute;
+	inset: 0;
+	background: var(--paper);
+	transform-origin: left;
+	transform: scaleX(var(--progress, 0));
+	transition: transform 0.3s var(--ease);
+}
+
+/* ─── Document mode (no JS / no WebGL) ────────────────────────────────────── */
+
+html:not(.immersive) body {
+	display: flex;
+	flex-direction: column;
+}
+
+html:not(.immersive) .bar {
+	order: -2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: calc(var(--safe-t) + var(--space-4)) var(--gutter) var(--space-4);
+	border-bottom: 1px solid var(--line);
+}
+
+html:not(.immersive) .tools,
+html:not(.immersive) .intro-actions,
+html:not(.immersive) .intro-progress,
+html:not(.immersive) .intro-hint {
+	display: none;
+}
+
+html:not(.immersive) .stage {
+	order: -1;
+}
+
+html:not(.immersive) .look {
+	position: relative;
+	aspect-ratio: 16 / 10;
+	max-height: 72vh;
+	width: 100%;
+	overflow: hidden;
+	background: var(--ink-2);
+}
+
+html:not(.immersive) .poster,
+html:not(.immersive) .poster img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	background-size: cover;
+}
+
+html:not(.immersive) canvas,
+html:not(.immersive) .spots,
+html:not(.immersive) .room-actions,
+html:not(.immersive) .details-close,
+html:not(.immersive) .details-head {
+	display: none !important;
+}
+
+html:not(.immersive) main {
+	width: min(100% - 2 * var(--gutter), 46rem);
+	margin: 0 auto;
+	padding: var(--space-7) 0 calc(var(--space-7) + var(--safe-b));
+	display: grid;
+	gap: var(--space-7);
+}
+
+html:not(.immersive) .intro-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-5);
+	line-height: 0.95;
+	margin-block: var(--space-3) var(--space-4);
+}
+
+html:not(.immersive) .intro-lede {
+	font-size: var(--step-1);
+	color: var(--paper-2);
+	max-width: 32ch;
+}
+
+html:not(.immersive) .hub-title,
+html:not(.immersive) .room-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-3);
+	margin-block: var(--space-2) var(--space-3);
+}
+
+html:not(.immersive) .room-by {
+	color: var(--paper-2);
+	margin-bottom: var(--space-5);
+}
+
+html:not(.immersive) .details-scroll > * + * {
+	margin-top: var(--space-4);
+}
+
+html:not(.immersive) .hub .scene-text {
+	color: var(--paper-2);
+	margin-bottom: var(--space-6);
+}
+
+/* room cards (hub list) */
+.room-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+	gap: var(--space-5);
+}
+
+.room-link {
+	display: grid;
+	gap: var(--space-1);
+	text-decoration: none;
+	border-radius: var(--radius);
+	padding-bottom: var(--space-2);
+}
+
+.room-link picture {
+	aspect-ratio: 4 / 3;
+	overflow: hidden;
+	border-radius: var(--radius);
+	background: var(--ink-3);
+	margin-bottom: var(--space-3);
+}
+
+.room-link img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	transition: transform 0.6s var(--ease);
+}
+
+.room-link:hover img {
+	transform: scale(1.04);
+}
+
+.room-link-meta {
+	font-size: var(--step--1);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.room-link-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+	line-height: 1.2;
+}
+
+.room-link-artist {
+	color: var(--paper-2);
+	font-size: var(--step--1);
+}
+
+/* ─── Room details (shared typography) ───────────────────────────────────── */
+
+.details-scroll h4 {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+	margin-top: var(--space-6);
+	color: var(--paper);
+}
+
+.details-scroll p {
+	color: var(--paper-2);
+}
+
+.details-scroll .summary {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+	line-height: 1.4;
+	color: var(--paper);
+}
+
+.artwork {
+	margin: 0;
+}
+
+html:not(.immersive) .artwork img {
+	width: auto;
+	max-height: 85vh;
+	margin-inline: auto;
+}
+
+.artwork img {
+	width: 100%;
+	border-radius: 6px;
+	background: var(--ink-3);
+	box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.8);
+}
+
+.artwork figcaption {
+	margin-top: var(--space-3);
+	font-size: var(--step--1);
+	color: var(--paper-3);
+}
+
+.facts {
+	margin: 0;
+	display: grid;
+	gap: var(--space-3);
+	font-size: var(--step--1);
+}
+
+.facts div {
+	display: grid;
+	grid-template-columns: 6.5rem 1fr;
+	gap: var(--space-3);
+	padding-top: var(--space-3);
+	border-top: 1px solid var(--line);
+}
+
+.facts dt {
+	color: var(--paper-3);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	font-size: var(--step--2);
+	padding-top: 0.15em;
+}
+
+.facts dd {
+	margin: 0;
+	color: var(--paper-2);
+}
+
+.pager {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--space-3);
+	margin-top: var(--space-6);
+}
+
+.pager a {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	padding: var(--space-3) var(--space-4);
+	min-height: 3.5rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	text-decoration: none;
+	font-size: var(--step--1);
+	transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease);
+}
+
+.pager a:hover {
+	border-color: var(--line-strong);
+	background: rgb(239 233 222 / 0.04);
+}
+
+.pager a[rel="next"] {
+	justify-content: flex-end;
+	text-align: right;
+}
+
+.pager small {
+	display: block;
+	color: var(--paper-3);
+	font-size: var(--step--2);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+}
+
+/* ─── Wordmark ────────────────────────────────────────────────────────────── */
+
+.wordmark {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 0.1rem;
+	text-decoration: none;
+	line-height: 1.15;
+	padding: 0.25rem 0;
+}
+
+.wordmark-name {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+}
+
+.wordmark-room {
+	font-size: var(--step--2);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--paper-2);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   Immersive mode
+   ════════════════════════════════════════════════════════════════════════════ */
+
+html.immersive,
+html.immersive body {
+	height: 100%;
+	overflow: hidden;
+	overscroll-behavior: none;
+}
+
+html.immersive body {
+	position: fixed;
+	inset: 0;
+}
+
+.immersive .stage {
+	position: fixed;
+	inset: 0;
+	z-index: 0;
+	background: var(--ink);
+}
+
+.immersive .look {
+	position: absolute;
+	inset: 0;
+	touch-action: none;
+	cursor: grab;
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.immersive .look:active {
+	cursor: grabbing;
+}
+
+.immersive .look.is-pointing {
+	cursor: pointer;
+}
+
+.immersive .look:focus-visible {
+	outline-offset: -6px;
+	border-radius: 0;
+	box-shadow: inset 0 0 0 6px rgb(0 0 0 / 0.5);
+}
+
+.immersive canvas,
+.immersive .poster,
+.immersive .poster img {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+
+.immersive .poster img {
+	object-fit: cover;
+	background-size: cover;
+	background-position: center;
+}
+
+.immersive .poster {
+	transition: opacity 1.2s var(--ease);
+	overflow: hidden;
+}
+
+/* the title screen is a still: a slow drift keeps it alive without the GPU */
+.immersive.is-intro .poster img {
+	animation: poster-drift 50s var(--ease-in-out) infinite alternate;
+	transform-origin: 50% 45%;
+}
+
+@keyframes poster-drift {
+	from {
+		transform: scale(1.03) translateX(0.6%);
+	}
+	to {
+		transform: scale(1.07) translateX(-1.2%);
+	}
+}
+
+.immersive.gl-ready .poster {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.immersive canvas {
+	opacity: 0;
+	transition: opacity 1.2s var(--ease);
+}
+
+.immersive.gl-ready canvas {
+	opacity: 1;
+}
+
+/* top bar */
+.immersive .bar {
+	position: fixed;
+	z-index: 20;
+	top: 0;
+	left: 0;
+	right: 0;
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-4);
+	padding: calc(var(--safe-t) + var(--space-3)) calc(var(--safe-r) + var(--gutter)) var(--space-6) calc(var(--safe-l) + var(--gutter));
+	background: linear-gradient(to bottom, rgb(5 7 9 / 0.72), rgb(5 7 9 / 0.38) 55%, transparent);
+	pointer-events: none;
+	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+
+.immersive .bar > * {
+	pointer-events: auto;
+}
+
+.immersive .wordmark {
+	text-shadow: 0 1px 12px rgb(0 0 0 / 0.65);
+}
+
+.immersive.is-intro .bar {
+	opacity: 0;
+	transform: translateY(-0.5rem);
+	pointer-events: none;
+}
+
+.immersive.is-intro .bar > * {
+	pointer-events: none;
+}
+
+.tools {
+	display: flex;
+	gap: var(--space-2);
+}
+
+.tool {
+	position: relative;
+	display: inline-grid;
+	place-items: center;
+	width: 2.875rem;
+	height: 2.875rem;
+	padding: 0;
+	border-radius: 999px;
+	border: 1px solid var(--line);
+	background: var(--surface);
+	color: var(--paper);
+	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.tool:hover {
+	background: rgb(30 36 42 / 0.95);
+	border-color: var(--line-strong);
+}
+
+.tool[aria-pressed="true"] {
+	border-color: rgb(239 233 222 / 0.5);
+}
+
+.tool[aria-pressed="true"] .when-off,
+.tool[aria-pressed="false"] .when-on {
+	display: none;
+}
+
+.tool-label {
+	position: absolute;
+	top: calc(100% + 0.5rem);
+	left: 50%;
+	translate: -50% 0;
+	padding: 0.3rem 0.6rem;
+	border-radius: 6px;
+	background: var(--paper);
+	color: var(--ink);
+	font-size: var(--step--2);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.15s var(--ease);
+}
+
+.tool:hover .tool-label,
+.tool:focus-visible .tool-label {
+	opacity: 1;
+}
+
+.tool:last-child .tool-label {
+	left: auto;
+	right: 0;
+	translate: none;
+}
+
+/* main overlay layer */
+.immersive main {
+	position: fixed;
+	inset: 0;
+	z-index: 10;
+	pointer-events: none;
+}
+
+.immersive main > * {
+	pointer-events: auto;
+}
+
+.immersive main:focus {
+	outline: none;
+}
+
+/* ─── Intro ───────────────────────────────────────────────────────────────── */
+
+.immersive .intro {
+	position: fixed;
+	inset: 0;
+	z-index: 30;
+	display: grid;
+	align-items: end;
+	padding: calc(var(--safe-t) + var(--space-7)) calc(var(--safe-r) + var(--gutter)) calc(var(--safe-b) + clamp(2rem, 7vh, 5rem))
+		calc(var(--safe-l) + var(--gutter));
+	background:
+		linear-gradient(to top, rgb(4 6 8 / 0.92) 0%, rgb(4 6 8 / 0.6) 42%, rgb(4 6 8 / 0.15) 75%, rgb(4 6 8 / 0.35) 100%),
+		linear-gradient(to right, rgb(4 6 8 / 0.55), transparent 70%);
+	transition: opacity 1s var(--ease), visibility 0s linear 0s;
+}
+
+.immersive .intro.is-leaving {
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 1s var(--ease), visibility 0s linear 1s;
+}
+
+.intro-inner {
+	display: grid;
+	gap: var(--space-4);
+	max-width: 44rem;
+}
+
+.immersive .intro-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-5);
+	line-height: 0.92;
+	letter-spacing: -0.01em;
+	margin-block: var(--space-1) var(--space-2);
+}
+
+.intro-title em {
+	font-style: italic;
+	color: var(--accent);
+}
+
+.immersive .intro-lede {
+	font-size: var(--step-1);
+	color: var(--paper);
+	max-width: 30ch;
+	line-height: 1.45;
+}
+
+.intro-room {
+	color: var(--paper-2);
+	font-size: var(--step--1);
+}
+
+.intro-room cite {
+	font-style: italic;
+	color: var(--paper);
+}
+
+.intro-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	margin-top: var(--space-4);
+}
+
+.intro-actions .btn {
+	min-height: 3.25rem;
+	padding-inline: 1.5rem;
+	font-size: var(--step-0);
+}
+
+.intro-progress {
+	max-width: 22rem;
+	margin-top: var(--space-2);
+}
+
+.intro-hint {
+	font-size: var(--step--1);
+	color: var(--paper-2);
+}
+
+/* ─── Hub ─────────────────────────────────────────────────────────────────── */
+
+.immersive .hub {
+	position: absolute !important;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	pointer-events: none;
+}
+
+.immersive .hub .room-list {
+	display: none;
+}
+
+/* painting labels that float under each frame */
+.spots ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.immersive .spots {
+	position: absolute;
+	inset: 0;
+	z-index: 5;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.immersive.is-intro .spots,
+.immersive.is-moving .spots {
+	opacity: 0;
+}
+
+.immersive .spots {
+	transition: opacity 0.5s var(--ease);
+}
+
+.spot {
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.65rem;
+	padding: 0.4rem 1rem 0.4rem 0.4rem;
+	border-radius: 999px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	color: var(--paper);
+	text-decoration: none;
+	white-space: nowrap;
+	pointer-events: auto;
+	will-change: transform;
+	transition:
+		opacity 0.35s var(--ease),
+		border-color 0.3s var(--ease),
+		background-color 0.3s var(--ease),
+		box-shadow 0.3s var(--ease);
+}
+
+.spot[data-visible="false"] {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.spot:focus-visible {
+	opacity: 1;
+}
+
+.spot:hover,
+.spot.is-hot {
+	border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+	background: rgb(16 20 24 / 0.94);
+	box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.spot-numeral {
+	display: grid;
+	place-items: center;
+	width: 2.15rem;
+	height: 2.15rem;
+	border-radius: 999px;
+	border: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
+	color: var(--accent);
+	font-family: var(--font-display), Georgia, serif;
+	font-style: italic;
+	font-size: 1.05rem;
+	line-height: 1;
+}
+
+.spot-text {
+	display: grid;
+	line-height: 1.15;
+}
+
+.spot-theme {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: 1.1rem;
+}
+
+.spot-artist {
+	font-size: var(--step--2);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--paper-2);
+}
+
+/* ─── Room card ───────────────────────────────────────────────────────────── */
+
+.immersive .room {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+.immersive .room > * {
+	pointer-events: auto;
+}
+
+.immersive .room-card {
+	position: absolute;
+	left: calc(var(--safe-l) + var(--gutter));
+	bottom: calc(var(--safe-b) + var(--gutter));
+	width: min(31rem, 100% - 2 * var(--gutter) - var(--safe-l) - var(--safe-r));
+	padding: var(--space-5);
+	border-radius: var(--radius-lg);
+	background: var(--surface);
+	border: 1px solid var(--line);
+	box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.9);
+	display: grid;
+	gap: var(--space-2);
+	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+
+.immersive .room-card .eyebrow {
+	color: var(--accent);
+}
+
+.immersive .room-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-2);
+	line-height: 1.1;
+}
+
+.immersive .room-by {
+	color: var(--paper-2);
+	font-size: var(--step--1);
+}
+
+.room-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+	margin-top: var(--space-3);
+}
+
+.immersive.is-moving .room-card,
+.immersive.is-moving .hint {
+	opacity: 0;
+	transform: translateY(0.75rem);
+	pointer-events: none;
+}
+
+/* ─── Points of interest ──────────────────────────────────────────────────── */
+
+.pois {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+html:not(.immersive) .pois {
+	display: grid;
+	gap: var(--space-4);
+	margin-block: var(--space-5);
+}
+
+html:not(.immersive) .poi-dot {
+	display: none;
+}
+
+html:not(.immersive) .poi-card {
+	padding: var(--space-4);
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+}
+
+.poi-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+	margin-bottom: var(--space-2);
+}
+
+.poi-card p {
+	color: var(--paper-2);
+	font-size: var(--step--1);
+}
+
+.immersive .pois {
+	position: absolute;
+	inset: 0;
+	pointer-events: none !important;
+	overflow: hidden;
+}
+
+.immersive .poi {
+	position: absolute;
+	top: 0;
+	left: 0;
+	will-change: transform;
+}
+
+.immersive.is-moving .pois,
+.immersive.is-intro .pois {
+	visibility: hidden;
+}
+
+.poi-dot {
+	position: absolute;
+	translate: -50% -50%;
+	display: grid;
+	place-items: center;
+	width: 2.75rem;
+	height: 2.75rem;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	pointer-events: auto;
+	transition: opacity 0.35s var(--ease);
+}
+
+.poi[data-visible="false"] .poi-dot {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.poi-dot:focus-visible {
+	opacity: 1;
+}
+
+/* a hollow ring with a centre dot: reads as interface, not as a light */
+.poi-ring {
+	position: relative;
+	width: 1.6rem;
+	height: 1.6rem;
+	border-radius: 999px;
+	border: 2px solid var(--paper);
+	background: rgb(7 9 11 / 0.45);
+	box-shadow: 0 2px 14px rgb(0 0 0 / 0.6);
+	transition: transform 0.25s var(--ease), border-color 0.25s var(--ease);
+}
+
+.poi-ring::after {
+	content: "";
+	position: absolute;
+	inset: 50%;
+	width: 0.42rem;
+	height: 0.42rem;
+	translate: -50% -50%;
+	border-radius: 999px;
+	background: var(--paper);
+}
+
+.poi-ring::before {
+	content: "";
+	position: absolute;
+	inset: -2px;
+	border-radius: 999px;
+	border: 2px solid var(--paper);
+	opacity: 0;
+	animation: poi-pulse 2.8s var(--ease-in-out) infinite;
+}
+
+.poi-dot:hover .poi-ring,
+.poi-dot[aria-expanded="true"] .poi-ring {
+	transform: scale(1.12);
+	border-color: var(--accent);
+}
+
+.poi-dot[aria-expanded="true"] .poi-ring::after {
+	background: var(--accent);
+}
+
+@keyframes poi-pulse {
+	0% {
+		opacity: 0.7;
+		transform: scale(1);
+	}
+	70%,
+	100% {
+		opacity: 0;
+		transform: scale(1.9);
+	}
+}
+
+.immersive .poi-card {
+	position: absolute;
+	bottom: 1.9rem;
+	left: 0;
+	translate: -50% 0;
+	width: min(19rem, calc(100vw - 2rem));
+	padding: var(--space-4) var(--space-5);
+	border-radius: var(--radius);
+	background: var(--surface-solid);
+	border: 1px solid var(--line);
+	box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.9);
+	pointer-events: auto;
+	animation: card-in 0.3s var(--ease) both;
+}
+
+.immersive .poi[data-align="left"] .poi-card {
+	translate: -1.4rem 0;
+}
+
+.immersive .poi[data-align="right"] .poi-card {
+	translate: calc(-100% + 1.4rem) 0;
+}
+
+.immersive .poi[data-below="true"] .poi-card {
+	bottom: auto;
+	top: 1.9rem;
+}
+
+.immersive .poi-card.is-collapsed {
+	display: none;
+}
+
+@keyframes card-in {
+	from {
+		opacity: 0;
+		transform: translateY(0.4rem);
+	}
+}
+
+/* ─── Details panel ───────────────────────────────────────────────────────── */
+
+.immersive .details {
+	position: absolute;
+	top: calc(var(--bar-h) + var(--space-3));
+	right: calc(var(--safe-r) + var(--gutter));
+	bottom: calc(var(--safe-b) + var(--gutter));
+	width: min(28rem, 100% - 2 * var(--gutter));
+	border-radius: var(--radius-lg);
+	background: var(--surface-solid);
+	border: 1px solid var(--line);
+	box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.95);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	animation: panel-in 0.5s var(--ease) both;
+}
+
+.immersive .details[data-open="false"] {
+	display: none;
+}
+
+@keyframes panel-in {
+	from {
+		opacity: 0;
+		transform: translateX(1.25rem);
+	}
+}
+
+.immersive .details-scroll {
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0 var(--space-5) var(--space-6);
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+}
+
+.immersive .details-scroll > * + * {
+	margin-top: var(--space-4);
+}
+
+.details-head {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	padding: var(--space-4) 0 var(--space-3);
+	background: linear-gradient(var(--surface-solid) 75%, transparent);
+}
+
+.details-title {
+	font-size: var(--step--1);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--paper-2);
+	font-family: var(--font-text), system-ui, sans-serif;
+	font-weight: 500;
+}
+
+.immersive .details-head + * {
+	margin-top: var(--space-2);
+}
+
+/* ─── Hint ────────────────────────────────────────────────────────────────── */
+
+.immersive .hint {
+	position: absolute;
+	left: 50%;
+	bottom: calc(var(--safe-b) + var(--gutter));
+	translate: -50% 0;
+	padding: 0.55rem 1.1rem;
+	border-radius: 999px;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	font-size: var(--step--1);
+	color: var(--paper);
+	white-space: nowrap;
+	pointer-events: none;
+	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
+}
+
+.immersive .hint.is-faded {
+	opacity: 0;
+}
+
+/* ─── Guide dialog ────────────────────────────────────────────────────────── */
+
+.guide {
+	margin: 0 0 0 auto;
+	padding: 0;
+	width: min(30rem, 100%);
+	max-width: 100%;
+	height: 100%;
+	max-height: 100%;
+	border: 0;
+	border-left: 1px solid var(--line);
+	background: var(--surface-solid);
+	color: var(--paper);
+	overscroll-behavior: contain;
+}
+
+.guide::backdrop {
+	background: rgb(3 4 6 / 0.6);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+}
+
+.guide[open] {
+	animation: guide-in 0.45s var(--ease) both;
+}
+
+@keyframes guide-in {
+	from {
+		transform: translateX(2rem);
+		opacity: 0;
+	}
+}
+
+.guide-inner {
+	padding: calc(var(--safe-t) + var(--space-4)) calc(var(--safe-r) + var(--space-5)) calc(var(--safe-b) + var(--space-6)) var(--space-5);
+	display: grid;
+	gap: var(--space-6);
+}
+
+.guide-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.guide-head h2 {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-2);
+}
+
+.guide-rooms {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: var(--space-2);
+}
+
+.guide-rooms a {
+	display: grid;
+	grid-template-columns: 4.5rem 1fr;
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-2);
+	border-radius: var(--radius);
+	text-decoration: none;
+	border: 1px solid transparent;
+	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+
+.guide-rooms a:hover {
+	background: rgb(239 233 222 / 0.05);
+}
+
+.guide-rooms a[aria-current="page"] {
+	border-color: var(--line-strong);
+	background: rgb(239 233 222 / 0.05);
+}
+
+.guide-thumb {
+	width: 4.5rem;
+	aspect-ratio: 1;
+	border-radius: 10px;
+	overflow: hidden;
+	background: var(--ink-3);
+}
+
+.guide-thumb picture,
+.guide-thumb img,
+.room-link picture img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.guide-thumb-hub {
+	background:
+		radial-gradient(circle at 50% 30%, rgb(255 230 190 / 0.35), transparent 45%),
+		linear-gradient(to bottom, #1b232a 55%, #07090b 56%);
+}
+
+.guide-text {
+	display: grid;
+	gap: 0.1rem;
+	line-height: 1.25;
+}
+
+.guide-meta {
+	font-size: var(--step--2);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--accent);
+}
+
+.guide-name {
+	font-family: var(--font-display), Georgia, serif;
+	font-size: var(--step-1);
+}
+
+.guide-artist {
+	font-size: var(--step--1);
+	color: var(--paper-2);
+}
+
+.guide-section {
+	display: grid;
+	gap: var(--space-3);
+	padding-top: var(--space-5);
+	border-top: 1px solid var(--line);
+}
+
+.guide-section h3 {
+	font-size: var(--step--1);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--paper-2);
+	font-weight: 500;
+}
+
+.guide-section h4 {
+	font-size: var(--step--1);
+	font-weight: 600;
+	margin-top: var(--space-3);
+}
+
+.guide-section p,
+.credits {
+	color: var(--paper-2);
+	font-size: var(--step--1);
+}
+
+.credits {
+	margin: 0;
+	padding-left: 1.1rem;
+	display: grid;
+	gap: var(--space-2);
+}
+
+.byline {
+	color: var(--paper) !important;
+}
+
+.controls {
+	margin: 0;
+	display: grid;
+	gap: var(--space-2);
+	font-size: var(--step--1);
+}
+
+.controls div {
+	display: grid;
+	grid-template-columns: 9rem 1fr;
+	gap: var(--space-3);
+}
+
+.controls dt {
+	color: var(--paper);
+}
+
+.controls dd {
+	margin: 0;
+	color: var(--paper-2);
+}
+
+/* ─── Small screens ───────────────────────────────────────────────────────── */
+
+@media (max-width: 40em) {
+	.tool-label {
+		display: none;
+	}
+
+	.tools {
+		gap: var(--space-1);
+	}
+
+	.immersive .room-card {
+		left: calc(var(--safe-l) + var(--space-3));
+		right: calc(var(--safe-r) + var(--space-3));
+		bottom: calc(var(--safe-b) + var(--space-3));
+		width: auto;
+		padding: var(--space-4);
+	}
+
+	.immersive .room-title {
+		font-size: var(--step-1);
+	}
+
+	.room-actions .btn {
+		flex: 1 1 auto;
+		padding-inline: 0.9rem;
+	}
+
+	.immersive .details {
+		top: auto;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		width: 100%;
+		max-height: 82dvh;
+		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+		border-bottom: 0;
+		animation-name: sheet-in;
+	}
+
+	.immersive .details-scroll {
+		padding-bottom: calc(var(--safe-b) + var(--space-6));
+	}
+
+	.immersive .details {
+		background: rgb(11 14 17);
+	}
+
+	/* the sheet covers the card: take the card out of the way */
+	.immersive .room:has(.details[data-open="true"]) .room-card {
+		visibility: hidden;
+	}
+
+	@keyframes sheet-in {
+		from {
+			opacity: 0;
+			transform: translateY(2rem);
+		}
+	}
+
+	.spot {
+		padding-right: 0.8rem;
+		gap: 0.5rem;
+	}
+
+	.spot-artist {
+		display: none;
+	}
+
+	.facts div,
+	.controls div {
+		grid-template-columns: 1fr;
+		gap: 0.15rem;
+	}
+
+	.immersive .hint {
+		white-space: normal;
+		text-align: center;
+		width: max-content;
+		max-width: calc(100% - 2 * var(--space-4));
+	}
+}
+
+@media (max-width: 22.5em) {
+	.wordmark-room {
+		display: none;
+	}
+}
+
+/* Landscape phones: very little height */
+@media (max-height: 30em) and (orientation: landscape) {
+	/* the painting labels sit low on short screens: keep the hint out of their way */
+	.immersive .hint {
+		top: calc(var(--safe-t) + var(--space-4));
+		bottom: auto;
+	}
+
+	.immersive .intro {
+		align-items: center;
+		padding-block: calc(var(--safe-t) + var(--space-4)) calc(var(--safe-b) + var(--space-4));
+	}
+
+	.immersive .intro-title {
+		font-size: clamp(2.4rem, 9vh + 1rem, 4rem);
+	}
+
+	.intro-inner {
+		gap: var(--space-2);
+	}
+
+	.intro-hint {
+		display: none;
+	}
+
+	.immersive .room-card {
+		padding: var(--space-3) var(--space-4);
+		width: min(26rem, 55vw);
+	}
+
+	.immersive .room-card .room-by {
+		display: none;
+	}
+
+	.immersive .room-title {
+		font-size: var(--step-1);
+	}
+
+	.immersive .details {
+		top: calc(var(--safe-t) + var(--space-3));
+		bottom: calc(var(--safe-b) + var(--space-3));
+	}
+}
+
+/* ─── User preferences ────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+@media (prefers-reduced-transparency: reduce) {
+	:root {
+		--surface: rgb(11 14 17 / 0.97);
+	}
+
+	.guide::backdrop {
+		backdrop-filter: none;
+		background: rgb(3 4 6 / 0.85);
+	}
+}
+
+@media (forced-colors: active) {
+	.btn,
+	.tool,
+	.spot,
+	.icon-btn,
+	.room-card,
+	.details {
+		border: 1px solid CanvasText;
+	}
+
+	.progress > span {
+		background: Highlight;
+	}
+
+	:focus-visible {
+		outline-color: Highlight;
+	}
+}
+
+@media (hover: none) {
+	.tool-label {
+		display: none;
+	}
+}

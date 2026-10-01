@@ -1,5 +1,5 @@
 {
-  "name": "art-gallery",
+  "name": "inside-the-frame",
   "type": "module",
   "version": "0.0.1",
   "engines": {
@@ -9,14 +9,17 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro",
-    "convert": "python scripts/convert-panoramas.py"
+    "check": "astro check",
+    "assets": "node scripts/build-assets.mjs",
+    "astro": "astro"
   },
   "dependencies": {
-    "@photo-sphere-viewer/core": "^5.14.1",
-    "@photo-sphere-viewer/markers-plugin": "^5.14.1",
-    "@photo-sphere-viewer/virtual-tour-plugin": "^5.14.1",
-    "astro": "^6.1.6",
-    "lightgallery": "^2.9.0"
+    "astro": "^6.4.8"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^26.6.3",
+    "axe-core": "^4.13.0",
+    "typescript": "^6.0.3"
   }
 }
