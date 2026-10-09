@@ -86,7 +86,8 @@ const clientConfig = {
 			<canvas id="canvas" aria-hidden="true"></canvas>
 		</div>
 		<p id="look-help" hidden>
-			Drag or swipe to look around, or use the arrow keys. Use plus and minus to zoom. Press Tab to reach the paintings and controls.
+			Drag or swipe to look around, or use the arrow keys or the look buttons. Use plus and minus, or the zoom buttons, to zoom.
+			Press Tab to reach the paintings and controls.
 		</p>
 
 		<nav class="spots" id="spots" aria-label="Paintings in the gallery" hidden={route !== "hub"}>
@@ -121,6 +122,34 @@ const clientConfig = {
 				}
 			</ul>
 		</nav>
+
+		<!-- one click or tap per step, for anyone who cannot drag or pinch; shown by the script in immersive mode -->
+		<div class="look-controls" id="look-controls" role="group" aria-label="Look around" hidden>
+			<button class="tool" type="button" data-look="left">
+				<Icon name="arrow-left" />
+				<span class="tool-label">Look left</span>
+			</button>
+			<button class="tool" type="button" data-look="right">
+				<Icon name="arrow-right" />
+				<span class="tool-label">Look right</span>
+			</button>
+			<button class="tool" type="button" data-look="up">
+				<Icon name="arrow-up" />
+				<span class="tool-label">Look up</span>
+			</button>
+			<button class="tool" type="button" data-look="down">
+				<Icon name="arrow-down" />
+				<span class="tool-label">Look down</span>
+			</button>
+			<button class="tool" type="button" data-zoom="in">
+				<Icon name="plus" />
+				<span class="tool-label">Zoom in</span>
+			</button>
+			<button class="tool" type="button" data-zoom="out">
+				<Icon name="minus" />
+				<span class="tool-label">Zoom out</span>
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -277,6 +306,22 @@ const clientConfig = {
 								Back to the gallery
 							</a>
 						</div>
+						{room.hotspots.length > 0 && (
+							<div class="room-pois">
+								<p class="room-pois-label" id={`room-${room.slug}-pois`}>
+									Things to look for
+								</p>
+								<ul class="room-pois-list" role="list" aria-labelledby={`room-${room.slug}-pois`}>
+									{room.hotspots.map((h) => (
+										<li>
+											<button class="poi-link" type="button" data-show-poi={`poi-${room.slug}-${h.id}`}>
+												{h.title}
+											</button>
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
 					</div>
 
 					{room.hotspots.length > 0 && (
@@ -287,8 +332,10 @@ const clientConfig = {
 										<span class="poi-ring" aria-hidden="true" />
 										<span class="sr-only">{h.title}</span>
 									</button>
-									<div class="poi-card" id={`poi-${room.slug}-${h.id}`}>
-										<h3 class="poi-title">{h.title}</h3>
+									<div class="poi-card" id={`poi-${room.slug}-${h.id}`} role="group" aria-labelledby={`poi-${room.slug}-${h.id}-title`}>
+										<h3 class="poi-title" id={`poi-${room.slug}-${h.id}-title`}>
+											{h.title}
+										</h3>
 										<p>{h.text}</p>
 									</div>
 								</li>
@@ -453,11 +500,15 @@ const clientConfig = {
 			<dl class="controls">
 				<div>
 					<dt>Look around</dt>
-					<dd>Drag, swipe, or arrow keys</dd>
+					<dd>Drag, swipe, arrow keys, or the arrow buttons</dd>
 				</div>
 				<div>
 					<dt>Zoom</dt>
-					<dd>Scroll, pinch, or + and −</dd>
+					<dd>Scroll, pinch, + and −, or the zoom buttons</dd>
+				</div>
+				<div>
+					<dt>Things to look for</dt>
+					<dd>Select a ring in the view, or its name on the room card</dd>
 				</div>
 				<div>
 					<dt>Enter a painting</dt>

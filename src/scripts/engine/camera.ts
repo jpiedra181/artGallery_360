@@ -99,11 +99,19 @@ export class ViewController implements ViewState {
 		return { fovV, stereo: stereoFor(fovV), aspect };
 	}
 
+	/** A scripted view kept within the same limits as drag, pinch and wheel. */
+	static limit(v: ViewState): ViewState {
+		return { yaw: v.yaw, pitch: clamp(v.pitch, MIN_PITCH, MAX_PITCH), zoom: clamp(v.zoom, MIN_ZOOM, MAX_ZOOM) };
+	}
+
 	set(v: Partial<ViewState>) {
 		if (v.yaw !== undefined) this.yaw = v.yaw;
 		if (v.pitch !== undefined) this.pitch = clamp(v.pitch, MIN_PITCH, MAX_PITCH);
 		if (v.zoom !== undefined) this.zoom = v.zoom;
 		this.vyaw = this.vpitch = 0;
+		// with motion control on, a scripted move re-aims the heading (as dragging does)
+		// instead of being pulled back to where the device points
+		if (this.gyro) this.gyro.offset = null;
 		this.dirty = true;
 	}
 

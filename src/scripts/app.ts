@@ -8,7 +8,7 @@
  */
 
 import { Soundscape, type SoundId } from "./audio/soundscape";
-import { ViewController } from "./engine/camera";
+import { ViewController, type ViewState } from "./engine/camera";
 import { chooseTier, decode, fetchBlob, prefetch, resolveUrl, supportsAvif, type SceneAssets } from "./engine/loader";
 import {
 	DEG,
@@ -99,6 +99,29 @@ const store = {
 		}
 	},
 };
+
+// ─── Turning the view without dragging ────────────────────────────────────────
+
+/** One click of the look buttons (radians), as [yaw, pitch]; yaw grows to the right, pitch upwards. */
+const LOOK_STEP_YAW = 45 * DEG;
+const LOOK_STEP_PITCH = 25 * DEG;
+const LOOK_STEPS: Record<string, [number, number]> = {
+	left: [-LOOK_STEP_YAW, 0],
+	right: [LOOK_STEP_YAW, 0],
+	up: [0, LOOK_STEP_PITCH],
+	down: [0, -LOOK_STEP_PITCH],
+};
+/** One click of the zoom buttons: the field of view shrinks or grows by this factor. */
+const ZOOM_STEP = 1.25;
+const LOOK_STEP_SECONDS = 0.45;
+const BRING_INTO_VIEW_SECONDS = 0.7;
+/** Something with focus counts as comfortably in view inside the central 60 % of the clear area. */
+const COMFORT_MARGIN = 0.2;
+/** Points-of-interest notes: distance from the point (as `--poi-gap` in global.css), and room kept free around them. */
+const NOTE_GAP_REM = 1.9;
+const NOTE_MARGIN = 8;
+/** Below this height (px) a note that fits neither above nor below its point covers the point instead of shrinking further. */
+const NOTE_MIN_HEIGHT = 112;
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -214,6 +237,8 @@ function start(withSound: boolean) {
 	const btnGyro = $<HTMLButtonElement>("#btn-gyro");
 	const btnFullscreen = $<HTMLButtonElement>("#btn-fullscreen");
 	const btnGuide = $<HTMLButtonElement>("#btn-guide");
+	const bar = $("#bar");
+	const lookControls = $("#look-controls");
 	const hubSection = $("#hub");
 	const roomSections = $$("article.room");
 
@@ -623,20 +648,114 @@ function start(withSound: boolean) {
 		s.addEventListener("blur", () => setHovered(null));
 	}
 
-	/** Keyboard users: turn the view so whatever just got focus is on screen. */
-	function bringIntoView(yaw: number, pitch: number) {
-		if (busy) return;
-		const ndc = project(dirFromAngles(yaw, pitch), view.yaw, view.pitch, currentProjection());
-		if (ndc && Math.abs(ndc[0]) < 0.6 && Math.abs(ndc[1]) < 0.6) return;
-		const y0 = view.yaw, p0 = view.pitch, dy = angleDelta(y0, yaw);
+	// ─── Scripted turns: focus, the look and zoom buttons, “Things to look for” ─
+	// One at a time: a newer turn takes over from wherever the view is.
+	let turnToken = 0;
+	let turnGoal: ViewState | null = null;
+
+	/** Glide to `goal`. Resolves true if it got there, false if a newer turn or a navigation took over. */
+	function turnTo(goal: ViewState, seconds: number): Promise<boolean> {
+		const token = ++turnToken;
+		const from: ViewState = { yaw: view.yaw, pitch: view.pitch, zoom: view.zoom };
+		const to = ViewController.limit(goal);
+		const dy = angleDelta(from.yaw, to.yaw);
+		turnGoal = { ...to, yaw: from.yaw + dy };
 		view.locked = true;
-		animate(reduced() ? 0 : 0.7, easeInOutCubic, (t) => {
-			view.yaw = y0 + dy * t;
-			view.pitch = lerp(p0, pitch, t);
+		return animate(reduced() ? 0 : seconds, easeInOutCubic, (t) => {
+			if (token !== turnToken) return;
+			view.yaw = from.yaw + dy * t;
+			view.pitch = lerp(from.pitch, to.pitch, t);
+			view.zoom = Math.exp(lerp(Math.log(from.zoom), Math.log(to.zoom), t));
 		}).then(() => {
+			if (token !== turnToken) return false;
+			turnGoal = null;
 			view.locked = false;
 			view.set({});
+			return true;
 		});
+	}
+
+	/** Navigation takes the camera over: drop any turn still running. */
+	function cancelTurn() {
+		turnToken++;
+		turnGoal = null;
+	}
+
+	/** Bottom edge of what the header shows (wordmark and buttons); the gradient under it is see-through. */
+	function barBottom() {
+		let bottom = 0;
+		// layout offsets, not rects: the header slides in with a transform after the title screen
+		for (const el of bar.children) bottom = Math.max(bottom, (el as HTMLElement).offsetTop + (el as HTMLElement).offsetHeight);
+		return bar.offsetTop + bottom;
+	}
+	// the header grows when the wordmark wraps (narrow screens, larger text): what sits under it follows
+	new ResizeObserver(() => root.style.setProperty("--bar-h", `${barBottom()}px`)).observe(bar);
+
+	/** The part of the view nothing covers: under the header, clear of the room card and of a description beside it. */
+	function clearArea() {
+		const area = { left: 0, top: barBottom(), right: look.clientWidth, bottom: look.clientHeight };
+		const room = current === "hub" ? null : document.getElementById(`room-${current}`);
+		if (!room) return area;
+		const panel = room.querySelector<HTMLElement>('.details[data-open="true"]');
+		if (panel) {
+			const r = panel.getBoundingClientRect();
+			// beside the view on wide screens; on narrow ones it is a sheet and the points hide under it
+			if (r.left > area.right / 4) area.right = Math.min(area.right, r.left);
+		}
+		const card = room.querySelector<HTMLElement>(".room-card");
+		if (card && getComputedStyle(card).visibility !== "hidden") {
+			const r = card.getBoundingClientRect();
+			// the card sits bottom left: keep the larger free region, above it or beside it
+			const above = (area.right - area.left) * (r.top - area.top);
+			const beside = (area.right - Math.max(area.left, r.right)) * (area.bottom - area.top);
+			if (above >= beside) area.bottom = Math.min(area.bottom, r.top);
+			else area.left = Math.max(area.left, r.right);
+		}
+		return area;
+	}
+
+	/**
+	 * Turn the view so whatever just got focus is on screen and not under the
+	 * header, the room card or an open description. With `center` it always
+	 * turns, even if the target is already in view.
+	 */
+	function bringIntoView(yaw: number, pitch: number, center = false): Promise<boolean> {
+		if (busy) return Promise.resolve(false);
+		const proj = currentProjection();
+		const w = look.clientWidth;
+		const h = look.clientHeight;
+		const area = clearArea();
+		const ndc = project(dirFromAngles(yaw, pitch), view.yaw, view.pitch, proj);
+		if (ndc && !center) {
+			const x = (ndc[0] * 0.5 + 0.5) * w;
+			const y = (0.5 - ndc[1] * 0.5) * h;
+			const mx = (area.right - area.left) * COMFORT_MARGIN;
+			const my = (area.bottom - area.top) * COMFORT_MARGIN;
+			if (x > area.left + mx && x < area.right - mx && y > area.top + my && y < area.bottom - my) return Promise.resolve(true);
+		}
+		// aim so the target lands in the middle of the clear area, not of the screen
+		const ray = screenRay((area.left + area.right) / w - 1, 1 - (area.top + area.bottom) / h, proj);
+		const across = Math.atan2(ray[0], ray[2]);
+		const upward = Math.atan2(ray[1], Math.hypot(ray[0], ray[2]));
+		return turnTo({ yaw: yaw - across, pitch: pitch - upward, zoom: view.zoom }, BRING_INTO_VIEW_SECONDS);
+	}
+
+	/** One click of the look or zoom buttons: what dragging and pinching do, with a single pointer and no drag. */
+	function stepView(dYaw: number, dPitch: number, zoomFactor = 1) {
+		if (busy || !entered) return;
+		interacted();
+		// a click during a step carries on from where that step is heading
+		const base = turnGoal ?? { yaw: view.yaw, pitch: view.pitch, zoom: view.zoom };
+		turnTo({ yaw: base.yaw + dYaw, pitch: base.pitch + dPitch, zoom: base.zoom * zoomFactor }, LOOK_STEP_SECONDS);
+	}
+	lookControls.hidden = false;
+	for (const btn of lookControls.querySelectorAll<HTMLButtonElement>("[data-look]")) {
+		const [dYaw, dPitch] = LOOK_STEPS[btn.dataset.look!];
+		btn.addEventListener("click", () => stepView(dYaw, dPitch));
+	}
+	for (const btn of lookControls.querySelectorAll<HTMLButtonElement>("[data-zoom]")) {
+		const factor = btn.dataset.zoom === "in" ? 1 / ZOOM_STEP : ZOOM_STEP;
+		btn.addEventListener("click", () => stepView(0, 0, factor));
 	}
 
 	// ─── Points of interest inside the rooms ────────────────────────────────
@@ -667,6 +786,20 @@ function start(withSound: boolean) {
 		}
 	});
 
+	/** Picked from “Things to look for” on the room card: turn to the point, open its note and move focus to it. */
+	async function showPoi(p: HTMLElement) {
+		if (busy || !entered) return;
+		setPoi(null);
+		const arrived = await bringIntoView(Number(p.dataset.yaw) * DEG, Number(p.dataset.pitch) * DEG, true);
+		if (!arrived || busy) return;
+		setPoi(p);
+		p.querySelector<HTMLButtonElement>(".poi-dot")!.focus({ preventScroll: true });
+	}
+	for (const link of $$<HTMLButtonElement>("[data-show-poi]")) {
+		const p = document.getElementById(link.dataset.showPoi!)!.closest<HTMLElement>(".poi")!;
+		link.addEventListener("click", () => showPoi(p));
+	}
+
 	function updatePois() {
 		if (current === "hub" || trans || !entered) return;
 		const proj = currentProjection();
@@ -681,10 +814,48 @@ function start(withSound: boolean) {
 			const x = (ndc[0] * 0.5 + 0.5) * w;
 			const y = (0.5 - ndc[1] * 0.5) * h;
 			p.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
-			p.dataset.align = x < 170 ? "left" : x > w - 170 ? "right" : "center";
-			p.dataset.below = String(y < h * 0.4);
 			if (!visible && openPoi === p) setPoi(null);
+			else if (openPoi === p) placeNote(p, x, y, w, h);
+			else p.dataset.below = String(y < h * 0.4);
 		}
+	}
+
+	/**
+	 * Keep an open note on screen and out from under the header, at any zoom:
+	 * above or below its point (whichever fits, below first near the top), slid
+	 * sideways instead of past the edge, and scrollable — and then focusable, so
+	 * the keyboard can scroll it — when it is still too tall.
+	 */
+	function placeNote(p: HTMLElement, x: number, y: number, w: number, h: number) {
+		const card = p.querySelector<HTMLElement>(".poi-card")!;
+		const gap = NOTE_GAP_REM * parseFloat(getComputedStyle(root).fontSize);
+		const top = barBottom() + NOTE_MARGIN;
+		const bottom = h - NOTE_MARGIN;
+		const natural = card.scrollHeight;
+		const above = y - gap - top;
+		const below = bottom - y - gap;
+		const preferBelow = y < h * 0.4;
+		let height = Math.min(natural, bottom - top);
+		let cardTop: number;
+		if (height <= (preferBelow ? below : above)) cardTop = preferBelow ? y + gap : y - gap - height;
+		else if (height <= (preferBelow ? above : below)) cardTop = preferBelow ? y - gap - height : y + gap;
+		else if (Math.max(above, below) >= NOTE_MIN_HEIGHT) {
+			// the roomier side, scrolling
+			height = Math.max(above, below);
+			cardTop = below >= above ? y + gap : y - gap - height;
+		} else {
+			// no room on either side (very short screens): cover the point; Escape closes the note
+			cardTop = clamp(y - height / 2, top, bottom - height);
+		}
+		const cw = card.offsetWidth;
+		const left = clamp(x - cw / 2, NOTE_MARGIN, w - NOTE_MARGIN - cw);
+		p.dataset.below = String(cardTop > y);
+		card.style.maxHeight = natural > height ? `${Math.floor(height)}px` : "";
+		card.style.setProperty("--poi-dx", `${(left - x).toFixed(1)}px`);
+		card.style.setProperty("--poi-dy", `${(cardTop - y).toFixed(1)}px`);
+		const scrolls = card.scrollHeight > card.clientHeight + 1;
+		if (scrolls && card.tabIndex !== 0) card.tabIndex = 0;
+		else if (!scrolls && card.hasAttribute("tabindex")) card.removeAttribute("tabindex");
 	}
 
 	// ─── Navigation ─────────────────────────────────────────────────────────
@@ -741,6 +912,7 @@ function start(withSound: boolean) {
 		}
 		if (target === current) return;
 		busy = true;
+		cancelTurn();
 		root.classList.add("is-moving");
 		spotsNav.inert = true;
 		setHovered(null);
@@ -956,9 +1128,41 @@ function start(withSound: boolean) {
 		if (e.target === guide) guide.close();
 	});
 
+	// ─── Button labels ──────────────────────────────────────────────────────
+	// The labels under the header buttons (and over the look buttons) show on
+	// hover and keyboard focus. Escape hides the one showing without moving
+	// focus or the pointer; it is the first thing Escape closes.
+	const tools = $$<HTMLButtonElement>(".tool");
+	const labelShowing = (tool: HTMLElement) =>
+		!tool.classList.contains("tip-hidden") &&
+		(tool.matches(":hover") || tool.matches(":focus-visible")) &&
+		(tool.querySelector<HTMLElement>(".tool-label")?.offsetWidth ?? 0) > 1;
+	window.addEventListener(
+		"keydown",
+		(e) => {
+			if (e.key !== "Escape") return;
+			const showing = tools.filter(labelShowing);
+			if (!showing.length) return;
+			for (const tool of showing) tool.classList.add("tip-hidden");
+			e.preventDefault();
+			e.stopPropagation();
+		},
+		true,
+	);
+	for (const tool of tools) {
+		tool.addEventListener("pointerleave", () => {
+			if (!tool.matches(":focus-visible")) tool.classList.remove("tip-hidden");
+		});
+		tool.addEventListener("blur", () => {
+			if (!tool.matches(":hover")) tool.classList.remove("tip-hidden");
+		});
+	}
+
 	// ─── Settings ───────────────────────────────────────────────────────────
 	function setMotion(on: boolean, save = true) {
 		motion = on;
+		// CSS animations (the pulse around the points of interest) pause with the panorama
+		root.classList.toggle("motion-off", !on);
 		btnMotion.setAttribute("aria-pressed", String(on));
 		btnMotion.setAttribute("aria-label", on ? "Pause animation" : "Play animation");
 		if (save) store.set("motion", on ? "on" : "off");

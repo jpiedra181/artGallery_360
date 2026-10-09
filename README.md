@@ -33,7 +33,8 @@ A **semantic mask** is rendered for every world (R water, G sky, B light sources
 ## Accessibility
 
 - every room has a written description of its world and of the painting; the exhibition can be followed entirely without seeing it;
-- keyboard: arrow keys look around, + and − zoom, Tab reaches the paintings and points of interest (the view turns to show what has focus), Escape closes panels;
+- keyboard: arrow keys look around, + and − zoom, Tab reaches the paintings and points of interest (the view turns to show what has focus, clear of the panels), Escape closes panels and button labels;
+- a single pointer, without dragging or pinching: on-screen buttons turn and zoom the view one step per click or tap, and each room card lists its points of interest ("Things to look for") — choosing one turns the view to it and opens its note;
 - screen readers: semantic landmarks and headings, a labelled 360° view, announcements when moving between rooms, focus management;
 - animation can be paused at any time and is off when the system asks for reduced motion; sound is opt-in;
 - WCAG 2.2 AA checked with axe-core; contrast-safe surfaces over the imagery; 44 px touch targets; works from 320 px wide, in portrait and landscape, with safe-area insets;
