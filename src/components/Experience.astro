@@ -110,7 +110,9 @@ const clientConfig = {
 									</span>
 									<span class="spot-text">
 										<span class="spot-theme">{room.theme}</span>
-										<span class="spot-artist">{room.artist}</span>
+										{/* the comma keeps theme and artist apart in the accessible name ("StillnessCLAUDE MONET");
+										    inside the artist span so it goes away with it on small screens */}
+										<span class="spot-artist"><span class="sr-only">, </span>{room.artist}</span>
 									</span>
 									<span class="sr-only">
 										: enter {room.title}, by {room.artist}
