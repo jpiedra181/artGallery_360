@@ -136,6 +136,46 @@ let renderer: PanoRenderer;
 const predecoded = new Map<SceneId, Promise<{ bitmap: ImageBitmap; mask: ImageBitmap | null }>>();
 const firstProgress = { value: 0, listeners: new Set<() => void>() };
 
+const SETTLE_IDLE_TIMEOUT_MS = 1500;
+// Pages loaded in a background tab never report their largest paint.
+const MAIN_PAINT_TIMEOUT_MS = 2500;
+
+function pageLoaded(): Promise<void> {
+	if (document.readyState === "complete") return Promise.resolve();
+	return new Promise((resolve) => addEventListener("load", () => resolve(), { once: true }));
+}
+
+/** First paint of the title screen's main content, where the browser reports it. */
+function mainContentPainted(): Promise<void> {
+	if (!PerformanceObserver.supportedEntryTypes?.includes("largest-contentful-paint")) return Promise.resolve();
+	return new Promise((resolve) => {
+		const done = () => {
+			observer.disconnect();
+			clearTimeout(timer);
+			resolve();
+		};
+		const observer = new PerformanceObserver(done);
+		const timer = setTimeout(done, MAIN_PAINT_TIMEOUT_MS);
+		observer.observe({ type: "largest-contentful-paint", buffered: true });
+	});
+}
+
+function browserIdle(): Promise<void> {
+	return new Promise((resolve) => {
+		if ("requestIdleCallback" in window) requestIdleCallback(() => resolve(), { timeout: SETTLE_IDLE_TIMEOUT_MS });
+		else setTimeout(resolve, 0);
+	});
+}
+
+/**
+ * Resolves once the title screen is on screen with its fonts and the browser
+ * is idle. On a slow phone, a panorama fetched any earlier holds back the
+ * title itself: Stillness's 4k panorama is 640 KB.
+ */
+function titleScreenSettled(): Promise<void> {
+	return Promise.all([pageLoaded(), document.fonts.ready, mainContentPainted()]).then(browserIdle);
+}
+
 if (typeof createImageBitmap !== "function" || !("WebGL2RenderingContext" in window)) {
 	fallback("WebGL2 or createImageBitmap unavailable");
 } else {
@@ -144,7 +184,8 @@ if (typeof createImageBitmap !== "function" || !("WebGL2RenderingContext" in win
 
 /**
  * Title screen. Nothing touches the GPU yet: the still image is on screen
- * and the first panorama downloads and decodes in the background. WebGL is
+ * and, once it has settled, the first panorama downloads and decodes in the
+ * background. WebGL is
  * only created when the visitor chooses to enter, which keeps the first
  * paint fast and leaves low-end devices alone until they ask for more.
  */
@@ -157,6 +198,7 @@ function prepare() {
 	predecoded.set(
 		id,
 		(async () => {
+			await titleScreenSettled();
 			const url = config.base + resolveUrl(assets, tier, await supportsAvif());
 			const maskUrl = assets.mask ? config.base + assets.mask : null;
 			const [blob, maskBlob] = await Promise.all([
