@@ -1,6 +1,16 @@
+<a href="https://artgallery360.art"><img src="public/og.jpg" alt="Inside the Frame: Hokusai's Great Wave hanging in a dark, spotlit gallery with a flooded floor" width="100%"></a>
+
 # Inside the Frame — Vol. I: Water
 
-An interactive exhibition that turns four public-domain paintings about water into 360° worlds you can stand in:
+An interactive exhibition that turns four public-domain paintings about water into 360° worlds you can stand in.
+
+**[Live site ↗](https://artgallery360.art)** · Built by [Javier Piedra](https://jpiedra.com/en/)
+
+> Personal project. Every artwork is public domain, every texture CC0 and every typeface open-licensed (see [Credits](#credits)).
+
+## Overview
+
+Online collections usually show a painting as a flat image with a caption. Inside the Frame asks what it would feel like to step into one. The visitor starts in a dark gallery whose floor is flooded with still water; selecting a painting glides up to it and dives through the canvas into its world.
 
 | Room | Painting | Collection |
 | --- | --- | --- |
@@ -9,38 +19,43 @@ An interactive exhibition that turns four public-domain paintings about water in
 | III — Stillness | Claude Monet, *Water Lily Pond*, 1900 | The Art Institute of Chicago |
 | IV — Moonlight | J. M. W. Turner, *Keelmen Heaving in Coals by Moonlight*, 1835 | National Gallery of Art, Washington |
 
-The visitor starts in a dark gallery whose floor is flooded with still water. Selecting a painting glides up to it and dives through the canvas into its world.
+The same approach suits museums, galleries, cultural foundations, hotels and brands that want an immersive experience people actually remember.
 
-## How it is made
+## Highlights
 
-**Worlds** are generated entirely from Python scripts in Blender 5 (`blender/scripts/`), rendered as 8K equirectangular panoramas with Cycles and finished in post:
+- **Worlds built in Blender, generated from code.** Every scene is produced by Python scripts in Blender 5 and rendered as an 8K equirectangular panorama with Cycles.
+- **Painted, not just rendered.** The two woodblock prints are lit by emission only (flat colours), with ink outlines drawn afterwards from depth, normal and object-id passes, plus paper grain and block mottling. The two oil paintings are rendered with real light, then painted with an anisotropic Kuwahara filter, brush strokes that follow the image structure, impasto relief and canvas weave.
+- **Living stills.** A semantic mask per world (R water, G sky, B light sources) drives real-time layers on top of the render: ripples on water (with drops falling in the gallery), rain in two directions with impacts on the river, flickering fires, a drifting sky, a rocking boat.
+- **Water-drop transitions** dissolve one scene into the next.
+- **Generative sound.** Synthesised live with Web Audio and positioned in 3D (HRTF) around the visitor — no audio files.
 
-- the two woodblock prints are lit by emission only (flat colours); ink outlines are drawn afterwards from depth, normal and object-id passes, and paper grain and block mottling are added (`scripts/looks.py`);
-- the two oil paintings are rendered with real light, then painted with an anisotropic Kuwahara filter, brush strokes that follow the local structure of the image, impasto relief and canvas weave.
+## Tech stack and decisions
 
-A **semantic mask** is rendered for every world (R water, G sky, B light sources).
+| Area | Choice |
+|---|---|
+| Site | Static [Astro](https://astro.build): one page per room, readable without JavaScript, navigated without reloads when it is available |
+| Viewer | A dependency-free **WebGL 2** renderer (~19 KB gzipped for the whole app) |
+| 3D production | Blender 5 + Cycles, scripted in Python (`blender/scripts/`) |
+| Post-processing | Python (`scripts/looks.py`, `scripts/post.py`) |
+| Audio | Web Audio API with HRTF panning |
+| Testing | axe-core |
 
-**The viewer** (`src/scripts/`) is a dependency-free WebGL2 renderer (~19 KB gzipped for the whole app):
+- **No sphere mesh.** A single fullscreen shader casts a ray per pixel and samples the panorama: exact projection, seam-safe mipmapping, and a stereographic blend for wide portrait screens.
+- **Streaming without stalls.** Panoramas stream in strips so uploads never block a frame; scenes open at 4K and upgrade to 8K on capable screens; resolution adapts to keep the frame rate smooth.
 
-- a single fullscreen shader casts a ray per pixel and samples the panorama — exact projection, no sphere mesh, seam-safe mipmapping, and a stereographic blend for wide portrait screens;
-- the mask drives real-time layers on top of the still render: ripples on water (with drops falling in the gallery), rain in two directions with impacts on the river, flickering fires, a drifting sky, the rocking of a boat;
-- transitions are a water-drop dissolve between two scenes;
-- panoramas stream in strips so uploads never stall a frame; scenes open at 4K and upgrade to 8K on capable screens; the resolution adapts to keep the frame rate smooth;
-- sound is synthesised live with Web Audio and positioned in 3D (HRTF) around the visitor — no audio files.
+## Accessibility and performance
 
-**The site** is static [Astro](https://astro.build): one page per room, readable without JavaScript, navigated without reloads when it is available.
+- Every room has a written description of its world and of the painting; the exhibition can be followed entirely without seeing it.
+- **Keyboard:** arrow keys look around, + and − zoom, Tab reaches the paintings and points of interest (the view turns to show what has focus, clear of the panels), Escape closes panels and button labels.
+- **Single pointer, no dragging or pinching:** on-screen buttons turn and zoom one step per click or tap, and each room card lists its points of interest ("Things to look for"); choosing one turns the view to it and opens its note.
+- **Screen readers:** semantic landmarks and headings, a labelled 360° view, announcements when moving between rooms, focus management.
+- Animation can be paused at any time and is off when the system asks for reduced motion; sound is opt-in.
+- WCAG 2.2 AA checked with axe-core; contrast-safe surfaces over the imagery; 44 px touch targets; works from 320 px wide, in portrait and landscape, with safe-area insets.
+- Without WebGL 2, the page falls back to stills and text.
 
-## Accessibility
+## Getting started
 
-- every room has a written description of its world and of the painting; the exhibition can be followed entirely without seeing it;
-- keyboard: arrow keys look around, + and − zoom, Tab reaches the paintings and points of interest (the view turns to show what has focus, clear of the panels), Escape closes panels and button labels;
-- a single pointer, without dragging or pinching: on-screen buttons turn and zoom the view one step per click or tap, and each room card lists its points of interest ("Things to look for") — choosing one turns the view to it and opens its note;
-- screen readers: semantic landmarks and headings, a labelled 360° view, announcements when moving between rooms, focus management;
-- animation can be paused at any time and is off when the system asks for reduced motion; sound is opt-in;
-- WCAG 2.2 AA checked with axe-core; contrast-safe surfaces over the imagery; 44 px touch targets; works from 320 px wide, in portrait and landscape, with safe-area insets;
-- without WebGL2 the page falls back to stills and text.
-
-## Working on it
+Requires Node 22.12 or later.
 
 ```sh
 npm install
@@ -85,4 +100,6 @@ Scenes: `hub`, `wave`, `rain`, `stillness`, `moonlight`. The hub script also wri
 - Textures from [Poly Haven](https://polyhaven.com) (CC0): Plastered Wall 04 and Square Floor by Rob Tuytel, Oak Wood Planks by Dimitrios Savva.
 - Type: Instrument Serif and Instrument Sans (SIL Open Font License).
 
-Concept, 3D, sound and code by Javier Piedra.
+---
+
+Concept, 3D, sound and code by **[Javier Piedra](https://jpiedra.com/en/)** — WordPress, 3D web and accessible front-ends. Want an immersive experience for your collection or brand? [Get in touch](mailto:javierpiedraiglesias@gmail.com).
