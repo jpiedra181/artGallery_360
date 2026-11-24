@@ -8,7 +8,8 @@
 import Icon from "./Icon.astro";
 import assets from "../data/assets.json";
 import hubGeometry from "../data/hub-geometry.json";
-import { credits, hub, rooms, site, type RoomSlug } from "../data/rooms";
+import registration from "../data/registration.json";
+import { credits, finale, hub, prologue, rooms, site, type RoomSlug } from "../data/rooms";
 
 interface Props {
 	route: "hub" | RoomSlug;
@@ -21,7 +22,8 @@ const asset = (p: string) => `${base}${p}`;
 
 type Still = { widths: number[]; avif: Record<string, string>; webp: Record<string, string>; lqip?: string } | null;
 type Art = { width: number; height: number; avif: Record<string, string>; webp: Record<string, string> };
-const scenes = (assets as { scenes: Record<string, { tiers: unknown; mask: string | null; still: Still }> }).scenes;
+type Depth = { url: string; near: number };
+const scenes = (assets as { scenes: Record<string, { tiers: unknown; mask: string | null; depth?: Depth; still: Still }> }).scenes;
 const art = (assets as { art: Record<string, Art> }).art;
 
 const srcset = (set: Record<string, string>) =>
@@ -44,7 +46,16 @@ const artAlt: Record<RoomSlug, string> = {
 const clientConfig = {
 	base,
 	route,
-	hub: { title: hub.title, effects: hub.effects, geometry: hubGeometry },
+	hub: {
+		title: hub.title,
+		effects: hub.effects,
+		entrance: hub.entrance,
+		opening: hub.opening,
+		returning: hub.returning,
+		pigment: hub.pigment,
+		view: hub.view,
+		geometry: hubGeometry,
+	},
 	rooms: rooms.map((r) => ({
 		slug: r.slug,
 		numeral: r.numeral,
@@ -52,11 +63,14 @@ const clientConfig = {
 		title: r.title,
 		artist: r.artist,
 		view: r.view,
+		entrance: r.entrance,
 		effects: r.effects,
 		audio: r.audio,
-		accent: r.accent,
+		pigment: r.pigment,
 	})),
-	scenes: Object.fromEntries(Object.entries(scenes).map(([k, v]) => [k, { tiers: v.tiers, mask: v.mask }])),
+	registration: registration.rooms,
+	art: Object.fromEntries(rooms.map((r) => [r.slug, { width: 960, avif: art[r.slug].avif["960"], webp: art[r.slug].webp["960"] }])),
+	scenes: Object.fromEntries(Object.entries(scenes).map(([k, v]) => [k, { tiers: v.tiers, mask: v.mask, depth: v.depth }])),
 };
 ---
 
@@ -86,7 +100,8 @@ const clientConfig = {
 			<canvas id="canvas" aria-hidden="true"></canvas>
 		</div>
 		<p id="look-help" hidden>
-			Drag or swipe to look around, or use the arrow keys or the look buttons. Use plus and minus, or the zoom buttons, to zoom.
+			Drag or swipe to look around, or use the arrow keys. Use plus and minus to zoom. The “Look and zoom buttons” control
+			opens buttons that do the same one step at a time.
 			Press Tab to reach the paintings and controls.
 		</p>
 
@@ -102,9 +117,8 @@ const clientConfig = {
 									href={href(room.slug)}
 									data-room={room.slug}
 									data-yaw={g.yaw}
-									data-pitch={g.frameBottom}
-									style={`--accent: ${room.accent}`}
-								>
+										data-pitch={g.frameBottom}
+									>
 									<span class="spot-numeral" aria-hidden="true">
 										{room.numeral}
 									</span>
@@ -117,6 +131,11 @@ const clientConfig = {
 									<span class="sr-only">
 										: enter {room.title}, by {room.artist}
 									</span>
+									{/* shown by the script once the room has been visited */}
+									<span class="sr-only" data-visited-note hidden>
+										{" "}
+										(visited)
+									</span>
 								</a>
 							</li>
 						);
@@ -125,7 +144,13 @@ const clientConfig = {
 			</ul>
 		</nav>
 
-		<!-- one click or tap per step, for anyone who cannot drag or pinch; shown by the script in immersive mode -->
+		<!-- one click or tap per step, for anyone who cannot drag or pinch. Folded behind one button so the
+		     view stays clear; the script shows that button in immersive mode and remembers whether the pad is open -->
+		<div class="look-pad" id="look-pad" role="region" aria-label="Look and zoom controls" hidden>
+			<button class="tool" type="button" id="btn-look" aria-expanded="false" aria-controls="look-controls">
+				<Icon name="look" />
+				<span class="tool-label">Look and zoom buttons</span>
+			</button>
 		<div class="look-controls" id="look-controls" role="group" aria-label="Look around" hidden>
 			<button class="tool" type="button" data-look="left">
 				<Icon name="arrow-left" />
@@ -152,16 +177,21 @@ const clientConfig = {
 				<span class="tool-label">Zoom out</span>
 			</button>
 		</div>
+		</div>
 	</div>
 </div>
 
 <header class="bar" id="bar">
-	<a class="wordmark" href={href("hub")} data-nav="hub">
-		<span class="wordmark-name">Inside the Frame</span>
-		<span class="wordmark-room" id="wordmark-room" aria-hidden="true">
-			{current ? `Room ${current.numeral} — ${current.theme}` : site.volume}
-		</span>
-	</a>
+	<!-- the brand takes whatever room the buttons leave; when that is too little for the name, a monogram stands in (see global.css) -->
+	<div class="brand">
+		<a class="wordmark" href={href("hub")} data-nav="hub">
+			<span class="wordmark-name">Inside the Frame</span>
+			<span class="wordmark-mark" aria-hidden="true">ItF</span>
+			<span class="wordmark-room" id="wordmark-room" aria-hidden="true">
+				{current ? `Room ${current.numeral} — ${current.theme}` : site.volume}
+			</span>
+		</a>
+	</div>
 	<nav class="tools" aria-label="Experience settings">
 		<button class="tool" type="button" id="btn-sound" aria-pressed="false" hidden>
 			<Icon name="sound-off" class="when-off" />
@@ -194,43 +224,73 @@ const clientConfig = {
 		{current ? `Room ${current.numeral} — ${current.theme}: ${current.title}` : `${site.name} — ${hub.title}`}
 	</h1>
 
+	{/* The title screen, set like the foot of an exhibition poster: the name, a rule, and under it the
+	    volume, the painters and the way in. The credit and the reading pages sit along the top. */}
 	<section class="intro" id="intro" aria-labelledby="intro-title">
 		<div class="intro-inner">
-			<p class="eyebrow">An interactive exhibition · {site.volume}</p>
-			<h2 class="intro-title" id="intro-title">Inside <em>the</em> Frame</h2>
-			<p class="intro-lede">{site.tagline}</p>
-			{
-				current && (
-					<p class="intro-room">
-						Starting in Room {current.numeral} — {current.theme}: <cite>{current.title}</cite>
+			<h2 class="intro-title" id="intro-title">{site.name}</h2>
+			<div class="intro-cols">
+				<div class="intro-about">
+					<div class="intro-bill">
+						<p class="intro-vol">{site.volume}</p>
+						<p class="intro-artists">{rooms.map((r) => r.artist.split(" ").slice(-1)[0]).join(", ")}</p>
+					</div>
+					<div class="intro-say">
+						<p class="intro-lede">{site.tagline}</p>
+						{
+							current && (
+								<p class="intro-room">
+									Starting in Room {current.numeral}, {current.theme}: <cite>{current.title}</cite>
+								</p>
+							)
+						}
+					</div>
+				</div>
+				<div class="intro-enter">
+					<!-- shown from the first paint in immersive mode (no layout shift); hidden in the document -->
+					<div class="intro-actions" id="intro-actions">
+						<button class="btn btn-primary" type="button" data-enter="sound">Enter with sound</button>
+						<button class="btn btn-quiet" type="button" data-enter="silent">Enter in silence</button>
+					</div>
+					<div class="intro-progress" id="intro-progress">
+						<div
+							class="progress"
+							role="progressbar"
+							aria-label="Loading the gallery"
+							aria-valuemin="0"
+							aria-valuemax="100"
+							aria-valuenow="0"
+						>
+							<span></span>
+						</div>
+					</div>
+					<p class="intro-hint" id="intro-hint">
+						Headphones recommended. Drag, swipe or use the arrow keys to look around.
 					</p>
-				)
-			}
-			<!-- shown from the first paint in immersive mode (no layout shift); hidden in the document -->
-			<div class="intro-actions" id="intro-actions">
-				<button class="btn btn-primary" type="button" data-enter="sound">
-					<Icon name="sound-on" />
-					Enter with sound
-				</button>
-				<button class="btn btn-quiet" type="button" data-enter="silent">Enter in silence</button>
-			</div>
-			<div class="intro-progress" id="intro-progress">
-				<div
-					class="progress"
-					role="progressbar"
-					aria-label="Loading the gallery"
-					aria-valuemin="0"
-					aria-valuemax="100"
-					aria-valuenow="0"
-				>
-					<span></span>
 				</div>
 			</div>
-			<p class="intro-hint" id="intro-hint">
-				Headphones recommended. Drag, swipe or use the arrow keys to look around.
+		</div>
+		<div class="intro-top">
+			<p class="intro-credit">An interactive exhibition by {site.author}</p>
+			<p class="intro-links">
+				<a href={`${base}making-of/`}>How it was made</a>
+				<a href={`${base}about/`}>About and credits</a>
 			</p>
 		</div>
 	</section>
+
+	{/* The prologue: two lines read over the dark water before the gallery comes into view. Run by
+	    the script, in immersive mode only; the lines are announced through the live region. */}
+	<div class="prologue" id="prologue" hidden>
+		{prologue.map((line) => (
+			<p class="prologue-line" aria-hidden="true">
+				{line}
+			</p>
+		))}
+		<button class="btn btn-quiet prologue-skip" type="button" id="prologue-skip">
+			Skip
+		</button>
+	</div>
 
 	<section class="hub" id="hub" data-route="hub" hidden={route !== "hub"} aria-labelledby="hub-title">
 		<div class="hub-inner">
@@ -241,7 +301,7 @@ const clientConfig = {
 					rooms.map((room) => {
 						const a = art[room.slug];
 						return (
-							<li style={`--accent: ${room.accent}`}>
+							<li>
 								<a class="room-link" href={href(room.slug)} data-nav={room.slug}>
 									{a && (
 										<picture>
@@ -261,7 +321,7 @@ const clientConfig = {
 									<span class="room-link-meta">
 										Room {room.numeral} — {room.theme}
 									</span>
-									<span class="room-link-title">{room.title}</span>
+									<cite class="room-link-title">{room.title}</cite>
 									<span class="room-link-artist">
 										{room.artist}, {room.date}
 									</span>
@@ -285,31 +345,66 @@ const clientConfig = {
 					id={`room-${room.slug}`}
 					data-route={room.slug}
 					hidden={route !== room.slug}
-					aria-labelledby={`room-${room.slug}-title`}
-					style={`--accent: ${room.accent}`}
-				>
-					<div class="room-card">
-						<p class="eyebrow">
-							Room {room.numeral} — {room.theme}
-						</p>
+						aria-labelledby={`room-${room.slug}-title`}
+						style={`--pigment: ${room.pigment}`}
+					>
+						{/* The room's label, as it would hang beside the painting. The swatch is the pigment that
+						    opened the canvas on the way in. */}
+						<div class="room-card">
+							<p class="room-no">
+								<span>
+									Room {room.numeral} — {room.theme}
+								</span>
+								<span class="swatch" aria-hidden="true" />
+							</p>
 						<h2 class="room-title" id={`room-${room.slug}-title`}>
 							{room.title}
 						</h2>
 						<p class="room-by">
-							{room.artist} · {room.date}
+							{room.artist}, {room.date}
 						</p>
+						{/* sets going what can move in the room; shown by the script. The same as holding the view or the space bar */}
+						{room.act && (
+							<button
+								class="btn room-act"
+								type="button"
+								data-tide
+								data-run={room.act.run}
+								data-stop={room.act.stop}
+								data-hint={room.act.hint}
+								data-caught={room.act.caught}
+								aria-pressed="false"
+								hidden
+							>
+								{room.act.run}
+							</button>
+						)}
 						<div class="room-actions">
 							<button class="btn" type="button" data-details={room.slug} aria-expanded="true" aria-controls={`details-${room.slug}`}>
-								<Icon name="info" />
-								About this painting
+								<span>About<span class="btn-more"> this painting</span></span>
 							</button>
+							{/* shown by the script, which folds the list below behind it */}
+							{room.hotspots.length > 0 && (
+								<button
+									class="btn btn-quiet"
+									type="button"
+									data-pois
+									aria-expanded="true"
+									aria-controls={`room-${room.slug}-pois-panel`}
+									hidden
+								>
+									<span>
+										Look for<span class="sr-only">: {room.hotspots.length} things in this painting</span>
+									</span>
+								</button>
+							)}
 							<a class="btn btn-quiet" href={href("hub")} data-nav="hub">
 								<Icon name="arrow-left" />
-								Back to the gallery
+								<span><span class="btn-more">Back to the </span>gallery</span>
 							</a>
 						</div>
 						{room.hotspots.length > 0 && (
-							<div class="room-pois">
+							<div class="room-pois" id={`room-${room.slug}-pois-panel`}>
 								<p class="room-pois-label" id={`room-${room.slug}-pois`}>
 									Things to look for
 								</p>
@@ -446,6 +541,36 @@ const clientConfig = {
 		})
 	}
 
+	{/* The ending: lines read over the water in the gallery once all four rooms have been visited, then the
+	    closing words, set like the title screen. Run by the script; announced through the live region. */}
+	<div class="prologue coda" id="coda" hidden>
+		{finale.lines.map((line) => (
+			<p class="prologue-line" aria-hidden="true">
+				{line}
+			</p>
+		))}
+		<button class="btn btn-quiet prologue-skip" type="button" id="coda-skip">
+			Skip
+		</button>
+	</div>
+
+	<section class="finale" id="finale" role="dialog" aria-labelledby="finale-title" aria-describedby="finale-text" tabindex="-1" hidden>
+		<h2 class="finale-title" id="finale-title">{finale.title}</h2>
+		<div class="finale-cols">
+			<div class="finale-about">
+				<p class="finale-vol">{site.name}, {site.volume}</p>
+				<p class="finale-by">Concept, 3D, sound and code by {site.author}</p>
+			</div>
+			{/* read out with the title; seen, it has just been read over the water */}
+			<p class="sr-only" id="finale-text">{finale.lines.join(" ")}</p>
+			<div class="finale-actions">
+			<a class="btn" href={`${base}making-of/`}>How it was made</a>
+			<a class="btn" href={`${base}about/`}>About and credits</a>
+			<button class="btn btn-quiet" type="button" data-finale-close>Stay in the gallery</button>
+			</div>
+		</div>
+	</section>
+
 	<p class="hint" id="hint" aria-hidden="true" hidden></p>
 </main>
 
@@ -471,7 +596,7 @@ const clientConfig = {
 				rooms.map((room) => {
 					const a = art[room.slug];
 					return (
-						<li style={`--accent: ${room.accent}`}>
+						<li>
 							<a href={href(room.slug)} data-nav={room.slug} aria-current={route === room.slug ? "page" : undefined}>
 								<span class="guide-thumb" aria-hidden="true">
 									{a && (
@@ -485,7 +610,7 @@ const clientConfig = {
 									<span class="guide-meta">
 										Room {room.numeral} — {room.theme}
 									</span>
-									<span class="guide-name">{room.title}</span>
+									<cite class="guide-name">{room.title}</cite>
 									<span class="guide-artist">
 										{room.artist}, {room.date}
 									</span>
@@ -502,15 +627,19 @@ const clientConfig = {
 			<dl class="controls">
 				<div>
 					<dt>Look around</dt>
-					<dd>Drag, swipe, arrow keys, or the arrow buttons</dd>
+					<dd>Drag, swipe or arrow keys; moving the mouse shifts your point of view a little</dd>
 				</div>
 				<div>
 					<dt>Zoom</dt>
-					<dd>Scroll, pinch, + and −, or the zoom buttons</dd>
+					<dd>Scroll, pinch, or + and −</dd>
+				</div>
+				<div>
+					<dt>Without dragging</dt>
+					<dd>The button at the bottom right opens look and zoom buttons: one step per click or tap</dd>
 				</div>
 				<div>
 					<dt>Things to look for</dt>
-					<dd>Select a ring in the view, or its name on the room card</dd>
+					<dd>Select a number in the view, or “Look for” on the room's label and then its name</dd>
 				</div>
 				<div>
 					<dt>Enter a painting</dt>
@@ -518,7 +647,11 @@ const clientConfig = {
 				</div>
 				<div>
 					<dt>Go back</dt>
-					<dd>“Back to the gallery” or your browser's back button</dd>
+					<dd>“Gallery” on the room's label, or your browser's back button</dd>
+				</div>
+				<div>
+					<dt>Controls</dt>
+					<dd>They step back after a few seconds; move, tap or press any key to bring them back. With animation paused they stay</dd>
 				</div>
 			</dl>
 		</section>
@@ -555,9 +688,13 @@ const clientConfig = {
 						</>
 					))}
 				</li>
-				<li>Type: Instrument Serif and Instrument Sans (SIL Open Font License)</li>
+				<li>Type: Ibarra Real Nova and Libre Franklin (SIL Open Font License)</li>
 			</ul>
 			<p class="byline">Concept, 3D, sound and code by {site.author}.</p>
+			<p class="guide-pages">
+				<a class="text-link" href={`${base}making-of/`}>How it was made</a>
+				<a class="text-link" href={`${base}about/`}>About and credits</a>
+			</p>
 		</section>
 	</div>
 </dialog>

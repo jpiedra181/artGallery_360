@@ -12,8 +12,15 @@ export type SoundId = "hub" | "ocean" | "shower" | "garden" | "harbour";
 interface Running {
 	id: SoundId;
 	bus: GainNode;
+	/** After the bus: what an act of the room does to its level, apart from coming and going. */
+	hush: GainNode;
+	/** The fires of the harbour blazing up. */
+	blaze?: GainNode;
 	stop: () => void;
 }
+
+/** One setting of the volume has to do for every room: measured, they come within some 8 dB of each other. */
+const LEVEL: Record<SoundId, number> = { hub: 2.4, ocean: 0.8, shower: 0.9, garden: 3, harbour: 2.6 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -95,6 +102,201 @@ export class Soundscape {
 	drip(x: number, y: number, z: number, loudness = 1) {
 		if (!this.ctx || !this.enabled || this.running?.id !== "hub") return;
 		this.plip(this.running.bus, x, y, z, rand(1100, 1700), 0.3 * loudness, 0.65);
+	}
+
+	/**
+	 * Passing through a canvas. Going in: the drop lands, then a rush of
+	 * water opens out and falls away. Coming out: the rush gathers and
+	 * closes, and a last drop marks the surface. Heard in the head, not in
+	 * the scene: it belongs to neither room.
+	 */
+	passage(direction: "in" | "out", seconds: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled) return;
+		const t = ctx.currentTime + 0.02;
+		const out = this.gain(1);
+		out.connect(this.dry);
+		const send = this.gain(0.5);
+		out.connect(send).connect(this.reverb);
+		const into = direction === "in";
+
+		// the rush: band-passed noise sweeping open (in) or shut (out)
+		const n = ctx.createBufferSource();
+		n.buffer = this.buffers.pink;
+		n.loop = true;
+		const bp = this.filter("bandpass", 300, 0.7);
+		const [f0, f1, f2] = into ? [260, 2200, 420] : [520, 1500, 180];
+		const peak = into ? 0.28 : 0.72;
+		bp.frequency.setValueAtTime(f0, t);
+		bp.frequency.exponentialRampToValueAtTime(f1, t + seconds * peak);
+		bp.frequency.exponentialRampToValueAtTime(f2, t + seconds);
+		const env = ctx.createGain();
+		env.gain.setValueAtTime(0.0001, t);
+		env.gain.exponentialRampToValueAtTime(0.22, t + seconds * peak);
+		env.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.4);
+		n.connect(bp).connect(env).connect(out);
+		n.start(t, rand(0, 4));
+		n.stop(t + seconds + 0.5);
+
+		// the body of the water: a low note falling away (in) or rising (out)
+		const o = ctx.createOscillator();
+		o.type = "sine";
+		const [n0, n1] = into ? [92, 44] : [46, 70];
+		o.frequency.setValueAtTime(n0, t);
+		o.frequency.exponentialRampToValueAtTime(n1, t + seconds * 0.8);
+		const body = ctx.createGain();
+		body.gain.setValueAtTime(0.0001, t);
+		body.gain.exponentialRampToValueAtTime(0.2, t + (into ? 0.05 : seconds * 0.6));
+		body.gain.exponentialRampToValueAtTime(0.0001, t + seconds * 0.95);
+		o.connect(body).connect(out);
+		o.start(t);
+		o.stop(t + seconds);
+
+		// the drop
+		const when = into ? 0 : seconds * 0.82;
+		window.setTimeout(() => {
+			if (this.enabled) this.plip(out, 0, 0, 1.2, into ? 520 : 880, into ? 0.4 : 0.22, 0.6);
+		}, when * 1000);
+	}
+
+	// ── the gallery keeps a note for every room that has been entered ──
+	private chordWas = "";
+	private chord: { gain: GainNode; stop: () => void }[] = [];
+	/** D, A, E and F sharp: open while there are few, and a chord once all four sound. */
+	private static readonly NOTES = [73.42, 110, 164.81, 184.99];
+
+	/** Which of the four notes sound in the gallery (0..1 each). Heard in the head, very low. */
+	setChord(levels: ArrayLike<number>) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled) return;
+		const here = this.running?.id === "hub";
+		// called on every frame: only a change is worth an event
+		const wanted = Array.from(levels, (v) => (here ? Math.round(v * 50) / 50 : 0));
+		const key = wanted.join();
+		if (key === this.chordWas && (here || !this.chord.length)) return;
+		this.chordWas = key;
+		if (here && wanted.some((v) => v > 0) && !this.chord.length) {
+			this.chord = Soundscape.NOTES.map((f, i) => {
+				const gain = this.gain(0);
+				const tone = this.filter("lowpass", 900, 0.3);
+				const parts = [1, 2, 3].map((h) => {
+					const o = ctx.createOscillator();
+					o.type = "sine";
+					o.frequency.value = f * h * (1 + 0.0009 * (h - 2));
+					const g = this.gain(0.5 / (h * h));
+					o.connect(g).connect(tone);
+					o.start();
+					return o;
+				});
+				// each breathes at its own pace
+				const breath = this.gain(0.8);
+				const lfo = this.lfo(breath.gain, 0.78, 0.2, 0.047 + i * 0.013);
+				tone.connect(breath).connect(gain);
+				gain.connect(this.dry);
+				const send = this.gain(0.8);
+				gain.connect(send).connect(this.reverb);
+				return {
+					gain,
+					stop: () => {
+						for (const o of [...parts, lfo]) o.stop();
+						gain.disconnect();
+					},
+				};
+			});
+		}
+		this.chord.forEach((c, i) => c.gain.gain.setTargetAtTime(0.07 * (wanted[i] ?? 0), ctx.currentTime, here ? 1.6 : 0.5));
+		if (!here) {
+			for (const c of this.chord) window.setTimeout(c.stop, 3000);
+			this.chord = [];
+		}
+	}
+
+	/** A step of wooden geta on the boards of the bridge (bearing and height in radians, metres away). */
+	step(yaw: number, pitch: number, dist: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled || this.running?.id !== "shower") return;
+		const d = Math.min(dist, 14);
+		const pos: [number, number, number] = [Math.sin(yaw) * Math.cos(pitch) * d, Math.sin(pitch) * d, Math.cos(yaw) * Math.cos(pitch) * d];
+		const t = ctx.currentTime + 0.01;
+		const level = 0.5 / (1 + dist * 0.05);
+		// two blocks of wood on planks: a knock with a little body under it
+		this.tick(this.running.bus, t, pos, rand(900, 1300), 5, level, 0.045);
+		this.tick(this.running.bus, t + 0.004, pos, rand(260, 340), 4, level * 0.9, 0.07);
+	}
+
+	/** A shovel biting into coal, and the coal landing (bearing in degrees). */
+	shovel(yawDeg: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled || this.running?.id !== "harbour") return;
+		const t = ctx.currentTime + 0.02;
+		const pos = this.polar(yawDeg, rand(8, 11), 0.5);
+		for (let i = 0; i < 9; i++) this.tick(this.running.bus, t + i * 0.018 + rand(0, 0.012), pos, rand(1400, 3400), rand(0.8, 1.6), 0.09, rand(0.02, 0.05));
+		const far = this.polar(yawDeg + 5, 12, 2);
+		for (let i = 0; i < 7; i++) this.tick(this.running.bus, t + 1.0 + rand(0, 0.22), far, rand(220, 620), rand(1.5, 3), 0.17, rand(0.03, 0.08));
+	}
+
+	/** How still the pond lies (0..1): the leaves and the lapping sink away, and leave the room to itself. */
+	setCalm(calm: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled || this.running?.id !== "garden") return;
+		this.running.hush.gain.setTargetAtTime(1 - 0.72 * calm, ctx.currentTime, 0.4);
+	}
+
+	/** How high the fires of the harbour blaze (-1..1). */
+	setFire(level: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled || this.running?.id !== "harbour") return;
+		this.running.blaze?.gain.setTargetAtTime(0.16 * Math.max(0, level), ctx.currentTime, 0.3);
+	}
+
+	/** A ship's bell across the water: struck twice. */
+	private bell(bus: AudioNode, pos: [number, number, number]) {
+		const ctx = this.ctx!;
+		const out = this.panner(...pos, 4);
+		out.connect(bus);
+		for (const [i, level] of [0.05, 0.035].entries()) {
+			const t = ctx.currentTime + 0.05 + i * 0.62;
+			// the partials of a small bronze bell, the high ones gone first
+			for (const [ratio, part, ring] of [[1, 1, 3.4], [2.01, 0.6, 2.2], [2.42, 0.5, 1.7], [3.01, 0.32, 1.1], [4.2, 0.2, 0.6]] as const) {
+				const o = ctx.createOscillator();
+				o.frequency.value = 622 * ratio;
+				const env = ctx.createGain();
+				env.gain.setValueAtTime(0, t);
+				env.gain.linearRampToValueAtTime(level * part, t + 0.003);
+				env.gain.exponentialRampToValueAtTime(0.00005, t + ring);
+				o.connect(env).connect(out);
+				o.start(t);
+				o.stop(t + ring + 0.05);
+			}
+		}
+	}
+
+	/** The lip of a wave drawing itself up: a low roar that grows (bearing in degrees). */
+	gather(yawDeg: number, seconds: number) {
+		if (!this.ctx || !this.enabled || this.running?.id !== "ocean") return;
+		this.swell(this.running.bus, this.polar(yawDeg, 9, 6), "brown", 180, 900, 1.1, seconds, 1.6);
+	}
+
+	/** The wave breaking: the weight of it, then the water running out to both sides. */
+	breaker(yawDeg: number) {
+		const ctx = this.ctx;
+		if (!ctx || !this.enabled || this.running?.id !== "ocean") return;
+		const { bus } = this.running;
+		const t = ctx.currentTime + 0.02;
+		const o = ctx.createOscillator();
+		o.type = "sine";
+		o.frequency.setValueAtTime(78, t);
+		o.frequency.exponentialRampToValueAtTime(30, t + 1.4);
+		const env = ctx.createGain();
+		env.gain.setValueAtTime(0.0001, t);
+		env.gain.exponentialRampToValueAtTime(0.5, t + 0.07);
+		env.gain.exponentialRampToValueAtTime(0.0001, t + 1.8);
+		o.connect(env).connect(this.panner(...this.polar(yawDeg, 8, 0), 6)).connect(bus);
+		o.start(t);
+		o.stop(t + 1.9);
+		this.swell(bus, this.polar(yawDeg, 8, 1), "pink", 5200, 420, 1.5, 0.16, 5.5);
+		this.swell(bus, this.polar(yawDeg - 45, 9, 0), "pink", 3400, 300, 0.8, 0.9, 6);
+		this.swell(bus, this.polar(yawDeg + 40, 9, 0), "pink", 3800, 320, 0.8, 1.2, 6);
 	}
 
 	// ─── Setup ─────────────────────────────────────────────────────────────
@@ -337,10 +539,12 @@ export class Soundscape {
 			window.setTimeout(() => old.stop(), 2400);
 		}
 		const bus = this.gain(0);
-		bus.connect(this.dry);
-		bus.gain.linearRampToValueAtTime(1, t + 2.5);
+		const hush = this.gain(1);
+		bus.connect(hush).connect(this.dry);
+		bus.gain.linearRampToValueAtTime(LEVEL[id], t + 2.5);
 		const sends = this.gain(0);
-		bus.connect(sends).connect(this.reverb);
+		hush.connect(sends).connect(this.reverb);
+		let blaze: GainNode | undefined;
 
 		const sources: AudioScheduledSourceNode[] = [];
 		const timers: number[] = [];
@@ -418,8 +622,12 @@ export class Soundscape {
 				sources.push(lap.src, this.lfo(lap.gain.gain, 0.08, 0.06, rate));
 			}
 			const roarLp = this.filter("lowpass", 380, 0.5);
-			const roar = this.bed(bus, "brown", [roarLp], 0.09, this.polar(62, 9, 0.5));
+			const roar = this.bed(bus, "brown", [roarLp], 0.09, this.polar(48, 9, 0.5));
 			sources.push(roar.src, this.lfo(roar.gain.gain, 0.09, 0.04, 1.7), this.lfo(roarLp.frequency, 380, 140, 0.9));
+			const up = this.bed(bus, "brown", [this.filter("lowpass", 620, 0.6)], 0, this.polar(42, 8, 1));
+			blaze = up.gain;
+			sources.push(up.src);
+			every(() => this.bell(bus, this.polar(rand(-50, -25), 26, 3)), 24, 48);
 			const wind = this.filter("bandpass", 500, 0.5);
 			const w = this.bed(bus, "pink", [wind], 0.03);
 			sources.push(w.src, this.lfo(w.gain.gain, 0.03, 0.02, 0.029));
@@ -427,7 +635,7 @@ export class Soundscape {
 				const now = ctx.currentTime;
 				const n = Math.random() < 0.3 ? 4 : 2;
 				for (let i = 0; i < n; i++) {
-					this.tick(bus, now + Math.random() * 0.25, this.polar(rand(50, 75), rand(7, 11), rand(0, 1.5)), rand(1500, 5200), rand(1, 3), rand(0.03, 0.12), rand(0.003, 0.02));
+					this.tick(bus, now + Math.random() * 0.25, this.polar(rand(30, 72), rand(7, 11), rand(0, 1.5)), rand(1500, 5200), rand(1, 3), rand(0.03, 0.12), rand(0.003, 0.02));
 				}
 			}, 240);
 			timers.push(crackle);
@@ -436,6 +644,8 @@ export class Soundscape {
 		this.running = {
 			id,
 			bus,
+			hush,
+			blaze,
 			stop: () => {
 				for (const tm of timers) {
 					window.clearTimeout(tm);
@@ -449,6 +659,8 @@ export class Soundscape {
 					}
 				}
 				bus.disconnect();
+				hush.disconnect();
+				sends.disconnect();
 			},
 		};
 	}

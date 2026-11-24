@@ -5,28 +5,27 @@
    • document (default): a readable, scrolling page. Used without JavaScript
      or WebGL, and as the baseline everything else enhances.
    • .immersive (on <html>): the fullscreen 360° experience.
+
+   One rule for the look of both: what you look at is the world, what you read
+   is paper. Text sits on label stock, as it does beside a painting in a
+   museum (square, opaque, ink on paper); controls are ink, like signage.
+   There are three colours: the ink, the paper and Prussian blue.
    ──────────────────────────────────────────────────────────────────────────── */
 
 :root {
-	--ink: #07090b;
-	--ink-2: #0c1014;
-	--ink-3: #141a20;
-	--paper: #efe9de;
-	--paper-2: #c2bbae;
-	--paper-3: #968f83;
-	--line: rgb(239 233 222 / 0.13);
-	--line-strong: rgb(239 233 222 / 0.28);
-	--accent: #e3c48f;
-	--focus: #f4d7a1;
-	--surface: rgb(9 11 14 / 0.86);
-	--surface-solid: rgb(11 14 17 / 0.95);
+	--ink: #07090b; /* the dark of the gallery */
+	--stock: #ecebe6; /* label stock: a warm grey-white, not cream */
+	--prussian: #1c3f73; /* the pigment of the Great Wave, and of Vol. I */
+	--control: #0e1013; /* the surface of a control over the view */
+	--control-hot: #23272e;
 
-	--step--2: clamp(0.72rem, 0.7rem + 0.08vw, 0.76rem);
-	--step--1: clamp(0.8rem, 0.78rem + 0.1vw, 0.86rem);
-	--step-0: clamp(0.95rem, 0.91rem + 0.2vw, 1.06rem);
-	--step-1: clamp(1.12rem, 1.02rem + 0.45vw, 1.38rem);
-	--step-2: clamp(1.4rem, 1.2rem + 0.95vw, 2rem);
-	--step-3: clamp(1.85rem, 1.45rem + 1.9vw, 3rem);
+	/* never under 12.5 px */
+	--step--2: clamp(0.78rem, 0.76rem + 0.08vw, 0.83rem);
+	--step--1: clamp(0.84rem, 0.82rem + 0.1vw, 0.9rem);
+	--step-0: clamp(0.97rem, 0.93rem + 0.2vw, 1.08rem);
+	--step-1: clamp(1.14rem, 1.04rem + 0.45vw, 1.4rem);
+	--step-2: clamp(1.45rem, 1.25rem + 0.95vw, 2.05rem);
+	--step-3: clamp(1.95rem, 1.5rem + 2vw, 3.15rem);
 	--step-5: clamp(3rem, 1.8rem + 6.4vw, 7.6rem);
 
 	--space-1: 0.25rem;
@@ -38,18 +37,48 @@
 	--space-7: 3rem;
 
 	--gutter: clamp(1rem, 0.6rem + 1.8vw, 2.25rem);
-	--radius: 14px;
-	--radius-lg: 22px;
+	/* paper is cut, not moulded: just enough to take the edge off a corner */
+	--radius: 1px;
 	--ease: cubic-bezier(0.2, 0.7, 0.2, 1);
 	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 	--bar-h: calc(3.5rem + env(safe-area-inset-top, 0px));
 	--tool-size: 2.875rem;
+	/* a label standing a little off the wall */
+	--lift: 0 1px 1px rgb(0 0 0 / 0.35), 0 14px 30px -16px rgb(0 0 0 / 0.75);
 
 	--safe-t: env(safe-area-inset-top, 0px);
 	--safe-r: env(safe-area-inset-right, 0px);
 	--safe-b: env(safe-area-inset-bottom, 0px);
 	--safe-l: env(safe-area-inset-left, 0px);
+}
 
+/* On paper: the document, and every label, note and sheet over the view. */
+:root,
+.immersive :is(.spot, .room-card, .poi-card, .details, .tool-label),
+.guide {
+	--bg: var(--stock);
+	--fg: #121418;
+	--fg-2: #3d4046;
+	--fg-3: #5c5f65;
+	--rule: rgb(18 20 24 / 0.18);
+	--rule-strong: rgb(18 20 24 / 0.5);
+	--tint: rgb(18 20 24 / 0.07);
+	--well: #d9d8d2;
+	--link: var(--prussian);
+	color-scheme: light;
+}
+
+/* In the gallery: text straight on the dark, and the controls. */
+html.immersive {
+	--bg: var(--ink);
+	--fg: #ecebe6;
+	--fg-2: #c3c2bc;
+	--fg-3: #9b9a95;
+	--rule: rgb(236 235 230 / 0.2);
+	--rule-strong: rgb(236 235 230 / 0.5);
+	--tint: rgb(236 235 230 / 0.1);
+	--well: #14171b;
+	--link: var(--fg);
 	color-scheme: dark;
 }
 
@@ -62,18 +91,33 @@
 html {
 	-webkit-text-size-adjust: 100%;
 	text-size-adjust: 100%;
-	background: var(--ink);
+	background: var(--bg);
+}
+
+/* Large screens (1440p, 4K, ultrawide): everything is sized in rem, so the interface grows a little
+   with the room it has, in both directions, and stays in proportion with the view. A percentage keeps
+   whatever text size the visitor chose in the browser. */
+@media (min-width: 100em) and (min-height: 56em) {
+	html {
+		font-size: 106.25%;
+	}
+}
+
+@media (min-width: 140em) and (min-height: 75em) {
+	html {
+		font-size: 118.75%;
+	}
 }
 
 body {
 	margin: 0;
 	min-height: 100vh;
 	min-height: 100dvh;
-	background: var(--ink);
-	color: var(--paper);
-	font-family: var(--font-text), system-ui, sans-serif;
+	background: var(--bg);
+	color: var(--fg);
+	font-family: var(--font-text), Arial, sans-serif;
 	font-size: var(--step-0);
-	line-height: 1.6;
+	line-height: 1.55;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
@@ -101,13 +145,26 @@ button {
 	cursor: pointer;
 }
 
+/* Touch: no grey flash on tap (every control has its own :active look) and no wait for a possible
+   double-tap zoom, so a tap answers at once. Pinch zoom stays available. */
+a,
+button,
+input,
+label,
+summary {
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+
+/* Headings are in the display face wherever they are the voice of the exhibition; the rules for each
+   say so. By default a heading is label type. */
 h1,
 h2,
 h3,
 h4 {
 	margin: 0;
-	font-weight: 400;
-	line-height: 1.12;
+	font-weight: 600;
+	line-height: 1.15;
 	text-wrap: balance;
 }
 
@@ -118,6 +175,11 @@ p {
 
 a {
 	color: inherit;
+}
+
+/* the title of a work is set in italic, as on any label */
+cite {
+	font-style: italic;
 }
 
 [hidden] {
@@ -149,11 +211,12 @@ a {
 	outline: none;
 }
 
+/* Two rings, one light and one dark: whatever is behind (paper, ink or a painting), one of them shows. */
 :focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 3px;
-	box-shadow: 0 0 0 6px rgb(0 0 0 / 0.6);
-	border-radius: 6px;
+	outline: 2px solid #fff;
+	outline-offset: 1px;
+	box-shadow: 0 0 0 5px #0b0d10;
+	border-radius: var(--radius);
 }
 
 .skip-link {
@@ -162,12 +225,12 @@ a {
 	top: calc(var(--safe-t) + 0.75rem);
 	left: calc(var(--safe-l) + 0.75rem);
 	padding: 0.7rem 1.1rem;
-	background: var(--paper);
-	color: var(--ink);
-	border-radius: 999px;
+	background: var(--stock);
+	color: #121418;
+	border-radius: var(--radius);
 	font-weight: 600;
 	text-decoration: none;
-	transform: translateY(-160%);
+	transform: translateY(-200%);
 	transition: transform 0.2s var(--ease);
 }
 
@@ -177,12 +240,20 @@ a {
 
 /* ─── Shared components ───────────────────────────────────────────────────── */
 
+/* the small line over a title: which room, which volume */
 .eyebrow {
 	font-size: var(--step--1);
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--paper-2);
 	font-weight: 500;
+	color: var(--fg-2);
+}
+
+/* a square of a room's pigment, like the colour chips in a conservator's notes */
+.swatch {
+	flex: none;
+	width: 0.8rem;
+	height: 0.8rem;
+	background: var(--pigment, var(--prussian));
+	box-shadow: inset 0 0 0 1px rgb(18 20 24 / 0.28);
 }
 
 .btn {
@@ -191,41 +262,48 @@ a {
 	justify-content: center;
 	gap: 0.55rem;
 	min-height: 2.875rem;
-	padding: 0.55rem 1.2rem;
-	border-radius: 999px;
-	border: 1px solid var(--line-strong);
-	background: rgb(239 233 222 / 0.07);
-	color: var(--paper);
+	padding: 0.55rem 1.15rem;
+	border-radius: var(--radius);
+	border: 1px solid var(--rule-strong);
+	background: transparent;
+	color: var(--fg);
 	font-size: var(--step--1);
 	font-weight: 500;
-	letter-spacing: 0.02em;
 	text-decoration: none;
 	white-space: nowrap;
 	transition:
-		background-color 0.25s var(--ease),
-		border-color 0.25s var(--ease),
-		color 0.25s var(--ease),
-		transform 0.25s var(--ease);
+		background-color 0.2s var(--ease),
+		border-color 0.2s var(--ease),
+		color 0.2s var(--ease);
 }
 
-.btn:hover {
-	background: rgb(239 233 222 / 0.14);
-	border-color: rgb(239 233 222 / 0.45);
+/* Hover only where there is a pointer that hovers: on touch screens a tapped button would otherwise
+   keep its hover look until the next tap elsewhere. Touch gets a short press instead (:active). */
+@media (hover: hover) {
+	.btn:hover {
+		background: var(--tint);
+		border-color: var(--fg);
+	}
+
+	.btn-primary:hover {
+		background: color-mix(in srgb, var(--fg) 84%, var(--bg));
+		border-color: transparent;
+	}
 }
 
 .btn:active {
-	transform: scale(0.98);
+	background: var(--tint);
+	translate: 0 1px;
 }
 
 .btn-primary {
-	background: var(--paper);
-	border-color: var(--paper);
-	color: var(--ink);
+	background: var(--fg);
+	border-color: var(--fg);
+	color: var(--bg);
 }
 
-.btn-primary:hover {
-	background: #fff;
-	border-color: #fff;
+.btn-primary:active {
+	background: color-mix(in srgb, var(--fg) 84%, var(--bg));
 }
 
 .btn-quiet {
@@ -238,21 +316,28 @@ a {
 	width: 2.75rem;
 	height: 2.75rem;
 	padding: 0;
-	border-radius: 999px;
-	border: 1px solid var(--line);
-	background: rgb(239 233 222 / 0.04);
-	transition: background-color 0.2s var(--ease);
+	border-radius: var(--radius);
+	border: 1px solid var(--rule);
+	background: transparent;
+	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
 }
 
-.icon-btn:hover {
-	background: rgb(239 233 222 / 0.12);
+@media (hover: hover) {
+	.icon-btn:hover {
+		background: var(--tint);
+		border-color: var(--rule-strong);
+	}
+}
+
+.icon-btn:active {
+	background: var(--tint);
 }
 
 .text-link {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.4rem;
-	color: var(--accent);
+	color: var(--link);
 	text-underline-offset: 0.2em;
 	text-decoration-thickness: 1px;
 }
@@ -266,15 +351,14 @@ a {
 	position: relative;
 	height: 2px;
 	width: 100%;
-	background: var(--line);
-	border-radius: 2px;
+	background: var(--rule);
 	overflow: hidden;
 }
 
 .progress > span {
 	position: absolute;
 	inset: 0;
-	background: var(--paper);
+	background: var(--fg);
 	transform-origin: left;
 	transform: scaleX(var(--progress, 0));
 	transition: transform 0.3s var(--ease);
@@ -293,7 +377,7 @@ html:not(.immersive) .bar {
 	align-items: center;
 	justify-content: space-between;
 	padding: calc(var(--safe-t) + var(--space-4)) var(--gutter) var(--space-4);
-	border-bottom: 1px solid var(--line);
+	border-bottom: 1px solid var(--rule);
 }
 
 html:not(.immersive) .tools,
@@ -313,7 +397,7 @@ html:not(.immersive) .look {
 	max-height: 72vh;
 	width: 100%;
 	overflow: hidden;
-	background: var(--ink-2);
+	background: var(--well);
 }
 
 html:not(.immersive) .poster,
@@ -341,28 +425,50 @@ html:not(.immersive) main {
 	gap: var(--space-7);
 }
 
+html:not(.immersive) .intro-inner {
+	display: grid;
+	gap: var(--space-4);
+}
+
 html:not(.immersive) .intro-title {
 	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
 	font-size: var(--step-5);
-	line-height: 0.95;
-	margin-block: var(--space-3) var(--space-4);
+	line-height: 0.92;
+	letter-spacing: -0.015em;
+	padding-bottom: var(--space-4);
+	border-bottom: 1px solid var(--rule-strong);
+}
+
+html:not(.immersive) .intro-about {
+	display: grid;
+	gap: var(--space-4);
 }
 
 html:not(.immersive) .intro-lede {
 	font-size: var(--step-1);
-	color: var(--paper-2);
 	max-width: 32ch;
+}
+
+html:not(.immersive) .intro-top {
+	display: grid;
+	gap: var(--space-2);
+	margin-top: var(--space-5);
+	font-size: var(--step--1);
+	color: var(--fg-2);
 }
 
 html:not(.immersive) .hub-title,
 html:not(.immersive) .room-title {
 	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
 	font-size: var(--step-3);
+	line-height: 1.05;
 	margin-block: var(--space-2) var(--space-3);
 }
 
 html:not(.immersive) .room-by {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	margin-bottom: var(--space-5);
 }
 
@@ -371,33 +477,31 @@ html:not(.immersive) .details-scroll > * + * {
 }
 
 html:not(.immersive) .hub .scene-text {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	margin-bottom: var(--space-6);
 }
 
-/* room cards (hub list) */
+/* the rooms, listed (hub) */
 .room-list {
 	list-style: none;
 	margin: 0;
 	padding: 0;
 	display: grid;
 	grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
-	gap: var(--space-5);
+	gap: var(--space-6) var(--space-5);
 }
 
 .room-link {
 	display: grid;
 	gap: var(--space-1);
 	text-decoration: none;
-	border-radius: var(--radius);
 	padding-bottom: var(--space-2);
 }
 
 .room-link picture {
 	aspect-ratio: 4 / 3;
 	overflow: hidden;
-	border-radius: var(--radius);
-	background: var(--ink-3);
+	background: var(--well);
 	margin-bottom: var(--space-3);
 }
 
@@ -405,49 +509,53 @@ html:not(.immersive) .hub .scene-text {
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	transition: transform 0.6s var(--ease);
 }
 
-.room-link:hover img {
-	transform: scale(1.04);
+@media (hover: hover) {
+	.room-link:hover .room-link-title {
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.2em;
+	}
 }
 
 .room-link-meta {
 	font-size: var(--step--1);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--accent);
+	font-weight: 600;
 }
 
 .room-link-title {
-	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-1);
-	line-height: 1.2;
+	font-size: var(--step-0);
+	line-height: 1.3;
 }
 
 .room-link-artist {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	font-size: var(--step--1);
 }
 
 /* ─── Room details (shared typography) ───────────────────────────────────── */
 
+/* section labels of a catalogue entry */
 .details-scroll h4 {
-	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-1);
+	font-size: var(--step--1);
+	font-weight: 600;
 	margin-top: var(--space-6);
-	color: var(--paper);
+	padding-top: var(--space-3);
+	border-top: 1px solid var(--rule-strong);
+	color: var(--fg);
 }
 
 .details-scroll p {
-	color: var(--paper-2);
+	color: var(--fg-2);
 }
 
 .details-scroll .summary {
 	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
 	font-size: var(--step-1);
-	line-height: 1.4;
-	color: var(--paper);
+	line-height: 1.32;
+	color: var(--fg);
 }
 
 .artwork {
@@ -462,21 +570,18 @@ html:not(.immersive) .artwork img {
 
 .artwork img {
 	width: 100%;
-	border-radius: 6px;
-	background: var(--ink-3);
-	box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.8);
+	background: var(--well);
 }
 
 .artwork figcaption {
 	margin-top: var(--space-3);
 	font-size: var(--step--1);
-	color: var(--paper-3);
+	color: var(--fg-2);
 }
 
 .facts {
 	margin: 0;
 	display: grid;
-	gap: var(--space-3);
 	font-size: var(--step--1);
 }
 
@@ -484,46 +589,50 @@ html:not(.immersive) .artwork img {
 	display: grid;
 	grid-template-columns: 6.5rem 1fr;
 	gap: var(--space-3);
-	padding-top: var(--space-3);
-	border-top: 1px solid var(--line);
+	padding-block: var(--space-2);
+	border-top: 1px solid var(--rule);
 }
 
 .facts dt {
-	color: var(--paper-3);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	font-size: var(--step--2);
-	padding-top: 0.15em;
+	color: var(--fg-3);
 }
 
 .facts dd {
 	margin: 0;
-	color: var(--paper-2);
+	color: var(--fg);
 }
 
 .pager {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: var(--space-3);
 	margin-top: var(--space-6);
+	border-block: 1px solid var(--rule-strong);
 }
 
 .pager a {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
-	padding: var(--space-3) var(--space-4);
+	padding: var(--space-3) var(--space-2);
 	min-height: 3.5rem;
-	border: 1px solid var(--line);
-	border-radius: var(--radius);
 	text-decoration: none;
 	font-size: var(--step--1);
-	transition: border-color 0.2s var(--ease), background-color 0.2s var(--ease);
+	font-weight: 500;
+	transition: background-color 0.2s var(--ease);
 }
 
-.pager a:hover {
-	border-color: var(--line-strong);
-	background: rgb(239 233 222 / 0.04);
+.pager a + a {
+	border-left: 1px solid var(--rule);
+}
+
+@media (hover: hover) {
+	.pager a:hover {
+		background: var(--tint);
+	}
+}
+
+.pager a:active {
+	background: var(--tint);
 }
 
 .pager a[rel="next"] {
@@ -533,10 +642,9 @@ html:not(.immersive) .artwork img {
 
 .pager small {
 	display: block;
-	color: var(--paper-3);
+	color: var(--fg-3);
 	font-size: var(--step--2);
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
+	font-weight: 400;
 }
 
 /* ─── Wordmark ────────────────────────────────────────────────────────────── */
@@ -544,7 +652,7 @@ html:not(.immersive) .artwork img {
 .wordmark {
 	display: inline-flex;
 	flex-direction: column;
-	gap: 0.1rem;
+	gap: 0.05rem;
 	text-decoration: none;
 	line-height: 1.15;
 	padding: 0.25rem 0;
@@ -552,14 +660,35 @@ html:not(.immersive) .artwork img {
 
 .wordmark-name {
 	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
 	font-size: var(--step-1);
+	letter-spacing: -0.005em;
 }
 
 .wordmark-room {
 	font-size: var(--step--2);
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--paper-2);
+	color: var(--fg-2);
+}
+
+/* the short form of the name, for a header with too little room for the whole one */
+.wordmark-mark {
+	display: none;
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 600;
+	font-size: 1.2rem;
+	line-height: 1;
+}
+
+/* Ibarra's word space is cut for reading sizes; in titles it is closed up a little */
+.wordmark-name,
+.intro-title,
+.hub-title,
+.room-title,
+.summary,
+.prologue-line,
+.finale-title,
+.guide-head h2 {
+	word-spacing: -0.06em;
 }
 
 /* ═════════════════════════════════════════════════════════════════════════════
@@ -604,9 +733,9 @@ html.immersive body {
 }
 
 .immersive .look:focus-visible {
-	outline-offset: -6px;
+	outline-offset: -4px;
 	border-radius: 0;
-	box-shadow: inset 0 0 0 6px rgb(0 0 0 / 0.5);
+	box-shadow: inset 0 0 0 7px rgb(11 13 16 / 0.7);
 }
 
 .immersive canvas,
@@ -644,9 +773,11 @@ html.immersive body {
 	}
 }
 
+/* the still stays whole under the canvas while that comes up over it: two half-transparent pictures would dip to black */
 .immersive.gl-ready .poster {
 	opacity: 0;
 	pointer-events: none;
+	transition: opacity 0s 1.25s;
 }
 
 .immersive canvas {
@@ -658,7 +789,7 @@ html.immersive body {
 	opacity: 1;
 }
 
-/* top bar */
+/* top bar: the name on the left, the controls on the right, nothing between them but the view */
 .immersive .bar {
 	position: fixed;
 	z-index: 20;
@@ -669,8 +800,7 @@ html.immersive body {
 	align-items: flex-start;
 	justify-content: space-between;
 	gap: var(--space-4);
-	padding: calc(var(--safe-t) + var(--space-3)) calc(var(--safe-r) + var(--gutter)) var(--space-6) calc(var(--safe-l) + var(--gutter));
-	background: linear-gradient(to bottom, rgb(5 7 9 / 0.72), rgb(5 7 9 / 0.38) 55%, transparent);
+	padding: calc(var(--safe-t) + var(--space-3)) calc(var(--safe-r) + var(--gutter)) 0 calc(var(--safe-l) + var(--gutter));
 	pointer-events: none;
 	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
 }
@@ -679,12 +809,60 @@ html.immersive body {
 	pointer-events: auto;
 }
 
+/* The brand fills the room the buttons leave and measures it: the wordmark inside shortens itself to
+   fit, whatever the number of buttons (four on iPhone, five on Android), the font or the zoom.
+   Only the wordmark itself takes pointers; the rest of the strip lets drags through to the view. */
+.immersive .brand {
+	flex: 1 1 0;
+	min-width: var(--tool-size);
+	container: brand / inline-size;
+	pointer-events: none;
+}
+
+.immersive .brand .wordmark {
+	pointer-events: auto;
+}
+
 /* its own surface, like the buttons beside it: the sky behind can be as light as paper */
 .immersive .wordmark {
-	padding: 0.3rem 0.8rem;
+	justify-content: center;
+	min-height: var(--tool-size);
+	max-width: 100%;
+	padding: 0.3rem 0.85rem 0.35rem;
 	border-radius: var(--radius);
-	border: 1px solid var(--line);
-	background: var(--surface);
+	background: var(--control);
+}
+
+.immersive .wordmark-name {
+	font-size: 1.2rem;
+}
+
+/* Too narrow for the name on two lines: the monogram, in a tile the size of a button.
+   The full name stays as the link's accessible name. */
+@container brand (max-width: 5.9rem) {
+	.immersive .brand .wordmark {
+		display: grid;
+		place-items: center;
+		width: var(--tool-size);
+		padding: 0;
+	}
+
+	.immersive .brand .wordmark-name {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.immersive .brand .wordmark-mark {
+		display: block;
+	}
+
+	.immersive .brand .wordmark-room {
+		display: none;
+	}
 }
 
 .immersive.is-intro .bar {
@@ -693,13 +871,15 @@ html.immersive body {
 	pointer-events: none;
 }
 
-.immersive.is-intro .bar > * {
+.immersive.is-intro .bar > *,
+.immersive.is-intro .brand .wordmark {
 	pointer-events: none;
 }
 
+/* the controls: ink tiles set edge to edge, like a row of pictograms on a sign */
 .tools {
 	display: flex;
-	gap: var(--space-2);
+	gap: 1px;
 }
 
 .tool {
@@ -709,20 +889,37 @@ html.immersive body {
 	width: var(--tool-size);
 	height: var(--tool-size);
 	padding: 0;
-	border-radius: 999px;
-	border: 1px solid var(--line);
-	background: var(--surface);
-	color: var(--paper);
-	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+	border: 0;
+	border-radius: 0;
+	background: var(--control);
+	color: var(--fg);
+	transition: background-color 0.2s var(--ease);
 }
 
-.tool:hover {
-	background: rgb(30 36 42 / 0.95);
-	border-color: var(--line-strong);
+@media (hover: hover) {
+	.tool:hover {
+		background: var(--control-hot);
+	}
 }
 
-.tool[aria-pressed="true"] {
-	border-color: rgb(239 233 222 / 0.5);
+.tool:active {
+	background: var(--control-hot);
+}
+
+/* on: a line under the pictogram */
+.tool[aria-pressed="true"],
+.tool[aria-expanded="true"] {
+	box-shadow: inset 0 -2px 0 var(--fg);
+}
+
+.tool:focus-visible {
+	z-index: 1;
+	box-shadow: 0 0 0 5px #0b0d10;
+}
+
+/* focused and on: both rings, and the line under the pictogram stays */
+.tool:is([aria-pressed="true"], [aria-expanded="true"]):focus-visible {
+	box-shadow: inset 0 -2px 0 var(--fg), 0 0 0 5px #0b0d10;
 }
 
 .tool[aria-pressed="true"] .when-off,
@@ -735,13 +932,12 @@ html.immersive body {
 	top: calc(100% + 0.5rem);
 	left: 50%;
 	translate: -50% 0;
-	padding: 0.3rem 0.6rem;
-	border-radius: 6px;
-	background: var(--paper);
-	color: var(--ink);
+	padding: 0.3rem 0.55rem;
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--fg);
 	font-size: var(--step--2);
-	font-weight: 600;
-	letter-spacing: 0.02em;
+	font-weight: 500;
 	white-space: nowrap;
 	pointer-events: none;
 	opacity: 0;
@@ -791,22 +987,32 @@ html.immersive body {
 	outline: none;
 }
 
-/* ─── Intro ───────────────────────────────────────────────────────────────── */
+/* ─── Title screen ────────────────────────────────────────────────────────── */
 
+/* Set like the foot of a poster: the credit and the reading pages along the top, the painting left
+   alone in the middle, and at the bottom the name over a rule, with the bill under it. */
 .immersive .intro {
 	position: fixed;
 	inset: 0;
 	z-index: 30;
 	display: grid;
-	/* bottom-aligned, but when zoomed in it can be taller than the screen: then it starts at the top and scrolls */
-	align-items: safe end;
+	grid-template-rows: auto 1fr;
+	gap: var(--space-5);
+	/* when zoomed in it can be taller than the screen: then it scrolls */
 	overflow-y: auto;
 	overscroll-behavior: contain;
-	padding: calc(var(--safe-t) + var(--space-7)) calc(var(--safe-r) + var(--gutter)) calc(var(--safe-b) + clamp(2rem, 7vh, 5rem))
+	padding: calc(var(--safe-t) + var(--space-4)) calc(var(--safe-r) + var(--gutter)) calc(var(--safe-b) + var(--gutter))
 		calc(var(--safe-l) + var(--gutter));
-	background:
-		linear-gradient(to top, rgb(4 6 8 / 0.92) 0%, rgb(4 6 8 / 0.6) 42%, rgb(4 6 8 / 0.15) 75%, rgb(4 6 8 / 0.35) 100%),
-		linear-gradient(to right, rgb(4 6 8 / 0.55), transparent 70%);
+	/* the poster can be at its lightest exactly where the text falls */
+	background: linear-gradient(
+		to top,
+		rgb(5 7 9 / 0.95) 0%,
+		rgb(5 7 9 / 0.86) 28%,
+		rgb(5 7 9 / 0.45) 52%,
+		rgb(5 7 9 / 0.08) 72%,
+		rgb(5 7 9 / 0.1) 84%,
+		rgb(5 7 9 / 0.6) 100%
+	);
 	transition: opacity 1s var(--ease), visibility 0s linear 0s;
 }
 
@@ -816,83 +1022,140 @@ html.immersive body {
 	transition: opacity 1s var(--ease), visibility 0s linear 1s;
 }
 
-.intro-inner {
-	display: grid;
-	gap: var(--space-4);
-	max-width: 44rem;
+.immersive .intro-top {
+	grid-row: 1;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0 var(--space-5);
+	font-size: var(--step--1);
 }
 
-/* a soft shade behind the text: the poster can be at its lightest exactly where the text falls */
+.intro-credit {
+	display: flex;
+	align-items: center;
+	min-height: 2.75rem;
+}
+
 .immersive .intro-inner {
-	position: relative;
-}
-
-.immersive .intro-inner::before {
-	content: "";
-	position: absolute;
-	inset: 0;
-	z-index: -1;
-	border-radius: var(--radius-lg);
-	background: rgb(4 6 8 / 0.45);
-	box-shadow: 0 0 3rem 2rem rgb(4 6 8 / 0.45);
-	pointer-events: none;
-}
-
-.immersive .intro .eyebrow {
-	color: var(--paper);
+	grid-row: 2;
+	align-self: safe end;
+	display: grid;
+	gap: clamp(0.75rem, 0.4rem + 1.4vw, 1.5rem);
 }
 
 .immersive .intro-title {
 	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-5);
-	line-height: 0.92;
-	letter-spacing: -0.01em;
-	margin-block: var(--space-1) var(--space-2);
+	font-weight: 500;
+	/* a poster scales with the wall: on large screens too, so the name keeps its share of the width */
+	font-size: clamp(3rem, 1rem + 7.3vw, 11rem);
+	line-height: 0.88;
+	letter-spacing: -0.02em;
+	/* the descender of no letter here goes below the line: the rule can sit close */
+	margin-left: -0.04em;
 }
 
-.intro-title em {
-	font-style: italic;
-	color: var(--accent);
+.immersive .intro-cols {
+	display: grid;
+	gap: var(--space-5) var(--space-6);
+	padding-top: var(--space-4);
+	border-top: 1px solid var(--rule-strong);
+}
+
+.immersive .intro-about {
+	display: grid;
+	gap: var(--space-3) var(--space-6);
+	align-content: start;
+}
+
+.intro-vol {
+	font-weight: 600;
+}
+
+.intro-artists {
+	color: var(--fg-2);
 }
 
 .immersive .intro-lede {
-	font-size: var(--step-1);
-	color: var(--paper);
 	max-width: 30ch;
-	line-height: 1.45;
+	font-size: var(--step-1);
+	line-height: 1.35;
 }
 
 .intro-room {
-	color: var(--paper-2);
+	margin-top: var(--space-2);
+	color: var(--fg-2);
 	font-size: var(--step--1);
 }
 
 .intro-room cite {
-	font-style: italic;
-	color: var(--paper);
+	color: var(--fg);
+}
+
+.intro-enter {
+	display: grid;
+	gap: var(--space-3);
+	align-content: start;
 }
 
 .intro-actions {
 	display: flex;
 	flex-wrap: wrap;
-	gap: var(--space-3);
-	margin-top: var(--space-4);
+	gap: var(--space-2);
 }
 
 .intro-actions .btn {
 	min-height: 3.25rem;
-	padding-inline: 1.5rem;
+	padding-inline: 1.4rem;
 	font-size: var(--step-0);
 }
 
-.intro-progress {
-	max-width: 22rem;
-	margin-top: var(--space-2);
+.intro-hint {
+	max-width: 24rem;
+	font-size: var(--step--1);
+	color: var(--fg-2);
 }
 
-.intro-hint {
-	font-size: var(--step--1);
-	color: var(--paper-2);
+/* the reading pages: there before entering, for anyone who would rather read first */
+.intro-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-5);
+}
+
+.intro-links a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	text-underline-offset: 0.25em;
+	text-decoration-thickness: 1px;
+}
+
+@media (hover: hover) {
+	.intro-links a:hover {
+		text-decoration-thickness: 2px;
+	}
+}
+
+/* room for the bill beside the way in */
+@media (min-width: 44em) {
+	.immersive .intro-cols {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+}
+
+/* and for the bill itself in two columns */
+@media (min-width: 68em) {
+	.immersive .intro-about {
+		grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+	}
+}
+
+.guide-pages {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-5);
 }
 
 /* ─── Hub ─────────────────────────────────────────────────────────────────── */
@@ -910,7 +1173,7 @@ html.immersive body {
 	display: none;
 }
 
-/* painting labels that float under each frame */
+/* the labels under the four frames */
 .spots ul {
 	list-style: none;
 	margin: 0;
@@ -936,27 +1199,25 @@ html.immersive body {
 	transition: opacity 0.5s var(--ease);
 }
 
+/* a wall label: the number of the room in its own column, then its name and its painter */
 .spot {
 	position: absolute;
 	top: 0;
 	left: 0;
 	display: inline-flex;
-	align-items: center;
-	gap: 0.65rem;
-	padding: 0.4rem 1rem 0.4rem 0.4rem;
-	border-radius: 999px;
-	background: var(--surface);
-	border: 1px solid var(--line);
-	color: var(--paper);
+	align-items: stretch;
+	min-height: 2.75rem;
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--lift);
 	text-decoration: none;
 	white-space: nowrap;
 	pointer-events: auto;
 	will-change: transform;
 	transition:
 		opacity 0.35s var(--ease),
-		border-color 0.3s var(--ease),
-		background-color 0.3s var(--ease),
-		box-shadow 0.3s var(--ease);
+		background-color 0.2s var(--ease);
 }
 
 .spot[data-visible="false"] {
@@ -968,80 +1229,122 @@ html.immersive body {
 	opacity: 1;
 }
 
-.spot:hover,
+.spot:active,
 .spot.is-hot {
-	border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-	background: rgb(16 20 24 / 0.94);
-	box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+	background: #fff;
+}
+
+.spot:active .spot-theme,
+.spot.is-hot .spot-theme {
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 0.18em;
+}
+
+@media (hover: hover) {
+	.spot:hover {
+		background: #fff;
+	}
+
+	.spot:hover .spot-theme {
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.18em;
+	}
 }
 
 .spot-numeral {
 	display: grid;
 	place-items: center;
-	width: 2.15rem;
-	height: 2.15rem;
-	border-radius: 999px;
-	border: 1px solid color-mix(in srgb, var(--accent) 65%, transparent);
-	color: var(--accent);
-	font-family: var(--font-display), Georgia, serif;
-	font-style: italic;
-	font-size: 1.05rem;
-	line-height: 1;
+	min-width: 2.5rem;
+	padding-inline: 0.65rem;
+	border-right: 1px solid var(--rule);
+	font-size: var(--step--1);
+	font-weight: 600;
+	transition: background-color 0.3s var(--ease), color 0.3s var(--ease);
 }
 
 .spot-text {
 	display: grid;
-	line-height: 1.15;
+	align-content: center;
+	padding: 0.4rem 0.95rem 0.45rem 0.75rem;
+	line-height: 1.2;
 }
 
 .spot-theme {
-	font-family: var(--font-display), Georgia, serif;
-	font-size: 1.1rem;
+	font-size: var(--step-0);
+	font-weight: 600;
 }
 
 .spot-artist {
 	font-size: var(--step--2);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--paper-2);
+	color: var(--fg-2);
 }
 
 /* ─── Look controls ───────────────────────────────────────────────────────── */
 
-/* turn and zoom with one click or tap each: what dragging and pinching do, for a single pointer */
-.immersive .look-controls {
+/* turn and zoom with one click or tap each: what dragging and pinching do, for a single pointer.
+   One button in the corner opens them, so the view is clear until they are wanted */
+.immersive .look-pad {
 	position: absolute;
 	z-index: 6;
 	right: calc(var(--safe-r) + var(--gutter));
 	bottom: calc(var(--safe-b) + var(--gutter));
-	display: grid;
-	grid-auto-flow: column;
-	gap: var(--space-2);
+	max-width: calc(100% - 2 * var(--gutter) - var(--safe-l) - var(--safe-r));
+	/* the button stays in the corner; the pad opens beside it, or above it where there is no room */
+	display: flex;
+	flex-flow: row-reverse wrap-reverse;
+	gap: 1px;
 	transition: opacity 0.6s var(--ease);
 }
 
-.immersive.is-intro .look-controls {
+.immersive .look-controls {
+	display: grid;
+	grid-auto-flow: column;
+	gap: 1px;
+	animation: pad-in 0.3s var(--ease) both;
+}
+
+.immersive .look-controls[hidden] {
+	display: none;
+}
+
+@keyframes pad-in {
+	from {
+		opacity: 0;
+		transform: translateX(0.5rem);
+	}
+}
+
+.immersive.is-intro .look-pad {
 	opacity: 0;
 	visibility: hidden;
 }
 
 /* an open description covers this corner */
-.immersive:has(.details[data-open="true"]) .look-controls {
+.immersive:has(.details[data-open="true"]) .look-pad {
 	visibility: hidden;
 }
 
 /* at the bottom of the screen the labels go above the buttons */
-.look-controls .tool-label {
+.look-pad .tool-label {
 	top: auto;
 	bottom: calc(100% + 0.5rem);
 }
 
-.look-controls .tool-label::before {
+.look-pad .tool-label::before {
 	top: 100%;
 	bottom: auto;
 }
 
-/* ─── Room card ───────────────────────────────────────────────────────────── */
+/* the corner button: its label must not run past the edge */
+.look-pad > .tool .tool-label {
+	left: auto;
+	right: 0;
+	translate: none;
+}
+
+/* ─── Room label ──────────────────────────────────────────────────────────── */
 
 .immersive .room {
 	position: absolute;
@@ -1058,108 +1361,229 @@ html.immersive body {
 	visibility: hidden;
 }
 
+/* The label that would hang beside the painting: room, title, painter and date on paper, and under
+   a rule what can be done from here. A caption, not a panel: the world is the thing to look at. */
 .immersive .room-card {
+	--pad: var(--space-4);
 	--card-b: calc(var(--safe-b) + var(--gutter));
 	position: absolute;
 	left: calc(var(--safe-l) + var(--gutter));
 	bottom: var(--card-b);
-	width: min(31rem, 100% - 2 * var(--gutter) - var(--safe-l) - var(--safe-r));
+	width: min(23rem, 100% - 2 * var(--gutter) - var(--safe-l) - var(--safe-r));
 	/* never taller than the space under the header: on short screens it scrolls */
 	max-height: calc(100dvh - var(--bar-h) - var(--space-3) - var(--card-b));
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
-	padding: var(--space-5);
-	border-radius: var(--radius-lg);
-	background: var(--surface);
-	border: 1px solid var(--line);
-	box-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.9);
+	scrollbar-color: var(--rule-strong) transparent;
+	padding: var(--pad) var(--pad) 0;
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--lift);
 	display: grid;
-	gap: var(--space-2);
+	/* one column, as wide as the label and never wider: the row of actions must not stretch it */
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--space-1);
 	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
 	/* above the points in the view, so none sits on its text; an open note comes above it again */
 	z-index: 1;
 }
 
-.immersive .room-card .eyebrow {
-	color: var(--accent);
+.room-no {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-3);
+	font-size: var(--step--1);
+	font-weight: 600;
+}
+
+html:not(.immersive) .room-no .swatch {
+	display: none;
 }
 
 .immersive .room-title {
 	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-2);
-	line-height: 1.1;
+	font-weight: 500;
+	font-size: clamp(1.45rem, 1.3rem + 0.6vw, 1.8rem);
+	line-height: 1.08;
+	margin-top: var(--space-2);
 }
 
 .immersive .room-by {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	font-size: var(--step--1);
 }
 
-.room-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-2);
+/* what the visitor can set going: the one control on the label printed in ink */
+.immersive .room-act {
+	width: 100%;
+	margin-top: var(--space-4);
+	min-height: 2.875rem;
+	border-radius: var(--radius);
+	border-color: var(--fg);
+	background: var(--fg);
+	color: var(--bg);
+}
+
+.immersive .room-act[aria-pressed="true"] {
+	background: transparent;
+	color: var(--fg);
+}
+
+.immersive .room-act + .room-actions {
 	margin-top: var(--space-3);
 }
 
-/* “Things to look for”: each name turns the view to its point and opens the note */
+/* while the view is held nothing is in front of it; while time is away from the
+   instant of the print, the points marked on it wait */
+.immersive.is-held :is(.bar, .room-card, .look-pad) {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.immersive .room .pois {
+	transition: opacity 0.4s var(--ease);
+}
+
+.immersive .room.is-away .pois {
+	opacity: 0;
+	visibility: hidden;
+}
+
+/* what can be done from the label: a row of plain words between rules */
+.room-actions {
+	display: flex;
+	margin: var(--space-4) calc(-1 * var(--pad)) 0;
+	border-top: 1px solid var(--rule-strong);
+}
+
+.room-actions .btn {
+	flex: 1 1 auto;
+	min-height: 2.875rem;
+	padding: 0.5rem 0.75rem;
+	border: 0;
+	border-radius: 0;
+	gap: 0.4rem;
+}
+
+.room-actions .btn + .btn {
+	border-left: 1px solid var(--rule);
+}
+
+.room-actions .btn:active {
+	translate: none;
+}
+
+.room-actions .btn .icon {
+	width: 1.05rem;
+	height: 1.05rem;
+}
+
+/* short labels on the card; the rest of each name is still read out */
+.immersive .btn-more {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* "gallery" opens its label once "Back to the" is out of sight */
+.immersive .room-actions .btn > span {
+	display: inline-block;
+}
+
+.immersive .room-actions .btn > span::first-letter {
+	text-transform: uppercase;
+}
+
+/* open: a bar of ink over the word, like the tab of a folder */
+.room-actions [data-pois][aria-expanded="true"],
+.room-actions [data-details][aria-expanded="true"] {
+	background: var(--tint);
+	box-shadow: inset 0 3px 0 var(--fg);
+}
+
+.room-pois[hidden] {
+	display: none;
+}
+
+/* “Things to look for”: a numbered key, as under a diagram. Each line turns the view to the point
+   with the same number and opens its note */
 .room-pois {
-	display: grid;
-	gap: var(--space-2);
-	margin-top: var(--space-2);
-	padding-top: var(--space-3);
-	border-top: 1px solid var(--line);
+	margin-inline: calc(-1 * var(--pad));
+	padding: var(--space-3) var(--pad) var(--space-2);
+	border-top: 1px solid var(--rule);
+	counter-reset: key;
 }
 
 .room-pois-label {
 	font-size: var(--step--2);
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--paper-2);
-	font-weight: 500;
+	color: var(--fg-3);
 }
 
 .room-pois-list {
 	list-style: none;
-	margin: 0;
+	margin: var(--space-1) 0 0;
 	padding: 0;
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-2);
+}
+
+.room-pois-list li + li {
+	border-top: 1px solid var(--rule);
 }
 
 .poi-link {
-	display: inline-flex;
+	display: flex;
 	align-items: center;
-	gap: 0.5rem;
-	min-height: 2.25rem;
-	padding: 0.3rem 0.85rem 0.3rem 0.6rem;
-	border-radius: 999px;
-	border: 1px solid var(--line);
-	background: rgb(239 233 222 / 0.04);
-	color: var(--paper);
+	gap: 0.7rem;
+	width: 100%;
+	min-height: 2.5rem;
+	padding: 0.3rem 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg);
 	font-size: var(--step--1);
+	font-weight: 500;
 	line-height: 1.3;
 	text-align: left;
-	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+	counter-increment: key;
 }
 
-/* the ring of the points in the view, small */
+/* the number of the point in the view */
 .poi-link::before {
-	content: "";
+	content: counter(key);
 	flex: none;
-	width: 0.8rem;
-	height: 0.8rem;
-	border-radius: 999px;
-	border: 2px solid var(--paper);
-	background: radial-gradient(circle, var(--paper) 0 1.5px, transparent 2px);
+	display: grid;
+	place-items: center;
+	width: 1.45rem;
+	height: 1.45rem;
+	border-radius: 50%;
+	border: 1px solid var(--fg);
+	font-size: var(--step--2);
+	font-weight: 600;
+	line-height: 1;
+	font-variant-numeric: lining-nums tabular-nums;
 }
 
-.poi-link:hover {
-	background: rgb(239 233 222 / 0.12);
-	border-color: var(--line-strong);
+@media (hover: hover) {
+	.poi-link:hover {
+		text-decoration: underline;
+		text-decoration-thickness: 1px;
+		text-underline-offset: 0.2em;
+	}
+
+	.poi-link:hover::before {
+		background: var(--fg);
+		color: var(--bg);
+	}
+}
+
+.poi-link:active::before {
+	background: var(--fg);
+	color: var(--bg);
 }
 
 .immersive.is-moving .room-card,
@@ -1169,18 +1593,52 @@ html.immersive body {
 	pointer-events: none;
 }
 
+/* on arriving the world opens first; its label follows. Keyboard focus brings it straight in */
+.immersive.is-arriving .room-card:not(:focus-within) {
+	opacity: 0;
+	transform: translateY(0.75rem);
+	pointer-events: none;
+}
+
+/* ─── Stepping back ───────────────────────────────────────────────────────── */
+
+/* After a few seconds without input the controls fade and leave the view to
+   the painting; any movement, touch or key brings them back (see app.ts).
+   They stay in the accessibility tree and in the tab order throughout. */
+.immersive.is-idle .bar,
+.immersive.is-idle .room-card,
+.immersive.is-idle .look-pad {
+	opacity: 0;
+	pointer-events: none;
+	transition-duration: 1.2s;
+}
+
+.immersive.is-idle .bar > *,
+.immersive.is-idle .brand .wordmark {
+	pointer-events: none;
+}
+
+.immersive.is-idle .look {
+	cursor: none;
+}
+
 /* ─── Points of interest ──────────────────────────────────────────────────── */
 
 .pois {
 	list-style: none;
 	margin: 0;
 	padding: 0;
+	counter-reset: poi;
+}
+
+.poi {
+	counter-increment: poi;
 }
 
 html:not(.immersive) .pois {
 	display: grid;
-	gap: var(--space-4);
 	margin-block: var(--space-5);
+	border-bottom: 1px solid var(--rule);
 }
 
 html:not(.immersive) .poi-dot {
@@ -1188,19 +1646,18 @@ html:not(.immersive) .poi-dot {
 }
 
 html:not(.immersive) .poi-card {
-	padding: var(--space-4);
-	border: 1px solid var(--line);
-	border-radius: var(--radius);
+	padding-block: var(--space-3);
+	border-top: 1px solid var(--rule);
 }
 
 .poi-title {
-	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-1);
-	margin-bottom: var(--space-2);
+	font-size: var(--step-0);
+	font-weight: 600;
+	margin-bottom: var(--space-1);
 }
 
 .poi-card p {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	font-size: var(--step--1);
 }
 
@@ -1237,7 +1694,7 @@ html:not(.immersive) .poi-card {
 	height: 2.75rem;
 	padding: 0;
 	border: 0;
-	border-radius: 999px;
+	border-radius: 50%;
 	background: transparent;
 	pointer-events: auto;
 	transition: opacity 0.35s var(--ease);
@@ -1252,67 +1709,43 @@ html:not(.immersive) .poi-card {
 	opacity: 1;
 }
 
-/* a hollow ring with a centre dot: reads as interface, not as a light */
+/* A numbered marker, as on an annotated plate in a catalogue: a disc of paper with the number of its
+   note. It reads as something added to the picture, not as a light in it. */
 .poi-ring {
-	position: relative;
-	width: 1.6rem;
-	height: 1.6rem;
-	border-radius: 999px;
-	border: 2px solid var(--paper);
-	background: rgb(7 9 11 / 0.45);
-	box-shadow: 0 2px 14px rgb(0 0 0 / 0.6);
-	transition: transform 0.25s var(--ease), border-color 0.25s var(--ease);
+	display: grid;
+	place-items: center;
+	width: 1.7rem;
+	height: 1.7rem;
+	border-radius: 50%;
+	background: var(--stock);
+	color: #121418;
+	box-shadow: 0 0 0 1px rgb(11 13 16 / 0.75), 0 2px 10px rgb(0 0 0 / 0.5);
+	font-size: var(--step--2);
+	font-weight: 600;
+	line-height: 1;
+	font-variant-numeric: lining-nums tabular-nums;
+	transition: transform 0.2s var(--ease), background-color 0.2s var(--ease), color 0.2s var(--ease);
 }
 
 .poi-ring::after {
-	content: "";
-	position: absolute;
-	inset: 50%;
-	width: 0.42rem;
-	height: 0.42rem;
-	translate: -50% -50%;
-	border-radius: 999px;
-	background: var(--paper);
+	content: counter(poi);
 }
 
-.poi-ring::before {
-	content: "";
-	position: absolute;
-	inset: -2px;
-	border-radius: 999px;
-	border: 2px solid var(--paper);
-	opacity: 0;
-	animation: poi-pulse 2.8s var(--ease-in-out) infinite;
-}
-
-/* “Pause animation” stops the pulse too */
-.motion-off .poi-ring::before {
-	animation: none;
-	opacity: 0;
-}
-
-.poi-dot:hover .poi-ring,
+/* open, or about to be: printed in reverse */
+.poi-dot:active .poi-ring,
 .poi-dot[aria-expanded="true"] .poi-ring {
-	transform: scale(1.12);
-	border-color: var(--accent);
+	background: #121418;
+	color: var(--stock);
+	box-shadow: 0 0 0 1px var(--stock), 0 2px 10px rgb(0 0 0 / 0.5);
 }
 
-.poi-dot[aria-expanded="true"] .poi-ring::after {
-	background: var(--accent);
-}
-
-@keyframes poi-pulse {
-	0% {
-		opacity: 0.7;
-		transform: scale(1);
-	}
-	70%,
-	100% {
-		opacity: 0;
-		transform: scale(1.9);
+@media (hover: hover) {
+	.poi-dot:hover .poi-ring {
+		transform: scale(1.12);
 	}
 }
 
+/* the note of a point: a slip of paper beside it */
 .immersive .poi-card {
 	--poi-gap: 1.9rem;
 	position: absolute;
@@ -1325,14 +1758,22 @@ html:not(.immersive) .poi-card {
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
-	padding: var(--space-4) var(--space-5);
+	scrollbar-color: var(--rule-strong) transparent;
+	padding: var(--space-3) var(--space-4) var(--space-4);
 	border-radius: var(--radius);
-	background: var(--surface-solid);
-	border: 1px solid var(--line);
-	box-shadow: 0 20px 50px -20px rgb(0 0 0 / 0.9);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--lift);
 	pointer-events: auto;
 	animation: card-in 0.3s var(--ease) both;
+}
+
+/* its number, as in the key on the label */
+.immersive .poi-title::before {
+	content: counter(poi) ".";
+	margin-right: 0.4em;
+	color: var(--fg-3);
+	font-weight: 500;
 }
 
 .immersive .poi[data-below="true"] .poi-card {
@@ -1350,7 +1791,7 @@ html:not(.immersive) .poi-card {
 	}
 }
 
-/* ─── Details panel ───────────────────────────────────────────────────────── */
+/* ─── Details: the catalogue entry ────────────────────────────────────────── */
 
 .immersive .details {
 	position: absolute;
@@ -1359,10 +1800,10 @@ html:not(.immersive) .poi-card {
 	right: calc(var(--safe-r) + var(--gutter));
 	bottom: calc(var(--safe-b) + var(--gutter));
 	width: min(28rem, 100% - 2 * var(--gutter));
-	border-radius: var(--radius-lg);
-	background: var(--surface-solid);
-	border: 1px solid var(--line);
-	box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.95);
+	border-radius: var(--radius);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--lift);
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
@@ -1387,7 +1828,7 @@ html:not(.immersive) .poi-card {
 	overscroll-behavior: contain;
 	padding: 0 var(--space-5) var(--space-6);
 	scrollbar-width: thin;
-	scrollbar-color: var(--line-strong) transparent;
+	scrollbar-color: var(--rule-strong) transparent;
 }
 
 .immersive .details-scroll > * + * {
@@ -1402,21 +1843,381 @@ html:not(.immersive) .poi-card {
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--space-3);
-	padding: var(--space-4) 0 var(--space-3);
-	background: linear-gradient(var(--surface-solid) 75%, transparent);
+	padding: var(--space-3) 0;
+	background: var(--bg);
+	border-bottom: 1px solid var(--rule-strong);
 }
 
 .details-title {
 	font-size: var(--step--1);
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--paper-2);
-	font-family: var(--font-text), system-ui, sans-serif;
-	font-weight: 500;
+	font-weight: 600;
 }
 
-.immersive .details-head + * {
-	margin-top: var(--space-2);
+/* ─── Prologue ────────────────────────────────────────────────────────────── */
+
+.immersive .prologue {
+	position: fixed;
+	inset: 0;
+	z-index: 25;
+	display: grid;
+	place-items: center;
+	padding: calc(var(--safe-t) + var(--space-6)) var(--gutter) calc(var(--safe-b) + var(--space-7));
+	/* a touch anywhere skips it */
+	cursor: pointer;
+	background: radial-gradient(ellipse 60% 45% at 50% 50%, rgb(5 7 9 / 0.86), rgb(5 7 9 / 0.25) 75%);
+	transition: opacity 0.9s var(--ease);
+}
+
+.immersive .prologue.is-leaving {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* one line at a time, in the same place */
+.prologue-line {
+	grid-area: 1 / 1;
+	max-width: 20ch;
+	margin: 0;
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(2rem, 1.2rem + 3.6vw, 4.2rem);
+	line-height: 1.05;
+	letter-spacing: -0.01em;
+	text-align: center;
+	text-wrap: balance;
+	color: var(--fg);
+	text-shadow: 0 2px 30px rgb(0 0 0 / 0.8);
+	opacity: 0;
+	transform: translateY(0.5rem);
+	transition: opacity 1.1s var(--ease), transform 1.4s var(--ease);
+}
+
+/* each word rises out of its own line, a moment after the one before it */
+.prologue-line .word {
+	display: inline-block;
+	overflow: clip;
+	overflow-clip-margin: 0.08em;
+	padding-block: 0.08em 0.16em;
+	margin-block: -0.08em -0.16em;
+}
+
+.prologue-line .word > span {
+	display: inline-block;
+	transform: translateY(115%) rotate(4deg);
+	transform-origin: 0 100%;
+	transition: transform 0.95s cubic-bezier(0.16, 0.9, 0.2, 1);
+	transition-delay: calc(var(--i) * 0.085s);
+}
+
+.prologue-line.is-on {
+	opacity: 1;
+	transform: none;
+}
+
+.prologue-line.is-on .word > span {
+	transform: none;
+}
+
+.prologue-line.is-gone {
+	opacity: 0;
+	transform: translateY(-0.35rem);
+}
+
+.prologue-skip {
+	position: absolute;
+	right: calc(var(--safe-r) + var(--gutter));
+	bottom: calc(var(--safe-b) + var(--gutter));
+}
+
+/* ─── Ring round the pointer ──────────────────────────────────────────────── */
+
+.ring {
+	position: absolute;
+	z-index: 3;
+	top: 0;
+	left: 0;
+	width: 0;
+	height: 0;
+	pointer-events: none;
+	opacity: 0;
+	transition: opacity 0.35s var(--ease);
+}
+
+.ring[data-on="true"] {
+	opacity: 1;
+}
+
+.ring svg {
+	position: absolute;
+	max-width: none;
+	width: 4rem;
+	height: 4rem;
+	left: -2rem;
+	top: -2rem;
+	overflow: visible;
+	fill: none;
+	stroke: #fff;
+	stroke-width: 1.25;
+	transform: scale(0.72);
+	transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.ring circle:first-child {
+	stroke: #0f1417;
+	stroke-width: 4;
+	opacity: 0.62;
+}
+
+.ring circle:nth-child(2) {
+	opacity: 0.9;
+}
+
+.ring .ring-fill {
+	stroke-width: 3;
+	stroke-dasharray: 1;
+	stroke-dashoffset: 1;
+	transform: rotate(-90deg);
+	transform-origin: center;
+}
+
+.ring[data-pressing="true"] svg,
+.ring[data-held="true"] svg {
+	transform: scale(1);
+}
+
+/* the time a press takes to become a hold (HOLD_MS in app.ts) */
+.ring[data-pressing="true"] .ring-fill {
+	stroke-dashoffset: 0;
+	transition: stroke-dashoffset 0.26s linear;
+}
+
+.ring[data-held="true"] .ring-fill {
+	stroke-dasharray: 0.2 0.8;
+	stroke-dashoffset: 0;
+	animation: ring-turn 2.2s linear infinite;
+}
+
+@keyframes ring-turn {
+	to {
+		transform: rotate(270deg);
+	}
+}
+
+.ring-word {
+	position: absolute;
+	left: 1.9rem;
+	top: -0.55rem;
+	font-size: var(--step--1);
+	font-weight: 600;
+	line-height: 1.1;
+	color: #fff;
+	text-shadow: 0 0 6px rgb(0 0 0 / 0.75), 0 0 2px rgb(0 0 0 / 0.75);
+}
+
+@media (hover: none) {
+	.ring-word {
+		display: none;
+	}
+}
+
+/* ─── Labels arriving ─────────────────────────────────────────────────────── */
+
+/* a room's label is put up like a card on a wall: the sheet first, then what is printed on it */
+@media (prefers-reduced-motion: no-preference) {
+	.immersive:not(.motion-off, .is-arriving, .is-moving, .is-intro) .room:not([hidden]) .room-card > * {
+		animation: print-in 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+		animation-delay: calc(0.25s + var(--n, 0) * 0.08s);
+	}
+
+	.room-card > :nth-child(2) {
+		--n: 1;
+	}
+
+	.room-card > :nth-child(3) {
+		--n: 2;
+	}
+
+	.room-card > :nth-child(4) {
+		--n: 3;
+	}
+
+	.room-card > :nth-child(n + 5) {
+		--n: 4;
+	}
+
+	@keyframes print-in {
+		from {
+			opacity: 0;
+			transform: translateY(0.6rem);
+		}
+	}
+
+	/* closing words: the title is drawn up over the rule, then the rule runs out, then the rest */
+	.immersive .finale:not([hidden]) .finale-title {
+		animation: title-in 1.3s cubic-bezier(0.16, 0.9, 0.2, 1) both 0.3s;
+	}
+
+	@keyframes title-in {
+		from {
+			clip-path: inset(0 0 100% 0);
+			transform: translateY(0.5em);
+		}
+		to {
+			clip-path: inset(-10% -2% -25% -2%);
+		}
+	}
+
+	.immersive .finale:not([hidden]) .finale-cols {
+		animation: print-in 0.9s var(--ease) both 1s;
+	}
+
+	/* buttons on paper fill with ink from below */
+	.immersive .room-actions .btn,
+	.finale-actions .btn,
+	.doc-next-actions .btn:not(.btn-primary) {
+		background-image: linear-gradient(currentcolor, currentcolor);
+		background-repeat: no-repeat;
+		background-position: 0 100%;
+		background-size: 100% 0;
+		transition: background-size 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+	}
+
+	@media (hover: hover) {
+		.immersive .room-actions .btn:hover,
+		.finale-actions .btn:hover,
+		.doc-next-actions .btn:not(.btn-primary):hover {
+			background-size: 100% 3px;
+		}
+	}
+}
+
+/* ─── The ending ──────────────────────────────────────────────────────────── */
+
+/* read over coloured water: less shade than the prologue needs over black */
+.immersive .coda {
+	background: radial-gradient(ellipse 55% 40% at 50% 50%, rgb(5 7 9 / 0.62), rgb(5 7 9 / 0.06) 78%);
+}
+
+.immersive.is-coda :is(.bar, .spots, .look-pad, .hint) {
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.8s var(--ease), visibility 0s linear 0.8s;
+}
+
+/* the closing words stand where the title stood: the foot of the poster again */
+.immersive .finale {
+	position: absolute;
+	z-index: 4;
+	inset: auto 0 0;
+	max-height: 100dvh;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	display: grid;
+	gap: clamp(0.75rem, 0.4rem + 1.4vw, 1.5rem);
+	padding: clamp(5rem, 22vh, 14rem) calc(var(--safe-r) + var(--gutter)) calc(var(--safe-b) + var(--gutter)) calc(var(--safe-l) + var(--gutter));
+	background: linear-gradient(to top, rgb(5 7 9 / 0.9) 0%, rgb(5 7 9 / 0.74) 30%, rgb(5 7 9 / 0.4) 55%, rgb(5 7 9 / 0) 100%);
+	/* the view above the words can still be dragged */
+	pointer-events: none;
+	animation: finale-in 1.6s var(--ease) both;
+}
+
+.immersive .finale > * {
+	pointer-events: auto;
+}
+
+.immersive .finale[hidden] {
+	display: none;
+}
+
+/* it takes focus so that it is read out; the ring belongs on its buttons */
+.finale:focus {
+	outline: none;
+}
+
+@keyframes finale-in {
+	from {
+		opacity: 0;
+	}
+}
+
+.finale-title {
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(2.4rem, 1rem + 5.4vw, 8rem);
+	line-height: 0.92;
+	letter-spacing: -0.02em;
+	margin-left: -0.04em;
+	text-wrap: balance;
+}
+
+.finale-cols {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: start;
+	justify-content: space-between;
+	gap: var(--space-4) var(--space-6);
+	padding-top: var(--space-4);
+	border-top: 1px solid var(--rule-strong);
+}
+
+.finale-vol {
+	font-weight: 600;
+}
+
+.finale-by {
+	color: var(--fg-2);
+}
+
+.finale-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+.finale-actions .btn {
+	padding-inline: 0.95rem;
+}
+
+.immersive.is-moving .finale {
+	display: none;
+}
+
+/* on short screens the words stand on the paintings: more shade under them */
+@media (max-height: 40em) {
+	.immersive .finale {
+		background: linear-gradient(to top, rgb(5 7 9 / 0.94) 0%, rgb(5 7 9 / 0.86) 60%, rgb(5 7 9 / 0.72) 82%, rgb(5 7 9 / 0) 100%);
+	}
+}
+
+/* four labels side by side: where there is no room for the painters' names they give way */
+@media (max-height: 30em) {
+	.immersive .spot-artist {
+		display: none;
+	}
+}
+
+@media (max-width: 22em) {
+	.immersive .spot-numeral {
+		display: none;
+	}
+
+	/* the number no longer tells which rooms have been visited: a bar of ink does */
+	.immersive .spot[data-visited="true"] {
+		box-shadow: inset 5px 0 0 var(--fg), var(--lift);
+	}
+}
+
+/* the labels and the look buttons would stand on the words */
+.immersive.is-closing :is(.spots, .look-pad) {
+	opacity: 0;
+	visibility: hidden;
+}
+
+/* a painting whose room has been visited: its number is printed in reverse */
+.spot[data-visited="true"] .spot-numeral {
+	background: var(--fg);
+	border-color: var(--fg);
+	color: var(--bg);
 }
 
 /* ─── Hint ────────────────────────────────────────────────────────────────── */
@@ -1427,22 +2228,28 @@ html:not(.immersive) .poi-card {
 	/* above the look controls */
 	bottom: calc(var(--safe-b) + var(--gutter) + var(--tool-size) + var(--space-3));
 	translate: -50% 0;
-	padding: 0.55rem 1.1rem;
-	border-radius: 999px;
-	background: var(--surface);
-	border: 1px solid var(--line);
+	padding: 0.5rem 0.9rem;
+	border-radius: var(--radius);
+	background: var(--control);
 	font-size: var(--step--1);
-	color: var(--paper);
+	color: var(--fg);
 	white-space: nowrap;
 	pointer-events: none;
 	transition: opacity 0.6s var(--ease), transform 0.6s var(--ease);
 }
 
-.immersive .hint.is-faded {
+/* in a room the label has the foot of the view: what is said goes under the header */
+.immersive:not([data-scene="hub"]) .hint {
+	top: calc(var(--bar-h) + var(--space-4));
+	bottom: auto;
+}
+
+.immersive .hint.is-faded,
+.immersive:has(.details[data-open="true"]) .hint {
 	opacity: 0;
 }
 
-/* ─── Guide dialog ────────────────────────────────────────────────────────── */
+/* ─── Guide dialog: the leaflet ───────────────────────────────────────────── */
 
 .guide {
 	margin: 0 0 0 auto;
@@ -1452,16 +2259,13 @@ html:not(.immersive) .poi-card {
 	height: 100%;
 	max-height: 100%;
 	border: 0;
-	border-left: 1px solid var(--line);
-	background: var(--surface-solid);
-	color: var(--paper);
+	background: var(--bg);
+	color: var(--fg);
 	overscroll-behavior: contain;
 }
 
 .guide::backdrop {
-	background: rgb(3 4 6 / 0.6);
-	backdrop-filter: blur(6px);
-	-webkit-backdrop-filter: blur(6px);
+	background: rgb(5 7 9 / 0.62);
 }
 
 .guide[open] {
@@ -1478,7 +2282,7 @@ html:not(.immersive) .poi-card {
 .guide-inner {
 	padding: calc(var(--safe-t) + var(--space-4)) calc(var(--safe-r) + var(--space-5)) calc(var(--safe-b) + var(--space-6)) var(--space-5);
 	display: grid;
-	gap: var(--space-6);
+	gap: var(--space-5);
 }
 
 .guide-head {
@@ -1489,6 +2293,7 @@ html:not(.immersive) .poi-card {
 
 .guide-head h2 {
 	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
 	font-size: var(--step-2);
 }
 
@@ -1496,8 +2301,7 @@ html:not(.immersive) .poi-card {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	display: grid;
-	gap: var(--space-2);
+	border-bottom: 1px solid var(--rule);
 }
 
 .guide-rooms a {
@@ -1505,28 +2309,34 @@ html:not(.immersive) .poi-card {
 	grid-template-columns: 4.5rem 1fr;
 	align-items: center;
 	gap: var(--space-4);
-	padding: var(--space-2);
-	border-radius: var(--radius);
+	padding: var(--space-2) var(--space-2) var(--space-2) 0;
+	border-top: 1px solid var(--rule);
 	text-decoration: none;
-	border: 1px solid transparent;
-	transition: background-color 0.2s var(--ease), border-color 0.2s var(--ease);
+	transition: background-color 0.2s var(--ease);
 }
 
-.guide-rooms a:hover {
-	background: rgb(239 233 222 / 0.05);
+@media (hover: hover) {
+	.guide-rooms a:hover {
+		background: var(--tint);
+	}
 }
 
+.guide-rooms a:active {
+	background: var(--tint);
+}
+
+/* where you are: a bar of ink down the edge of the row */
 .guide-rooms a[aria-current="page"] {
-	border-color: var(--line-strong);
-	background: rgb(239 233 222 / 0.05);
+	box-shadow: inset 3px 0 0 var(--fg);
+	padding-left: var(--space-3);
+	background: var(--tint);
 }
 
 .guide-thumb {
 	width: 4.5rem;
 	aspect-ratio: 1;
-	border-radius: 10px;
 	overflow: hidden;
-	background: var(--ink-3);
+	background: var(--well);
 }
 
 .guide-thumb picture,
@@ -1537,48 +2347,43 @@ html:not(.immersive) .poi-card {
 	object-fit: cover;
 }
 
+/* the gallery itself, in a few strokes: a lit wall over dark water */
 .guide-thumb-hub {
 	background:
-		radial-gradient(circle at 50% 30%, rgb(255 230 190 / 0.35), transparent 45%),
+		radial-gradient(circle at 50% 30%, rgb(255 240 215 / 0.4), transparent 45%),
 		linear-gradient(to bottom, #1b232a 55%, #07090b 56%);
 }
 
 .guide-text {
 	display: grid;
 	gap: 0.1rem;
-	line-height: 1.25;
+	line-height: 1.3;
 }
 
 .guide-meta {
-	font-size: var(--step--2);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--accent);
+	font-size: var(--step--1);
+	font-weight: 600;
 }
 
 .guide-name {
-	font-family: var(--font-display), Georgia, serif;
-	font-size: var(--step-1);
+	font-size: var(--step--1);
 }
 
 .guide-artist {
 	font-size: var(--step--1);
-	color: var(--paper-2);
+	color: var(--fg-2);
 }
 
 .guide-section {
 	display: grid;
 	gap: var(--space-3);
-	padding-top: var(--space-5);
-	border-top: 1px solid var(--line);
+	padding-top: var(--space-4);
+	border-top: 1px solid var(--rule-strong);
 }
 
 .guide-section h3 {
 	font-size: var(--step--1);
-	letter-spacing: 0.14em;
-	text-transform: uppercase;
-	color: var(--paper-2);
-	font-weight: 500;
+	font-weight: 600;
 }
 
 .guide-section h4 {
@@ -1589,8 +2394,14 @@ html:not(.immersive) .poi-card {
 
 .guide-section p,
 .credits {
-	color: var(--paper-2);
+	color: var(--fg-2);
 	font-size: var(--step--1);
+}
+
+.guide-section a:not(.text-link) {
+	color: var(--link);
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
 }
 
 .credits {
@@ -1601,13 +2412,12 @@ html:not(.immersive) .poi-card {
 }
 
 .byline {
-	color: var(--paper) !important;
+	color: var(--fg) !important;
 }
 
 .controls {
 	margin: 0;
 	display: grid;
-	gap: var(--space-2);
 	font-size: var(--step--1);
 }
 
@@ -1615,27 +2425,44 @@ html:not(.immersive) .poi-card {
 	display: grid;
 	grid-template-columns: 9rem 1fr;
 	gap: var(--space-3);
+	padding-block: var(--space-2);
+	border-top: 1px solid var(--rule);
 }
 
 .controls dt {
-	color: var(--paper);
+	color: var(--fg);
+	font-weight: 500;
 }
 
 .controls dd {
 	margin: 0;
-	color: var(--paper-2);
+	color: var(--fg-2);
 }
 
 /* ─── Small screens ───────────────────────────────────────────────────────── */
 
-/* Up to here an open description overlaps the card: take the card out of the way */
+/* Up to here an open description overlaps the label: take the label out of the way */
 @media (max-width: 62.5em) {
 	.immersive .room:has(.details[data-open="true"]) .room-card {
 		visibility: hidden;
 	}
 }
 
-/* Up to here the card would meet the look controls: it sits above them */
+/* Phones (and short landscape screens) have no room for a note and the label together: while a note is
+   open the label steps aside, so the note reads over the painting instead of over the label's text.
+   Closing the note (a tap on the view, the marker again, or Escape) brings the label back. The view has
+   already turned the point clear of the label by then (clearArea in app.ts), so nothing jumps. */
+@media (max-width: 40em), (max-height: 30em) and (orientation: landscape) {
+	.immersive .room:has(.poi-card:not(.is-collapsed)) .room-card {
+		opacity: 0;
+		transform: translateY(0.75rem);
+		visibility: hidden;
+		pointer-events: none;
+		transition: opacity 0.35s var(--ease), transform 0.35s var(--ease), visibility 0s linear 0.35s;
+	}
+}
+
+/* Up to here the label would meet the look controls: it sits above them */
 @media (max-width: 56em) {
 	.immersive .room-card {
 		--card-b: calc(var(--safe-b) + var(--gutter) + var(--tool-size) + var(--space-2));
@@ -1656,27 +2483,28 @@ html:not(.immersive) .poi-card {
 }
 
 @media (max-width: 40em) {
-	.tools,
-	.immersive .look-controls {
-		gap: var(--space-1);
-	}
-
-	/* a compact wordmark: the room it names is on the card below */
+	/* a compact wordmark: the room it names is on the label below */
 	.immersive .bar {
 		gap: var(--space-2);
 	}
 
 	.immersive .wordmark {
-		padding: 0.25rem 0.5rem;
+		padding: 0.25rem 0.6rem;
+	}
+
+	.immersive .wordmark-name {
+		font-size: 1.05rem;
+		line-height: 1.05;
 	}
 
 	.immersive .wordmark-room {
 		display: none;
 	}
 
-	.immersive .look-controls {
+	.immersive .look-pad {
 		right: calc(var(--safe-r) + var(--space-3));
 		bottom: calc(var(--safe-b) + var(--space-3));
+		max-width: calc(100% - 2 * var(--space-3) - var(--safe-l) - var(--safe-r));
 	}
 
 	.immersive .room-card {
@@ -1684,20 +2512,19 @@ html:not(.immersive) .poi-card {
 		left: calc(var(--safe-l) + var(--space-3));
 		right: calc(var(--safe-r) + var(--space-3));
 		width: auto;
-		padding: var(--space-4);
+		padding-top: var(--space-3);
 	}
 
-	.immersive .room-title {
-		font-size: var(--step-1);
+	.room-actions {
+		margin-top: var(--space-3);
 	}
 
 	.room-actions .btn {
-		flex: 1 1 auto;
-		padding-inline: 0.9rem;
-		/* on the narrowest cards (400 % zoom) the labels wrap instead of running past the edge */
+		/* on the narrowest cards (400 % zoom) the words wrap instead of running past the edge */
 		white-space: normal;
 	}
 
+	/* a sheet drawn up from the bottom edge */
 	.immersive .details {
 		top: auto;
 		left: 0;
@@ -1705,17 +2532,11 @@ html:not(.immersive) .poi-card {
 		bottom: 0;
 		width: 100%;
 		max-height: 82dvh;
-		border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-		border-bottom: 0;
 		animation-name: sheet-in;
 	}
 
 	.immersive .details-scroll {
 		padding-bottom: calc(var(--safe-b) + var(--space-6));
-	}
-
-	.immersive .details {
-		background: rgb(11 14 17);
 	}
 
 	/* the sheet covers the points too: keep them, and focus, out from under it */
@@ -1730,9 +2551,13 @@ html:not(.immersive) .poi-card {
 		}
 	}
 
-	.spot {
-		padding-right: 0.8rem;
-		gap: 0.5rem;
+	.spot-numeral {
+		min-width: 2.25rem;
+		padding-inline: 0.5rem;
+	}
+
+	.spot-text {
+		padding-inline: 0.65rem 0.8rem;
 	}
 
 	.spot-artist {
@@ -1742,7 +2567,7 @@ html:not(.immersive) .poi-card {
 	.facts div,
 	.controls div {
 		grid-template-columns: 1fr;
-		gap: 0.15rem;
+		gap: 0.1rem;
 	}
 
 	.immersive .hint {
@@ -1752,6 +2577,15 @@ html:not(.immersive) .poi-card {
 		width: max-content;
 		max-width: calc(100% - 2 * var(--space-4));
 	}
+
+	/* the credit and the reading pages each on a line of their own */
+	.immersive .intro-top {
+		display: grid;
+	}
+
+	.intro-actions .btn {
+		flex: 1 1 auto;
+	}
 }
 
 @media (max-width: 22.5em) {
@@ -1760,39 +2594,72 @@ html:not(.immersive) .poi-card {
 	}
 }
 
+/* Here the open pad wraps above its button: the label moves up with it */
+@media (max-width: 23.2em) {
+	.immersive:has(#btn-look[aria-expanded="true"]) .room-card {
+		--card-b: calc(var(--safe-b) + var(--space-3) + 2 * var(--tool-size) + 1px + var(--space-2));
+	}
+}
+
 /* Landscape phones: very little height */
 @media (max-height: 30em) and (orientation: landscape) {
-	/* the painting labels sit low on short screens: keep the hint out of their way */
+	/* the painting labels sit low on short screens: keep the hint out of their way, under the header buttons */
 	.immersive .hint {
-		top: calc(var(--safe-t) + var(--space-4));
+		top: calc(var(--safe-t) + var(--space-3) + var(--tool-size) + var(--space-3));
 		bottom: auto;
 	}
 
+	/* the title screen in one band: the name small, the bill and the way in side by side */
 	.immersive .intro {
-		align-items: safe center;
-		padding-block: calc(var(--safe-t) + var(--space-4)) calc(var(--safe-b) + var(--space-4));
+		gap: var(--space-2);
+		padding-block: calc(var(--safe-t) + var(--space-2)) calc(var(--safe-b) + var(--space-3));
 	}
 
 	.immersive .intro-title {
-		font-size: clamp(2.4rem, 9vh + 1rem, 4rem);
+		font-size: clamp(2.2rem, 9vh + 1rem, 3.6rem);
 	}
 
-	.intro-inner {
+	.immersive .intro-inner {
 		gap: var(--space-2);
 	}
 
+	.immersive .intro-cols {
+		grid-template-columns: minmax(0, 1fr) auto;
+		padding-top: var(--space-2);
+	}
+
+	.immersive .intro-about {
+		gap: var(--space-1);
+	}
+
+	.immersive .intro-lede {
+		font-size: var(--step-0);
+		max-width: none;
+	}
+
+	.intro-artists,
 	.intro-hint {
 		display: none;
 	}
 
-	/* the card on the left, the look controls in a row on the right */
-	.immersive .room-card {
-		--card-b: calc(var(--safe-b) + var(--gutter));
-		padding: var(--space-3) var(--space-4);
-		width: min(26rem, 100% - 3 * var(--gutter) - 6 * var(--tool-size) - 5 * var(--space-2));
+	/* the label on the left, the look controls on the right: open, they fold into three columns beside
+	   their button, so the label keeps the width for its words on one line */
+	.immersive .look-controls {
+		grid-auto-flow: row;
+		grid-template-columns: repeat(3, var(--tool-size));
 	}
 
-	.immersive .look-controls {
+	.immersive .room-card {
+		--card-b: calc(var(--safe-b) + var(--gutter));
+		padding-top: var(--space-3);
+		width: min(24rem, 100% - 3 * var(--gutter) - 4 * var(--tool-size) - 3px - var(--safe-l) - var(--safe-r));
+	}
+
+	.room-actions {
+		margin-top: var(--space-2);
+	}
+
+	.immersive .look-pad {
 		right: calc(var(--safe-r) + var(--gutter));
 		bottom: calc(var(--safe-b) + var(--gutter));
 	}
@@ -1803,6 +2670,7 @@ html:not(.immersive) .poi-card {
 
 	.immersive .room-title {
 		font-size: var(--step-1);
+		margin-top: 0;
 	}
 
 	/* under the header, not behind it */
@@ -1814,18 +2682,51 @@ html:not(.immersive) .poi-card {
 
 /* Short and narrow (a 400 % zoom): the look controls fold into two columns */
 @media (max-height: 30em) and (orientation: landscape) and (max-width: 40em) {
+	/* what is said in a room goes where the label is wide of it */
+	.immersive:not([data-scene="hub"]) .hint {
+		white-space: normal;
+		left: auto;
+		right: calc(var(--safe-r) + var(--gutter));
+		translate: none;
+		max-width: 10rem;
+	}
+
 	.immersive .look-controls {
 		grid-auto-flow: row;
 		grid-template-columns: repeat(2, var(--tool-size));
 	}
 
 	.immersive .room-card {
-		width: min(26rem, 100% - 3 * var(--gutter) - 2 * var(--tool-size) - var(--space-1));
+		width: min(24rem, 100% - 3 * var(--gutter) - 3 * var(--tool-size) - 2px - var(--safe-l) - var(--safe-r));
 	}
 
 	/* no labels under the header buttons here, so the sheet can start closer */
 	.immersive .details {
 		top: calc(var(--bar-h) + var(--space-3));
+	}
+
+	/* the open pad folds beside its button here, not above it: the label stays where it is */
+	.immersive:has(#btn-look[aria-expanded="true"]) .room-card {
+		--card-b: calc(var(--safe-b) + var(--gutter));
+	}
+
+	/* the label is too narrow for its actions in a row: they become a list */
+	.room-actions {
+		flex-direction: column;
+	}
+
+	.room-actions .btn {
+		justify-content: flex-start;
+	}
+
+	.room-actions .btn + .btn {
+		border-left: 0;
+		border-top: 1px solid var(--rule);
+	}
+
+	/* too narrow for two columns on the title screen */
+	.immersive .intro-cols {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -1843,13 +2744,8 @@ html:not(.immersive) .poi-card {
 }
 
 @media (prefers-reduced-transparency: reduce) {
-	:root {
-		--surface: rgb(11 14 17 / 0.97);
-	}
-
 	.guide::backdrop {
-		backdrop-filter: none;
-		background: rgb(3 4 6 / 0.85);
+		background: rgb(5 7 9 / 0.88);
 	}
 }
 
@@ -1858,10 +2754,29 @@ html:not(.immersive) .poi-card {
 	.tool,
 	.spot,
 	.icon-btn,
-	.poi-link,
 	.room-card,
-	.details {
+	.poi-card,
+	.finale,
+	.details,
+	.swatch,
+	.poi-ring,
+	.immersive .wordmark,
+	.immersive .hint {
 		border: 1px solid CanvasText;
+	}
+
+	.swatch {
+		forced-color-adjust: none;
+	}
+
+	.spot[data-visited="true"] .spot-numeral,
+	.tool[aria-pressed="true"],
+	.room-actions .btn[aria-expanded="true"],
+	.poi-dot[aria-expanded="true"] .poi-ring {
+		/* in system colours, but without the backplate the browser puts behind text, which would hide it */
+		forced-color-adjust: none;
+		background: Highlight;
+		color: HighlightText;
 	}
 
 	.progress > span {

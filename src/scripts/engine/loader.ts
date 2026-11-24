@@ -8,6 +8,8 @@ export type Tier = "2k" | "4k" | "8k";
 export interface SceneAssets {
 	tiers: Partial<Record<Tier, { avif?: string; webp?: string; bytes?: number }>>;
 	mask?: string;
+	/** Disparity map (near / distance) and the distance, in metres, of the nearest surface. */
+	depth?: { url: string; near: number };
 }
 
 let avifSupport: Promise<boolean> | null = null;

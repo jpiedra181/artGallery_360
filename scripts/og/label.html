@@ -1,0 +1,79 @@
+<!doctype html>
+<!--
+	The label under the picture on the share card (public/og.jpg): the name of the exhibition on label
+	stock, set as on the site. make_stills.py stacks label.png under a view of the gallery.
+
+	To change it, edit this page, open it in a browser 1200 px wide and save a screenshot of the
+	label (1200 × 156, at 1×) as label.png beside it. The fonts are the two the site uses, here from
+	Google Fonts; the values are those of src/styles/global.css.
+-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<title>Share card label</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Ibarra+Real+Nova:wght@500&family=Libre+Franklin:wght@400;600&display=block"
+			rel="stylesheet"
+		/>
+		<style>
+			* {
+				box-sizing: border-box;
+				margin: 0;
+			}
+			body {
+				width: 1200px;
+				background: #ecebe6;
+				color: #121418;
+				font: 400 22px/1.36 "Libre Franklin", Arial, sans-serif;
+				-webkit-font-smoothing: antialiased;
+			}
+			.label {
+				display: grid;
+				grid-template-columns: 1fr auto;
+				align-items: center;
+				height: 156px;
+				padding: 0 46px 0 44px;
+			}
+			h1 {
+				font: 500 88px/1 "Ibarra Real Nova", Georgia, serif;
+				letter-spacing: -0.02em;
+				word-spacing: -0.06em;
+				/* the face sits high on its line: bring it to the optical middle of the label */
+				padding-top: 4px;
+			}
+			.bill {
+				align-self: stretch;
+				display: grid;
+				align-content: center;
+				padding-left: 34px;
+				border-left: 1px solid rgb(18 20 24 / 0.5);
+			}
+			.vol {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				font-weight: 600;
+			}
+			/* the pigment of Vol. I: Prussian blue */
+			.swatch {
+				width: 17px;
+				height: 17px;
+				background: #1c3f73;
+			}
+			.dim {
+				color: #3d4046;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="label">
+			<h1>Inside the Frame</h1>
+			<div class="bill">
+				<p class="vol">Vol. I — Water <span class="swatch"></span></p>
+				<p>Hokusai, Hiroshige, Monet, Turner</p>
+				<p class="dim">An interactive exhibition by Javier Piedra</p>
+			</div>
+		</div>
+	</body>
+</html>

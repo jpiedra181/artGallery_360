@@ -1,14 +1,18 @@
 """Room II — Rain. Inside Hiroshige's "Sudden Shower over Shin-Ōhashi Bridge
 and Atake".
 
-The viewer stands by the railing of the long wooden bridge over the Sumida,
-in a summer downpour. The deck rises ahead and people hurry across under
-straw hats and mats; below, the grey-green river and a raftsman; across the
-water, the dark tree line of Atake fading into mist under a band of black
-cloud. Flat woodblock colours; the rain itself is drawn live by the viewer.
+The print looks down on the bridge, so the viewer does too: from the open
+platform of a fire watch on the near bank, with the bridge crossing from the
+lower left to the upper right, the turquoise river going to deep blue under
+it, the far bank a single dark silhouette and black cloud wiped in above.
+Flat woodblock colours (emission only).
+
+This is the plate. The railings, the people hurrying over the deck and the
+raft are drawn live over it, because they move, and the rain falls live too
+(src/scripts/worlds/sudden-shower.ts, which repeats the layout constants).
 
 Mask pass
-  R  river (rain rings)      G  sky
+  R  river (rain rings)      G  sky      B  our platform, in front of the drawing
 """
 
 import math
@@ -22,387 +26,423 @@ from mathutils import Matrix, Vector
 import common as C
 import printmaking as P
 
-SKY = [(0.0, "#a9aea6"), (0.12, "#8e9490"), (0.32, "#626865"), (0.55, "#33373a"), (0.8, "#1c1e21"), (1.0, "#151719")]
-RIVER = "#4f7a76"
-RIVER_DEEP = "#2f565b"
-RIVER_LINE = "#6f9590"
-DECK = "#d8bf8e"
-DECK_LINE = "#a98d5e"
-RAIL = "#5a4a35"
-PILE = "#4a4237"
-BANK = "#2f3a30"
-BANK_FAR = "#6c746b"
-GROUND = "#7d7a62"
-ROOF = "#3c3f42"
-WALL = "#9e9784"
-KIMONO = "#2c3a49"
-KIMONO_2 = "#4e5a52"
-STRAW = "#c7ad74"
-STRAW_DARK = "#9a8350"
-UMBRELLA = "#3a332c"
-SKIN = "#e6c79d"
-LOG = "#a98c5c"
-FOG = "#9da39c"
+# Palette read from the print (sRGB), a little fresher than the aged sheet
+SKY_LOW, SKY, CLOUD, BLACK = "#5f7f8c", "#4d6a7c", "#33434f", "#1b1d21"
+SHORE, SHORE_BACK, SHORE_FAR = "#34495a", "#3f5768", "#4c6879"
+RIVER_FAR, RIVER, RIVER_LOW, RIVER_DEEP = "#86b5a8", "#7cb3a4", "#5c9a9b", "#1f466b"
+DECK, DECK_SIDE = "#eec78b", "#d8a878"
+PILE, PILE_DARK = "#897d6d", "#6f6558"
+GROUND, GROUND_WET = "#a3977a", "#8f8a70"
+TILE, TILE_LIGHT, THATCH, WALL, PAPER = "#566873", "#6b7f88", "#a98f5f", "#a89878", "#efe0bd"
+TIMBER, TIMBER_DARK = "#d6b585", "#a3845c"
+INK = "#24272c"
 
-BRIDGE_YAW = math.radians(-24)   # the deck runs away from us towards yaw -24°
-VIEW_S = -38.0                   # where we stand along the bridge (m)
-SPAN = 120.0                     # half-length of the bridge (m)
-DECK_W = 6.2
-RIVER_HALF = 112.0               # banks at ±112 m along the bridge axis
+# ── layout (metres; the eye is over the origin, the water at z = 0) ──
+EYE = 22.0
+ALONG = (0.848, 0.530)            # the way the bridge runs
+START = (-9.0, 22.0)              # its centre line at s = 0
+DECK_W = 6.4
+S0, S1 = -21.0, 131.0             # where it meets the banks
+FLOW = (0.871, -0.491)            # along the river
+NORMAL = (0.491, 0.871)           # across it, towards the far bank
+NEAR, FAR = -3.5, 129.0           # the two shores, measured along NORMAL
 
-rng = random.Random(4)
-
-
-def axis():
-    a = BRIDGE_YAW
-    along = Vector((math.sin(a), math.cos(a), 0))
-    across = Vector((math.cos(a), -math.sin(a), 0))  # to the right of the deck
-    return along, across
+rng = random.Random(57)
+nrng = np.random.default_rng(57)
 
 
 def deck_z(s):
-    """Arched deck: highest in the middle of the river."""
-    return 6.0 + 2.8 * (1 - (s / SPAN) ** 2)
+    return 5.6 + 3.2 * (1 - ((s - 55.0) / 78.0) ** 2)
 
 
-# where the viewer stands: on the deck, near the right-hand railing
-_along, _across = axis()
-ORIGIN = -(_along * VIEW_S + _across * (DECK_W / 2 - 1.1))  # shift the world so we are at x=y=0
+def on_bridge(s, t, z=0.0):
+    """Point of the bridge: s along, t across (positive towards us), z above the deck."""
+    return Vector((START[0] + ALONG[0] * s + ALONG[1] * t, START[1] + ALONG[1] * s - ALONG[0] * t, deck_z(s) + z))
 
 
-def W(s, t, z):
-    """World position for bridge coordinates: s along, t across (m), z up."""
-    along, across = axis()
-    return along * s + across * t + Vector((0, 0, z)) + ORIGIN
+def shore(f, n, z=0.0):
+    """Point by the river: f along it, n across it."""
+    return Vector((FLOW[0] * f + NORMAL[0] * n, FLOW[1] * f + NORMAL[1] * n, z))
 
 
-def fogged(name, color_hex, fog_hex=FOG, near=60.0, far=650.0, amount=0.8):
-    """Flat colour that fades into the mist with distance."""
+def fogged(name, color_hex, fog_hex=SKY_LOW, near=90.0, far=700.0, amount=0.75):
+    """Flat colour that goes into the wet air with distance."""
     mat, nt, out = C.new_material(name)
     em = C.node(nt, "ShaderNodeEmission", 400, 0)
     nt.links.new(em.outputs[0], out.inputs["Surface"])
     lp = C.node(nt, "ShaderNodeLightPath", -400, -200)
-    rng_ = C.node(nt, "ShaderNodeMapRange", -200, -200)
-    rng_.inputs["From Min"].default_value = near
-    rng_.inputs["From Max"].default_value = far
-    rng_.inputs["To Max"].default_value = amount
-    rng_.interpolation_type = "SMOOTHSTEP"
-    nt.links.new(lp.outputs["Ray Length"], rng_.inputs["Value"])
-    col = C.mix_color(nt, P.hex_to_linear(color_hex), P.hex_to_linear(fog_hex), rng_.outputs["Result"], x=100, y=0)
+    mr = C.node(nt, "ShaderNodeMapRange", -200, -200)
+    mr.inputs["From Min"].default_value = near
+    mr.inputs["From Max"].default_value = far
+    mr.inputs["To Max"].default_value = amount
+    mr.interpolation_type = "SMOOTHSTEP"
+    nt.links.new(lp.outputs["Ray Length"], mr.inputs["Value"])
+    col = C.mix_color(nt, P.hex_to_linear(color_hex), P.hex_to_linear(fog_hex), mr.outputs["Result"], x=100, y=0)
     nt.links.new(col, em.inputs["Color"])
     return mat
 
 
-def obj_from_bm(name, bm, coll, mat, smooth=False):
+def obj_from_bm(name, bm, coll, mat, group=None, lines=True):
     mesh = bpy.data.meshes.new(name)
     bm.to_mesh(mesh)
     bm.free()
     obj = bpy.data.objects.new(name, mesh)
     coll.objects.link(obj)
-    if smooth:
-        for p in obj.data.polygons:
-            p.use_smooth = True
     C.assign(obj, mat)
+    if group:
+        obj["line_group"] = group
+    if not lines:
+        no_lines(obj)
     return obj
 
 
+def no_lines(obj):
+    """Printed from a colour block alone: no key line round it."""
+    for kind in ("normal", "id", "depth"):
+        obj[f"skip_{kind}"] = True
+
+
 def beam(bm, a, b, w, h=None):
-    """Box from point a to point b with cross-section w × h."""
     h = h or w
     d = b - a
     m = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Diagonal((w, h, d.length, 1))
     bmesh.ops.create_cube(bm, size=1.0, matrix=m)
 
 
-# ─── Bridge ───────────────────────────────────────────────────────────────────
+# ─── Sky ──────────────────────────────────────────────────────────────────────
 
-def build_bridge(coll):
-    along, across = axis()
-    # deck: a strip with planks across it (UV u = along, v = across)
-    n = 360
-    s = np.linspace(-SPAN - 4, SPAN + 4, n)
-    verts, uvs = [], []
-    for si in s:
-        for t in (-DECK_W / 2, DECK_W / 2):
-            p = W(si, t, deck_z(si))
-            verts.append(tuple(p))
-            uvs.append((si, t))
-    faces = P.grid_faces(n, 2)
-    deck = P.mesh_from_arrays("deck", np.array(verts), faces, coll)
-    P.add_uv(deck, np.array(uvs))
-    mat, nt, out = C.new_material("deck")
-    em = C.node(nt, "ShaderNodeEmission", 500, 0)
-    nt.links.new(em.outputs[0], out.inputs["Surface"])
-    uv = C.node(nt, "ShaderNodeUVMap", -700, 0)
-    sep = C.node(nt, "ShaderNodeSeparateXYZ", -500, 0)
-    nt.links.new(uv.outputs[0], sep.inputs[0])
-    mul = C.node(nt, "ShaderNodeMath", -350, 0, operation="MULTIPLY")
-    mul.inputs[1].default_value = 1 / 0.32
-    nt.links.new(sep.outputs["X"], mul.inputs[0])
-    fr = C.node(nt, "ShaderNodeMath", -200, 0, operation="FRACT")
-    nt.links.new(mul.outputs[0], fr.inputs[0])
-    seam = C.node(nt, "ShaderNodeMath", -50, 0, operation="LESS_THAN")
-    seam.inputs[1].default_value = 0.08
-    nt.links.new(fr.outputs[0], seam.inputs[0])
-    col = C.mix_color(nt, P.hex_to_linear(DECK), P.hex_to_linear(DECK_LINE), seam.outputs[0], x=150, y=0)
-    lp = C.node(nt, "ShaderNodeLightPath", -50, -250)
-    fog = C.node(nt, "ShaderNodeMapRange", 100, -250)
-    fog.inputs["From Min"].default_value = 60
-    fog.inputs["From Max"].default_value = 450
-    fog.inputs["To Max"].default_value = 0.65
-    fog.interpolation_type = "SMOOTHSTEP"
-    nt.links.new(lp.outputs["Ray Length"], fog.inputs["Value"])
-    col = C.mix_color(nt, col, P.hex_to_linear(FOG), fog.outputs["Result"], x=300, y=0)
-    nt.links.new(col, em.inputs["Color"])
-    C.assign(deck, mat)
-    deck["line_group"] = "deck"
-
-    # edge beams, railing posts and rails
-    bm = bmesh.new()
-    for side in (-1, 1):
-        t = side * DECK_W / 2
-        prev = None
-        for si in np.arange(-SPAN, SPAN + 0.1, 2.0):
-            base = W(si, t, deck_z(si))
-            top = base + Vector((0, 0, 1.05))
-            beam(bm, base - Vector((0, 0, 0.05)), top, 0.13)
-            if prev is not None:
-                pb, pt = prev
-                beam(bm, pt, top, 0.1, 0.12)                                         # handrail
-                beam(bm, pb + Vector((0, 0, 0.45)), base + Vector((0, 0, 0.45)), 0.07)  # mid rail
-                beam(bm, pb - Vector((0, 0, 0.25)), base - Vector((0, 0, 0.25)), 0.16, 0.4)  # fascia
-            prev = (base, top)
-    rail = obj_from_bm("railing", bm, coll, fogged("rail", RAIL))
-
-    # bents of piles under the deck, every 7 m, with cross bracing
-    bm = bmesh.new()
-    for si in np.arange(-RIVER_HALF + 4, RIVER_HALF - 3, 7.0):
-        top_z = deck_z(si) - 0.45
-        xs = [-2.6, -0.9, 0.9, 2.6]
-        for t in xs:
-            beam(bm, W(si, t, -3.0), W(si, t, top_z), 0.32)
-        beam(bm, W(si, -3.1, top_z), W(si, 3.1, top_z), 0.35, 0.35)            # cap
-        beam(bm, W(si, -2.6, top_z - 0.6), W(si, 2.6, 1.2), 0.14)                # braces
-        beam(bm, W(si, 2.6, top_z - 0.6), W(si, -2.6, 1.2), 0.14)
-        beam(bm, W(si, -2.8, 2.2), W(si, 2.8, 2.2), 0.2)                         # tie
-    for t in (-2.7, 2.7):  # stringers along the bridge
-        prev = None
-        for si in np.arange(-SPAN, SPAN + 0.1, 3.5):
-            p = W(si, t, deck_z(si) - 0.32)
-            if prev is not None:
-                beam(bm, prev, p, 0.3, 0.45)
-            prev = p
-    obj_from_bm("piles", bm, coll, fogged("piles", PILE, near=40, far=500, amount=0.75))
-    return deck
+def build_sky(scene):
+    """Prussian blue, and the black cloud wiped in from the top with a ragged
+    lower edge (bokashi: the block is inked unevenly by hand)."""
+    world = scene.world
+    world.use_nodes = True
+    nt = world.node_tree
+    nt.nodes.clear()
+    out = C.node(nt, "ShaderNodeOutputWorld", 900, 0)
+    bg = C.node(nt, "ShaderNodeBackground", 700, 0)
+    nt.links.new(bg.outputs[0], out.inputs["Surface"])
+    coord = C.node(nt, "ShaderNodeTexCoord", -1100, 0)
+    sep = C.node(nt, "ShaderNodeSeparateXYZ", -900, 0)
+    nt.links.new(coord.outputs["Generated"], sep.inputs[0])
+    # lobes hanging from the cloud: noise over the bearing, stretched downwards
+    mp = C.node(nt, "ShaderNodeMapping", -900, -300)
+    mp.inputs["Scale"].default_value = (2.6, 2.6, 0.9)
+    nt.links.new(coord.outputs["Generated"], mp.inputs["Vector"])
+    noise = C.node(nt, "ShaderNodeTexNoise", -700, -300)
+    noise.inputs["Scale"].default_value = 1.0
+    noise.inputs["Detail"].default_value = 2.2
+    noise.inputs["Roughness"].default_value = 0.42
+    nt.links.new(mp.outputs[0], noise.inputs["Vector"])
+    push = C.node(nt, "ShaderNodeMath", -500, -200, operation="MULTIPLY_ADD")
+    push.inputs[1].default_value = 0.78
+    nt.links.new(noise.outputs["Fac"], push.inputs[0])
+    nt.links.new(sep.outputs["Z"], push.inputs[2])
+    ramp = C.node(nt, "ShaderNodeValToRGB", -250, 0)
+    cr = ramp.color_ramp
+    cr.interpolation = "EASE"
+    stops = [(0.22, SKY_LOW), (0.38, SKY), (0.56, SKY), (0.66, CLOUD), (0.73, "#22272c"), (0.86, BLACK)]
+    while len(cr.elements) > 1:
+        cr.elements.remove(cr.elements[-1])
+    for i, (pos, hx) in enumerate(stops):
+        el = cr.elements[0] if i == 0 else cr.elements.new(pos)
+        el.position = pos
+        el.color = (*P.hex_to_linear(hx), 1)
+    nt.links.new(push.outputs[0], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], bg.inputs["Color"])
 
 
-# ─── River, banks and the far shore ───────────────────────────────────────────
+# ─── River and banks ──────────────────────────────────────────────────────────
 
 def build_river(coll):
-    along, across = axis()
-    size = 3000
     bm = bmesh.new()
-    bmesh.ops.create_grid(bm, x_segments=2, y_segments=2, size=size / 2)
-    water = obj_from_bm("river", bm, coll, None)
-    water.location = (0, 0, 0)
+    bmesh.ops.create_grid(bm, x_segments=2, y_segments=2, size=2200)
+    water = obj_from_bm("river", bm, coll, None, "river")
     mat, nt, out = C.new_material("river")
     em = C.node(nt, "ShaderNodeEmission", 600, 0)
     nt.links.new(em.outputs[0], out.inputs["Surface"])
-    geo = C.node(nt, "ShaderNodeNewGeometry", -900, 0)
-    # bands of colour drifting with the current, like a graded wipe of ink
-    noise = C.node(nt, "ShaderNodeTexNoise", -700, 0)
-    noise.inputs["Scale"].default_value = 0.02
-    noise.inputs["Detail"].default_value = 1.5
-    mp = C.node(nt, "ShaderNodeMapping", -850, -200)
-    mp.inputs["Scale"].default_value = (1.0, 14.0, 1.0)  # stretched along the flow
-    mp.inputs["Rotation"].default_value = (0, 0, BRIDGE_YAW + math.pi / 2)
-    nt.links.new(geo.outputs["Position"], mp.inputs["Vector"])
-    nt.links.new(mp.outputs[0], noise.inputs["Vector"])
-    ramp = C.node(nt, "ShaderNodeValToRGB", -450, 0)
+    lp = C.node(nt, "ShaderNodeLightPath", -700, 0)
+    # graded wipes: deep blue under the bridge and below us, turquoise, pale towards the far shore.
+    # The wipe is level on the sheet, so it follows how far down one looks: the length of the ray.
+    geo = C.node(nt, "ShaderNodeNewGeometry", -1000, -300)
+    noise = C.node(nt, "ShaderNodeTexNoise", -800, -300)
+    noise.inputs["Scale"].default_value = 0.03
+    noise.inputs["Detail"].default_value = 1.0
+    nt.links.new(geo.outputs["Position"], noise.inputs["Vector"])
+    ln = C.node(nt, "ShaderNodeMath", -500, 0, operation="LOGARITHM")
+    ln.inputs[1].default_value = 10.0
+    nt.links.new(lp.outputs["Ray Length"], ln.inputs[0])
+    wob = C.node(nt, "ShaderNodeMath", -350, -100, operation="MULTIPLY_ADD")
+    wob.inputs[1].default_value = 0.06
+    nt.links.new(noise.outputs["Fac"], wob.inputs[0])
+    nt.links.new(ln.outputs[0], wob.inputs[2])
+    fac = C.node(nt, "ShaderNodeMapRange", -200, 0)
+    fac.inputs["From Min"].default_value = math.log10(20)
+    fac.inputs["From Max"].default_value = math.log10(700)
+    nt.links.new(wob.outputs[0], fac.inputs["Value"])
+    ramp = C.node(nt, "ShaderNodeValToRGB", 0, 0)
     cr = ramp.color_ramp
-    cr.interpolation = "CONSTANT"
-    cr.elements[0].position = 0.0
-    cr.elements[0].color = (*P.hex_to_linear(RIVER_DEEP), 1)
-    cr.elements[1].position = 0.33
-    cr.elements[1].color = (*P.hex_to_linear(RIVER), 1)
-    e = cr.elements.new(0.69)
-    e.color = (*P.hex_to_linear(RIVER_LINE), 1)
-    nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
-    lp = C.node(nt, "ShaderNodeLightPath", -450, -300)
-    fog = C.node(nt, "ShaderNodeMapRange", -250, -300)
-    fog.inputs["From Min"].default_value = 80
-    fog.inputs["From Max"].default_value = 900
-    fog.inputs["To Max"].default_value = 0.7
-    fog.interpolation_type = "SMOOTHSTEP"
-    nt.links.new(lp.outputs["Ray Length"], fog.inputs["Value"])
-    # the graded wipe at the bottom of the print: deep blue right below us
-    near = C.node(nt, "ShaderNodeMapRange", -250, -500)
-    near.inputs["From Min"].default_value = 11.0
-    near.inputs["From Max"].default_value = 45.0
-    near.inputs["To Min"].default_value = 1.0
-    near.inputs["To Max"].default_value = 0.0
-    near.interpolation_type = "SMOOTHSTEP"
-    nt.links.new(lp.outputs["Ray Length"], near.inputs["Value"])
-    col = C.mix_color(nt, ramp.outputs["Color"], P.hex_to_linear("#223f50"), near.outputs["Result"], x=150, y=-100)
-    col = C.mix_color(nt, col, P.hex_to_linear("#8a9692"), fog.outputs["Result"], x=300, y=0)
-    nt.links.new(col, em.inputs["Color"])
+    cr.interpolation = "EASE"
+    while len(cr.elements) > 1:
+        cr.elements.remove(cr.elements[-1])
+    pos = lambda d: (math.log10(d) - math.log10(20)) / (math.log10(700) - math.log10(20))
+    for i, (d, hx) in enumerate([(24, RIVER_DEEP), (33, "#2f6584"), (46, RIVER_LOW), (66, RIVER), (135, RIVER_FAR), (260, "#7aa8a6"), (680, SKY)]):
+        el = cr.elements[0] if i == 0 else cr.elements.new(pos(d))
+        el.position = pos(d)
+        el.color = (*P.hex_to_linear(hx), 1)
+    nt.links.new(fac.outputs["Result"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], em.inputs["Color"])
     C.assign(water, mat)
     C.set_mask(water, (1, 0, 0))
-    water.location = tuple(Vector((0, 0, 0)))
-    return water
 
 
-def blob_tree(bm, at, r, h):
-    """A dark rounded tree mass: a few squashed spheres."""
-    for _ in range(rng.randint(3, 5)):
-        c = at + Vector((rng.uniform(-r, r) * 0.6, rng.uniform(-r, r) * 0.6, h * rng.uniform(0.55, 0.85)))
-        rr = r * rng.uniform(0.55, 0.9)
-        m = Matrix.Translation(c) @ Matrix.Diagonal((rr, rr, rr * 0.75, 1))
-        bmesh.ops.create_icosphere(bm, subdivisions=2, radius=1.0, matrix=m)
-    beam(bm, at, at + Vector((0, 0, h * 0.5)), r * 0.15)
+def lobes(x, seed, low, high, spacing):
+    """Height of a mass of trees along x: overlapping rounded crowns."""
+    r = np.random.default_rng(seed)
+    h = np.full_like(x, low * 0.8)
+    c = x.min() - 40
+    while c < x.max() + 40:
+        rad = spacing * r.uniform(0.7, 1.9)
+        top = r.uniform(low, high) * (0.8 + 0.35 * math.sin(c * 0.021 + seed) + 0.15 * math.sin(c * 0.07 + seed * 2))
+        inside = np.clip(1 - ((x - c) / rad) ** 2, 0, 1)
+        h = np.maximum(h, top * np.sqrt(inside) ** 0.55)
+        # smaller crowns on the shoulder of each
+        for _ in range(3):
+            c2, rad2 = c + r.uniform(-rad, rad), rad * r.uniform(0.2, 0.4)
+            i2 = np.clip(1 - ((x - c2) / rad2) ** 2, 0, 1)
+            h = np.maximum(h, np.interp(c2, x, h) * 0.94 + rad2 * 0.55 * np.sqrt(i2) - 99.0 * (i2 <= 0))
+        c += rad * r.uniform(0.5, 0.95)
+    return h
 
 
-def house(bm_wall, bm_roof, at, yaw, w, d, h):
-    rot = Matrix.Rotation(yaw, 4, "Z")
-    m = Matrix.Translation(at + Vector((0, 0, h / 2))) @ rot @ Matrix.Diagonal((w, d, h, 1))
-    bmesh.ops.create_cube(bm_wall, size=1.0, matrix=m)
-    # hipped roof: a squashed pyramid with eaves
-    rh = h * 0.7
-    verts = [Vector((-w * 0.65, -d * 0.65, 0)), Vector((w * 0.65, -d * 0.65, 0)), Vector((w * 0.65, d * 0.65, 0)),
-             Vector((-w * 0.65, d * 0.65, 0)), Vector((-w * 0.25, 0, rh)), Vector((w * 0.25, 0, rh))]
-    base = at + Vector((0, 0, h))
-    vs = [bm_roof.verts.new(base + rot.to_3x3() @ v) for v in verts]
-    for f in ((0, 1, 5, 4), (1, 2, 5), (2, 3, 4, 5), (3, 0, 4), (3, 2, 1, 0)):
-        bm_roof.faces.new([vs[i] for i in f])
+def silhouette(name, coll, n, f0, f1, low, high, spacing, colour, seed, base=0.0, side=1, gap=None):
+    f = np.arange(f0, f1, 0.7)
+    h = lobes(f, seed, low, high, spacing)
+    if gap:
+        h = np.minimum(h, 2.4 + 40 * np.clip(np.maximum(gap[0] - f, f - gap[1]) / 9, 0, 1) ** 2)
+    verts = []
+    for fi, hi in zip(f, h):
+        verts.append(tuple(shore(fi, n, base)))
+        verts.append(tuple(shore(fi, n, base + hi)))
+    obj = P.mesh_from_arrays(name, np.array(verts), P.grid_faces(len(f), 2), coll)
+    C.assign(obj, fogged(name, colour, SKY, near=150, far=900, amount=0.82))
+    no_lines(obj)
+    return obj
 
 
-def build_banks(coll):
-    """Both banks run parallel to the river, at the two ends of the bridge."""
-    along, across = axis()
-    for end, label in ((1, "atake"), (-1, "near_bank")):
-        ground = bmesh.new()
-        trees = bmesh.new()
-        walls = bmesh.new()
-        roofs = bmesh.new()
-        s0 = end * RIVER_HALF
-        # embankment: a long low strip along the river
-        verts = []
-        for t in np.linspace(-1600, 1600, 80):
-            for ds in (0, end * 500):
-                verts.append(W(s0 + ds, t, 1.4))
-        faces = P.grid_faces(80, 2)
-        g = P.mesh_from_arrays(f"{label}_ground", np.array([tuple(v) for v in verts]), faces, coll)
-        C.assign(g, fogged(f"{label}_ground", GROUND, near=40, far=700, amount=0.8))
-        # a dense band of trees along the water, with roofs among them
-        for t in np.arange(-900, 900, 9.0):
-            if abs(t) < 9 and end == 1:
-                continue  # leave the bridge approach clear
-            depth = rng.uniform(4, 28)
-            at = W(s0 + end * depth, t + rng.uniform(-3, 3), 1.4)
-            if rng.random() < 0.22:
-                house(walls, roofs, at, BRIDGE_YAW + rng.uniform(-0.1, 0.1), rng.uniform(6, 11), rng.uniform(5, 8), rng.uniform(3.5, 5.0))
-            else:
-                blob_tree(trees, at, rng.uniform(4.5, 8.5), rng.uniform(9, 16))
-        # a second, taller row of trees behind
-        for t in np.arange(-900, 900, 14.0):
-            at = W(s0 + end * rng.uniform(32, 60), t, 1.4)
-            blob_tree(trees, at, rng.uniform(6, 10), rng.uniform(14, 22))
-        far_tone = BANK if end == 1 else "#3a4438"
-        obj_from_bm(f"{label}_trees", trees, coll, fogged(f"{label}_trees", far_tone, BANK_FAR, near=90, far=620, amount=0.85), smooth=True)
-        obj_from_bm(f"{label}_walls", walls, coll, fogged(f"{label}_walls", WALL, near=80, far=600, amount=0.85))
-        obj_from_bm(f"{label}_roofs", roofs, coll, fogged(f"{label}_roofs", ROOF, near=80, far=600, amount=0.8))
+def build_far_bank(coll):
+    """Atake: one dark silhouette, a second just behind it, and three roofs catching the light."""
+    silhouette("atake_far", coll, FAR + 75, -2600, 2600, 29, 37, 26, SHORE_FAR, 3)
+    silhouette("atake_back", coll, FAR + 32, -1100, 1100, 12, 20, 17, SHORE_BACK, 8)
+    silhouette("atake", coll, FAR, -1100, 1100, 7.5, 13.5, 11, SHORE, 21)
+    # the stepped edge of the bank on the water
+    f = np.arange(-1100, 1100, 5.0)
+    r = np.random.default_rng(5)
+    edge = np.repeat(r.uniform(0.0, 5.0, len(f) // 2 + 1), 2)[: len(f)]
+    verts = []
+    for fi, e in zip(f, edge):
+        verts.append(tuple(shore(fi, FAR - e, 0.3)))
+        verts.append(tuple(shore(fi, FAR + 2000, 0.3)))
+    g = P.mesh_from_arrays("atake_ground", np.array(verts), P.grid_faces(len(f), 2), coll)
+    C.assign(g, fogged("atake_ground", SHORE, SKY, near=150, far=900, amount=0.82))
+    no_lines(g)
+    bm, dark = bmesh.new(), bmesh.new()
+    for f0, w in ((-165, 15), (-128, 14), (-96, 12), (-250, 16), (58, 11), (120, 12)):
+        a = [shore(f0 - w / 2, FAR - 1.2, 4.6), shore(f0 + w / 2, FAR - 1.2, 4.6), shore(f0, FAR - 1.2, 8.8)]
+        bm.faces.new([bm.verts.new(p) for p in a])
+        b = [shore(f0 - w * 0.12, FAR - 1.4, 4.6), shore(f0 + w * 0.36, FAR - 1.4, 4.6), shore(f0 + w * 0.05, FAR - 1.4, 7.3)]
+        dark.faces.new([dark.verts.new(p) for p in b])
+        dark.faces.new([dark.verts.new(p) for p in (shore(f0 - w * 0.7, FAR - 1.0, 0.4), shore(f0 + w * 0.7, FAR - 1.0, 0.4), shore(f0 + w * 0.6, FAR - 1.0, 4.6), shore(f0 - w * 0.6, FAR - 1.0, 4.6))])
+    obj_from_bm("roofs_lit", bm, coll, fogged("roofs_lit", PAPER, SKY, near=120, far=900, amount=0.6), lines=False)
+    obj_from_bm("roofs_dark", dark, coll, fogged("roofs_dark", "#2b3d4c", SKY, near=150, far=900, amount=0.8), lines=False)
 
 
-# ─── People ───────────────────────────────────────────────────────────────────
-
-def person(parts, at, facing, kind, scale=1.0, lean=0.35):
-    """A figure hurrying through the rain.
-
-    kind: "hat" (wide straw hat), "mat" (straw mat held over the head),
-    "umbrella" (oiled-paper umbrella). parts: dict of bmesh per colour.
-    """
-    rot = Matrix.Rotation(-facing, 4, "Z")
-    fwd = rot.to_3x3() @ Vector((0, 1, 0))
-    side = rot.to_3x3() @ Vector((1, 0, 0))
-    lean_m = Matrix.Rotation(-lean, 4, side)
-    k = scale
-    # bare legs mid-stride, mostly hidden by the robe
-    for sgn in (-1, 1):
-        hip = at + Vector((0, 0, 0.62 * k)) + side * 0.08 * sgn * k
-        foot = at + fwd * 0.22 * sgn * k + side * 0.09 * sgn * k
-        beam(parts["skin"], foot, hip, 0.11 * k)
-        # sandal
-        beam(parts["rail"], foot - fwd * 0.08 * k, foot + fwd * 0.12 * k, 0.1 * k, 0.04 * k)
-    # robe: a tapered, forward-leaning body from the shoulders to below the knees
-    body_c = at + Vector((0, 0, 0.96 * k))
-    m = Matrix.Translation(body_c) @ lean_m @ rot @ Matrix.Diagonal((0.27 * k, 0.21 * k, 0.53 * k, 1))
-    bmesh.ops.create_cone(parts["kimono"], cap_ends=True, segments=12, radius1=1.0, radius2=0.7, depth=2.0, matrix=m)
-    # arms folded in front, holding the robe or the umbrella
-    for sgn in (-1, 1):
-        sh = body_c + lean_m.to_3x3() @ Vector((0, 0, 0.42 * k)) + side * 0.2 * sgn * k
-        hand = body_c + lean_m.to_3x3() @ Vector((0, 0, 0.12 * k)) + fwd * 0.26 * k + side * 0.05 * sgn * k
-        beam(parts["kimono"], sh, hand, 0.13 * k)
-    head = body_c + lean_m.to_3x3() @ Vector((0, 0, 0.66 * k)) + fwd * 0.08 * k
-    bmesh.ops.create_uvsphere(parts["skin"], u_segments=10, v_segments=7, radius=0.12 * k, matrix=Matrix.Translation(head))
-    if kind == "hat":
-        m = Matrix.Translation(head + Vector((0, 0, 0.08 * k))) @ lean_m
-        bmesh.ops.create_cone(parts["straw"], cap_ends=True, segments=18, radius1=0.42 * k, radius2=0.02, depth=0.22 * k, matrix=m)
-    elif kind == "mat":
-        # a straw mat draped over head and back
-        m = Matrix.Translation(head + Vector((0, 0, 0.02)) - fwd * 0.15 * k) @ lean_m @ rot @ Matrix.Diagonal((0.38 * k, 0.5 * k, 0.1 * k, 1))
-        bmesh.ops.create_uvsphere(parts["straw_dark"], u_segments=12, v_segments=6, radius=1.0, matrix=m)
-    else:
-        top = head + Vector((0, 0, 0.55 * k)) + fwd * 0.12 * k
-        beam(parts["rail"], head + fwd * 0.18 * k - Vector((0, 0, 0.2 * k)), top, 0.025 * k)
-        m = Matrix.Translation(top) @ Matrix.Rotation(-0.25, 4, side)
-        bmesh.ops.create_cone(parts["umbrella"], cap_ends=True, segments=20, radius1=0.62 * k, radius2=0.03, depth=0.32 * k, matrix=m)
+def house(bms, at, turn, w, d, h, roof):
+    rot = Matrix.Rotation(turn, 4, "Z")
+    bmesh.ops.create_cube(bms["wall"], size=1.0, matrix=Matrix.Translation(at + Vector((0, 0, h / 2))) @ rot @ Matrix.Diagonal((w, d, h, 1)))
+    rh, r3 = d * 0.36, rot.to_3x3()
+    e = 1.15
+    v = [Vector(p) for p in ((-w / 2 - e, -d / 2 - e, 0), (w / 2 + e, -d / 2 - e, 0), (w / 2 + e, d / 2 + e, 0), (-w / 2 - e, d / 2 + e, 0), (-w / 2 - e * 0.6, 0, rh), (w / 2 + e * 0.6, 0, rh))]
+    top = at + Vector((0, 0, h))
+    vs = [bms[roof].verts.new(top + r3 @ p) for p in v]
+    for f in ((0, 1, 5, 4), (2, 3, 4, 5)):
+        bms[roof].faces.new([vs[i] for i in f])
+    gv = [bms["wall"].verts.new(top + r3 @ p) for p in v]
+    for f in ((1, 2, 5), (3, 0, 4)):
+        bms["wall"].faces.new([gv[i] for i in f])
+    # ridge, and the rows of the tiles
+    a, b = top + r3 @ (v[4] + Vector((0, 0, 0.12))), top + r3 @ (v[5] + Vector((0, 0, 0.12)))
+    beam(bms["ridge"], a, b, 0.42, 0.34)
+    for side in (0, 3):
+        for k in (0.36, 0.68):
+            p = v[4].lerp(v[side], k) + Vector((0, 0, 0.06))
+            q = v[5].lerp(v[1 if side == 0 else 2], k) + Vector((0, 0, 0.06))
+            beam(bms["ridge"], top + r3 @ p, top + r3 @ q, 0.09, 0.09)
 
 
-def build_people(coll):
-    parts = {n: bmesh.new() for n in ("kimono", "kimono_2", "straw", "straw_dark", "umbrella", "skin", "rail")}
-    along, across = axis()
-    heading_fwd = BRIDGE_YAW
-    heading_back = BRIDGE_YAW + math.pi
-    # (s offset from us, t across the deck, direction, kind, scale)
-    crowd = [
-        (5.5, -1.1, heading_back, "hat", 1.0),
-        (8.0, 1.4, heading_back, "mat", 1.0),
-        (9.2, 0.3, heading_back, "mat", 0.95),
-        (14.0, -1.8, heading_fwd, "umbrella", 1.0),
-        (15.5, -0.9, heading_fwd, "umbrella", 0.95),
-        (24.0, 1.0, heading_back, "hat", 1.0),
-        (-7.0, -1.6, heading_fwd, "hat", 1.0),
-        (-11.0, 0.8, heading_back, "umbrella", 1.0),
-    ]
-    for ds, t, heading, kind, sc in crowd:
-        si = VIEW_S + ds
-        at = W(si, t, deck_z(si))
-        p = {k: parts[k] for k in parts}
-        if rng.random() < 0.5:
-            p = dict(parts, kimono=parts["kimono_2"])
-        person(p, at, heading, kind, sc)
-    cols = {"kimono": KIMONO, "kimono_2": KIMONO_2, "straw": STRAW, "straw_dark": STRAW_DARK, "umbrella": UMBRELLA,
-            "skin": SKIN, "rail": RAIL}
-    for name, bm in parts.items():
-        obj_from_bm(f"people_{name}", bm, coll, P.flat(f"people_{name}", cols[name]), smooth=True)
+def build_near_bank(coll):
+    """The town we are standing in, seen from above: roofs, lanes, dark trees."""
+    f = np.arange(-900, 901, 12.0)
+    verts = []
+    for fi in f:
+        verts.append(tuple(shore(fi, NEAR, 2.6)))
+        verts.append(tuple(shore(fi, -900, 2.6)))
+    g = P.mesh_from_arrays("near_ground", np.array(verts), P.grid_faces(len(f), 2), coll)
+    C.assign(g, fogged("near_ground", GROUND, SKY_LOW, near=40, far=420, amount=0.75))
+    bm = bmesh.new()  # the facing of the embankment, and its coping
+    beam(bm, shore(-600, NEAR + 0.2, 1.0), shore(600, NEAR + 0.2, 1.0), 3.2, 0.5)
+    beam(bm, shore(-600, NEAR, 2.72), shore(600, NEAR, 2.72), 0.3, 1.2)
+    obj_from_bm("embankment", bm, coll, fogged("embankment", PILE, SKY_LOW, near=60, far=400, amount=0.7))
+
+    bms = {k: bmesh.new() for k in ("wall", "tile", "tile2", "thatch", "ridge")}
+    turn = math.atan2(FLOW[1], FLOW[0])
+    row = -14.0
+    while row > -210:
+        depth = rng.uniform(7.0, 9.5)
+        fi = -330.0 + rng.uniform(0, 12)
+        while fi < 330:
+            w = rng.uniform(8, 15)
+            p = shore(fi + w / 2, row - depth / 2, 2.6)
+            # leave room for the tower, and for the street the bridge comes down into
+            street = abs((p.x - START[0]) * ALONG[1] - (p.y - START[1]) * ALONG[0]) < 8.5 and p.x < -20
+            if math.hypot(p.x, p.y) > 13 and not street and rng.random() > 0.1:
+                kind = "thatch" if rng.random() < 0.16 else ("tile2" if rng.random() < 0.4 else "tile")
+                house(bms, p, turn + rng.uniform(-0.02, 0.02), w - 1.6, depth, rng.uniform(2.2, 3.4), kind)
+            fi += w + (rng.uniform(2.5, 5) if rng.random() < 0.14 else -0.2)
+        row -= depth + rng.uniform(2.6, 5.4)
+    for key, colour in (("wall", WALL), ("tile", TILE), ("tile2", TILE_LIGHT), ("thatch", THATCH), ("ridge", "#44545e")):
+        obj_from_bm(f"town_{key}", bms[key], coll, fogged(f"town_{key}", colour, SKY_LOW, near=50, far=330, amount=0.85), "town" if key == "ridge" else f"town_{key}")
+    # what breaks the rows: trees standing dark among the roofs, the big roof of a temple, two more towers
+    crowns, trunks = bmesh.new(), bmesh.new()
+    for _ in range(58):
+        f, n = rng.uniform(-260, 260), rng.uniform(-200, -20)
+        p = shore(f, n, 2.6)
+        if math.hypot(p.x, p.y) < 20:
+            continue
+        away = Vector((p.x, p.y, 0)).normalized()
+        side = Vector((away.y, -away.x, 0))
+        size = rng.uniform(2.2, 4.6) * (1.5 if rng.random() < 0.15 else 1)
+        lift = size * rng.uniform(1.0, 1.5)
+        pts = []
+        lob = rng.randint(6, 9)
+        for k in range(48):
+            a = k / 48 * 2 * math.pi
+            r = size * (0.86 + 0.14 * abs(math.sin(a * lob / 2 + lob)))
+            pts.append(crowns.verts.new(p + side * math.cos(a) * r + Vector((0, 0, lift + math.sin(a) * r * 0.82))))
+        crowns.faces.new(pts)
+        beam(trunks, p, p + Vector((0, 0, lift)), 0.35)
+    obj_from_bm("town_trees", crowns, coll, fogged("town_trees", SHORE_BACK, SKY_LOW, near=50, far=330, amount=0.8))
+    obj_from_bm("town_trunks", trunks, coll, fogged("town_trunks", "#39454c", SKY_LOW, near=50, far=330, amount=0.8), lines=False)
+    temple = {k: bmesh.new() for k in ("wall", "tile", "tile2", "thatch", "ridge")}
+    for f, n, w, d, h in ((-74, -92, 34, 24, 7.5), (96, -128, 26, 19, 6.5), (20, -168, 22, 16, 6)):
+        house(temple, shore(f, n, 2.6), turn, w, d, h, "tile")
+    for key, colour in (("wall", WALL), ("tile", "#4b5b66"), ("ridge", "#34424c")):
+        obj_from_bm(f"temple_{key}", temple[key], coll, fogged(f"temple_{key}", colour, SKY_LOW, near=50, far=330, amount=0.8), f"temple_{key}")
+    towers = bmesh.new()
+    for f, n, h in ((-118, -46, 15), (64, -70, 17)):
+        base = shore(f, n, 2.6)
+        for dx in (-0.9, 0.9):
+            for dy in (-0.9, 0.9):
+                beam(towers, base + Vector((dx * 1.2, dy * 1.2, 0)), base + Vector((dx, dy, h)), 0.3)
+        beam(towers, base + Vector((0, 0, h - 1.6)), base + Vector((0, 0, h - 1.4)), 2.9)
+        beam(towers, base + Vector((0, 0, h)), base + Vector((0, 0, h + 0.3)), 3.4)
+        beam(towers, base + Vector((0, 0, h + 0.3)), base + Vector((0, 0, h + 0.9)), 2.0)
+        for k in range(1, 4):
+            for s in (-1, 1):
+                beam(towers, base + Vector((-1.1, s, h * k / 4)), base + Vector((1.1, s, h * k / 4)), 0.2)
+                beam(towers, base + Vector((s, -1.1, h * k / 4)), base + Vector((s, 1.1, h * k / 4)), 0.2)
+    obj_from_bm("towers", towers, coll, fogged("towers", PILE, SKY_LOW, near=50, far=330, amount=0.8))
+    silhouette("near_trees", coll, -225, -900, 900, 13, 22, 15, SHORE_BACK, 33, 2.6)
+    silhouette("near_trees_back", coll, -290, -2600, 2600, 28, 38, 24, SHORE_FAR, 41, 2.6)
 
 
-def build_raft(coll):
-    """A log raft drifting downstream, its raftsman leaning on a pole."""
-    along, across = axis()
-    centre = W(VIEW_S + 18, 44, 0.15)
-    flow = across  # the river flows across the bridge
-    logs = bmesh.new()
-    for i in range(7):
-        off = along * (i - 3) * 0.55
-        beam(logs, centre + off - flow * 7, centre + off + flow * 7, 0.5)
-    obj_from_bm("raft", logs, coll, fogged("raft", LOG, near=40, far=400, amount=0.6))
-    parts = {n: bmesh.new() for n in ("kimono", "straw", "skin", "rail")}
-    at = centre + flow * 4 + Vector((0, 0, 0.25))
-    person(dict(parts, straw_dark=parts["straw"], umbrella=parts["straw"]), at, BRIDGE_YAW + math.pi / 2, "hat", 1.05, lean=0.15)
-    beam(parts["rail"], at + Vector((0, 0, 1.9)) - along * 0.2, at - along * 2.2 + Vector((0, 0, -1.8)), 0.06)
-    for name, col in (("kimono", KIMONO), ("straw", STRAW), ("skin", SKIN), ("rail", RAIL)):
-        obj_from_bm(f"raftsman_{name}", parts[name], coll, fogged(f"raftsman_{name}", col, near=40, far=400, amount=0.6), smooth=True)
+# ─── Bridge ───────────────────────────────────────────────────────────────────
+
+def build_bridge(coll):
+    s = np.linspace(S0 - 16, S1 + 8, 320)
+    verts = []
+    for si in s:
+        for t in (-DECK_W / 2, DECK_W / 2):
+            verts.append(tuple(on_bridge(si, t)))
+    deck = P.mesh_from_arrays("deck", np.array(verts), P.grid_faces(len(s), 2), coll)
+    C.assign(deck, fogged("deck", DECK, SKY_LOW, near=110, far=420, amount=0.6))
+    deck["line_group"] = "deck"
+
+    bm = bmesh.new()
+    for t in (-DECK_W / 2, DECK_W / 2):
+        prev = None
+        for si in np.arange(S0 - 14, S1 + 6, 1.5):
+            p = on_bridge(si, t, -0.2)
+            if prev:
+                beam(bm, prev, p, 0.2, 0.4)
+            prev = p
+    obj_from_bm("fascia", bm, coll, fogged("fascia", DECK_SIDE, SKY_LOW, near=110, far=420, amount=0.6), "deck")
+
+    # the timber under it: bents of piles, bound near the water, with caps, ties and braces
+    piles, dark = bmesh.new(), bmesh.new()
+    for si in np.arange(S0 + 5, S1 - 3, 6.2):
+        top = deck_z(si) - 0.75
+        feet = (-3.3, -1.15, 1.15, 3.3)
+        for t in feet:
+            lean = t * 0.1
+            a, b = on_bridge(si, t + lean), on_bridge(si, t * 0.86)
+            a.z, b.z = -2.0, top
+            m = beam(piles, a, b, 0.5)
+            for z in (0.7, 1.15):  # the iron bands
+                q = a.lerp(b, (z + 2) / (top + 2))
+                beam(dark, q - Vector((0, 0, 0.1)), q + Vector((0, 0, 0.1)), 0.6)
+        for z, w in ((top, 0.5), (top * 0.52 + 0.4, 0.34)):
+            a, b = on_bridge(si, -3.7), on_bridge(si, 3.7)
+            a.z = b.z = z
+            beam(piles, a, b, w)
+        for sg in (-1, 1):
+            a, b = on_bridge(si, -2.9 * sg), on_bridge(si, 2.9 * sg)
+            a.z, b.z = top - 0.5, top * 0.52 + 0.6
+            beam(piles, a, b, 0.24)
+        if si + 6.2 < S1 - 3:  # braces and ties from bent to bent, on both faces
+            for t in (-2.9, 2.9):
+                a, b = on_bridge(si, t), on_bridge(si + 6.2, t)
+                a.z, b.z = top - 0.4, top * 0.5
+                beam(piles, a, b, 0.22)
+                c, d = on_bridge(si, t), on_bridge(si + 6.2, t)
+                c.z, d.z = top * 0.5, deck_z(si + 6.2) - 1.15
+                beam(piles, c, d, 0.22)
+                e, g = on_bridge(si, t), on_bridge(si + 6.2, t)
+                e.z, g.z = top * 0.5 + 0.1, deck_z(si + 6.2) * 0.5 - 0.3
+                beam(piles, e, g, 0.26)
+    for t in (-2.9, -1, 1, 2.9):
+        prev = None
+        for si in np.arange(S0, S1, 3.1):
+            p = on_bridge(si, t, -0.55)
+            if prev:
+                beam(piles, prev, p, 0.36, 0.42)
+            prev = p
+    fog = dict(fog_hex=SKY_LOW, near=90, far=420, amount=0.7)
+    obj_from_bm("piles", piles, coll, fogged("piles", PILE, **fog))
+    obj_from_bm("bands", dark, coll, fogged("bands", PILE_DARK, **fog))
+
+
+# ─── Where we stand ───────────────────────────────────────────────────────────
+
+def build_platform(coll):
+    """The top of a fire watch: a few boards, posts at the back and sides, open towards the river."""
+    z = EYE - 1.62
+    boards, frame = bmesh.new(), bmesh.new()
+    for i in range(8):
+        x = -1.22 + i * 0.35
+        beam(boards, Vector((x, -1.35, z)), Vector((x, 0.62, z)), 0.335, 0.07)
+    for x in (-1.45, 1.45):
+        for y in (-1.4, 0.5):
+            beam(frame, Vector((x, y, 2.6)), Vector((x, y, z + (0.95 if y < 0 else 0.62))), 0.16)
+        beam(frame, Vector((x, -1.4, z + 0.86)), Vector((x, 0.5, z + 0.56)), 0.1, 0.12)
+        beam(frame, Vector((x, -1.5, z - 0.12)), Vector((x, 0.72, z - 0.12)), 0.16, 0.2)
+    for h in (0.86, 0.45):
+        beam(frame, Vector((-1.45, -1.4, z + h)), Vector((1.45, -1.4, z + h)), 0.1, 0.12)
+    for k in range(1, 5):
+        zz = 2.6 + (z - 2.6) * k / 5
+        for a, b in (((-1.45, -1.4), (1.45, -1.4)), ((-1.45, 0.5), (1.45, 0.5)), ((-1.45, -1.4), (-1.45, 0.5)), ((1.45, -1.4), (1.45, 0.5))):
+            beam(frame, Vector((*a, zz)), Vector((*b, zz)), 0.11)
+    for obj in (obj_from_bm("boards", boards, coll, P.flat("boards", TIMBER)), obj_from_bm("frame", frame, coll, P.flat("frame", TIMBER_DARK))):
+        C.set_mask(obj, (0, 0, 1))
 
 
 # ─── Build ────────────────────────────────────────────────────────────────────
@@ -410,20 +450,15 @@ def build_raft(coll):
 def build(preview=True):
     scene = C.clear_scene()
     P.setup_render(scene, samples=24 if preview else 64)
-    P.sky_world(scene, SKY)
-    c_bridge = C.collection("Bridge")
-    c_river = C.collection("River")
-    c_banks = C.collection("Banks")
-    c_people = C.collection("People")
-    build_river(c_river)
-    build_bridge(c_bridge)
-    build_banks(c_banks)
-    build_people(c_people)
-    build_raft(c_river)
-    eye = deck_z(VIEW_S) + 1.55
-    C.pano_camera(eye)
+    build_sky(scene)
+    build_river(C.collection("River"))
+    banks = C.collection("Banks")
+    build_far_bank(banks)
+    build_near_bank(banks)
+    build_bridge(C.collection("Bridge"))
+    build_platform(C.collection("Platform"))
+    C.pano_camera(EYE)
     C.set_resolution(1024 if preview else 8192)
-    print(f"eye height above the river: {eye:.2f} m")
     return scene
 
 

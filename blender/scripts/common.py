@@ -331,8 +331,12 @@ def render_pass(path, kind, samples=16, depth="8", scene=None):
             if group not in groups:
                 groups[group] = (rng.random(), rng.random(), rng.random())
             obj["line_id"] = groups[group]
-    hidden = []
+    hidden, shown = [], []
     for obj in scene.objects:
+        # plain shapes that stand in for painted ones, for the passes alone
+        if obj.get("only_passes") and obj.hide_render:
+            obj.hide_render = False
+            shown.append(obj)
         if (obj.get("volume_only") or obj.get(f"skip_{kind}")) and not obj.hide_render:
             obj.hide_render = True
             hidden.append(obj)
@@ -363,6 +367,8 @@ def render_pass(path, kind, samples=16, depth="8", scene=None):
         scene.cycles.filter_width = saved["filter"]
         for obj in hidden:
             obj.hide_render = False
+        for obj in shown:
+            obj.hide_render = True
     return path
 
 

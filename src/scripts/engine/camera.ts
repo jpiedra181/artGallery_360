@@ -54,6 +54,8 @@ export class ViewController implements ViewState {
 	yaw = 0;
 	pitch = 0;
 	zoom = 1;
+	/** 0 = straight perspective, 1 = stereographic: raised where what stands at the sides of a wide view should not be stretched. */
+	soften = 0;
 	/** When true, user input is ignored (scripted camera moves). */
 	locked = false;
 	onInteract: (() => void) | null = null;
@@ -96,7 +98,7 @@ export class ViewController implements ViewState {
 
 	projection(aspect: number): Projection {
 		const fovV = clamp(ViewController.baseFov(aspect) * this.zoom, 18 * DEG, 125 * DEG);
-		return { fovV, stereo: stereoFor(fovV), aspect };
+		return { fovV, stereo: Math.max(stereoFor(fovV), this.soften), aspect };
 	}
 
 	/** A scripted view kept within the same limits as drag, pinch and wheel. */

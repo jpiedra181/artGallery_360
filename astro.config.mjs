@@ -1,9 +1,10 @@
 // @ts-check
 import { defineConfig, fontProviders } from "astro/config";
 
-// Set SITE_URL when deploying so canonical and Open Graph URLs are absolute,
+// Canonical and Open Graph URLs must be absolute: without a site, shared links
+// get no preview image. Set SITE_URL to build for another address,
 // e.g. SITE_URL=https://inside-the-frame.example.com npm run build
-const site = process.env.SITE_URL || undefined;
+const site = process.env.SITE_URL || "https://artgallery360.art";
 
 // https://astro.build/config
 export default defineConfig({
@@ -15,23 +16,26 @@ export default defineConfig({
 	prefetch: false,
 	devToolbar: { enabled: false },
 	fonts: [
+		// The voice of the exhibition (its name, the prologue, the titles of the rooms): the types
+		// Joaquín Ibarra printed with in Madrid around 1780, in the lifetime of all four painters.
 		{
 			provider: fontProviders.fontsource(),
-			name: "Instrument Serif",
+			name: "Ibarra Real Nova",
 			cssVariable: "--font-display",
-			weights: [400],
-			styles: ["normal", "italic"],
+			weights: ["400 700"],
+			styles: ["normal"],
 			subsets: ["latin", "latin-ext"],
 			fallbacks: ["Georgia", "serif"],
 		},
+		// Everything a museum would print on a label: captions, facts, controls. Titles of works in italic.
 		{
 			provider: fontProviders.fontsource(),
-			name: "Instrument Sans",
+			name: "Libre Franklin",
 			cssVariable: "--font-text",
-			weights: ["400 600"],
-			styles: ["normal"],
+			weights: ["400 700"],
+			styles: ["normal", "italic"],
 			subsets: ["latin", "latin-ext"],
-			fallbacks: ["system-ui", "sans-serif"],
+			fallbacks: ["Arial", "sans-serif"],
 		},
 	],
 	vite: {

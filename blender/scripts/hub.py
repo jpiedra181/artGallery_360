@@ -1,8 +1,11 @@
-"""Hub: a dark, flooded gallery with the four paintings, one per wall.
+"""Hub: a dark, flooded gallery with the four paintings side by side.
 
-The viewer stands on a small timber dais in the middle of the room. The floor
-is covered by a sheet of still water that mirrors the lit canvases; the web
-viewer animates ripples on it using the mask pass (R channel).
+The room is a many-sided hall. The four walls ahead carry one painting each,
+close enough together to be seen at once; the rest are bare, and behind the
+viewer is the doorway one came in by, with a plank walk from it to the small
+timber dais in the middle. The floor is covered by a sheet of still water
+that mirrors the lit canvases; the web viewer animates ripples on it using the
+mask pass (R channel), and stains it with the pigments of the rooms visited.
 
 Mask pass
   R  water surface
@@ -18,26 +21,31 @@ from mathutils import Vector
 
 import common as C
 
-ROOM = 4.2          # distance from the viewer to each wall (m)
-CEILING = 4.9
+ROOM = 5.7          # distance from the viewer to each wall (m)
+CEILING = 5.3
 WATER_Z = 0.0
 FLOOR_Z = -0.07
 DAIS_TOP = 0.06
 EYE = DAIS_TOP + 1.6
-HANG = 1.78         # height of the painting centres
+HANG = 2.0         # height of the painting centres
 
 # id, texture, yaw (deg), image height (m), kind
 PAINTINGS = [
-    ("wave", "wave.jpg", 0, 1.72, "print"),
-    ("rain", "rain.jpg", 90, 2.05, "print"),
-    ("stillness", "stillness.jpg", 180, 1.95, "oil"),
-    ("moonlight", "moonlight.jpg", 270, 1.85, "oil"),
+    ("wave", "wave.jpg", -42.5, 1.6, "print"),
+    ("rain", "rain.jpg", -12.0, 1.94, "print"),
+    ("stillness", "stillness.jpg", 15.0, 1.9, "oil"),
+    ("moonlight", "moonlight.jpg", 44.5, 1.74, "oil"),
 ]
+
+# the walls: the four with paintings, and bare ones closing the hall behind
+WALLS = [-42.5, -12.0, 15.0, 44.5, 84, 125, 180, 235, 274]
+DOOR = 180
+DOOR_W, DOOR_H, PASSAGE = 1.9, 3.1, 3.2
 
 WALL_TINT = (0.13, 0.17, 0.19)
 REFLECT_MIN = 0.42  # mirror strength looking straight down (physical water ≈ 0.02)
 COVE_COLOR = (0.70, 0.80, 1.0)
-WASHER_POWER = 38
+WASHER_POWER = 4.6   # per metre of wall
 LIGHT_COLOR = (1.0, 0.86, 0.72)
 
 
@@ -189,12 +197,34 @@ def build(preview=True):
     floor_mat = C.pbr_material("floor", "square_floor", scale=1 / 2.0, tint=(0.12, 0.125, 0.13), roughness_mul=0.8, bump=0.4, mapping="OBJECT")
     dais_mat = C.pbr_material("dais", "oak_wood_planks", scale=1 / 1.2, tint=(0.32, 0.27, 0.23), roughness_mul=0.9, bump=0.5, mapping="OBJECT")
 
-    span = ROOM * 2
+    span = ROOM * 3.4
     height = CEILING - FLOOR_Z
-    for yaw in (0, 90, 180, 270):
-        w = quad(f"wall_{yaw}", span, height, room, uv=False)
-        place_on_wall(w, yaw, 0.0, FLOOR_Z + height / 2)
-        C.assign(w, wall_mat)
+    # each wall runs between the corners where its plane meets its neighbours'
+    faces = []
+    for i, yaw in enumerate(WALLS):
+        before, after = WALLS[i - 1] - (360 if i == 0 else 0), WALLS[(i + 1) % len(WALLS)] + (360 if i == len(WALLS) - 1 else 0)
+        left = -ROOM * math.tan(math.radians((yaw - before) / 2))
+        right = ROOM * math.tan(math.radians((after - yaw) / 2))
+        faces.append((yaw, left, right))
+        panels = [(left, right, FLOOR_Z, CEILING)]
+        if yaw == DOOR:
+            panels = [(left, -DOOR_W / 2, FLOOR_Z, CEILING), (DOOR_W / 2, right, FLOOR_Z, CEILING), (-DOOR_W / 2, DOOR_W / 2, DOOR_H, CEILING)]
+        for k, (x0, x1, z0, z1) in enumerate(panels):
+            w = quad(f"wall_{yaw}_{k}", x1 - x0, z1 - z0, room, uv=False)
+            place_on_wall(w, yaw, 0.0, (z0 + z1) / 2)
+            a = math.radians(yaw)
+            w.location += Vector((math.cos(a), -math.sin(a), 0)) * (x0 + x1) / 2
+            C.assign(w, wall_mat)
+    # the passage behind the doorway: its sides, its lintel, and daylight at the far end
+    for sx in (-1, 1):
+        side = box(f"jamb_{sx}", (0.2, PASSAGE, DOOR_H - FLOOR_Z), room, (sx * (DOOR_W / 2 + 0.1), -ROOM - PASSAGE / 2, (DOOR_H + FLOOR_Z) / 2))
+        C.assign(side, wall_mat)
+    lintel = box("lintel", (DOOR_W + 0.4, PASSAGE, 0.2), room, (0, -ROOM - PASSAGE / 2, DOOR_H + 0.1))
+    C.assign(lintel, wall_mat)
+    glow = quad("daylight", DOOR_W + 0.2, DOOR_H + 0.5, room, uv=False)
+    glow.location = (0, -ROOM - PASSAGE + 0.02, (DOOR_H + 0.5) / 2 - 0.1)
+    glow.rotation_euler = (0, 0, math.pi)
+    C.assign(glow, C.emission_material("daylight", (0.5, 0.64, 0.82), 0.22))
 
     bpy.ops.mesh.primitive_plane_add(size=span, location=(0, 0, FLOOR_Z))
     floor = bpy.context.active_object
@@ -215,6 +245,14 @@ def build(preview=True):
 
     dais = box("dais", (1.4, 1.4, DAIS_TOP - FLOOR_Z), room, (0, 0, (DAIS_TOP + FLOOR_Z) / 2))
     C.assign(dais, dais_mat)
+    # the walk from the door
+    for i in range(13):
+        y = -0.83 - 0.46 * i
+        if y < -ROOM - 1.2:
+            break
+        plank = box(f"plank_{i}", (0.78, 0.43, 0.07), room, (0.012 * math.sin(i * 2.1), y, DAIS_TOP - 0.035))
+        plank.rotation_euler = (0, 0, 0.012 * math.sin(i * 1.7))
+        C.assign(plank, dais_mat)
 
     for obj in (floor, water, ceiling):
         for c in obj.users_collection:
@@ -277,10 +315,10 @@ def build(preview=True):
 
         # Ceiling spot aimed at the canvas centre
         d = yaw_dir(yaw)
-        spot_pos = d * (ROOM - 1.9) + Vector((0, 0, CEILING - 0.35))
+        spot_pos = d * (ROOM - 2.1) + Vector((0, 0, CEILING - 0.35))
         target = d * (ROOM - 0.08) + Vector((0, 0, HANG))
         ld = bpy.data.lights.new(f"spot_{pid}", "SPOT")
-        ld.energy = 480
+        ld.energy = 640
         ld.color = LIGHT_COLOR
         dist = (target - spot_pos).length
         half = max(w, outer_h) / 2 + 0.35
@@ -317,17 +355,19 @@ def build(preview=True):
     # Wall washers: hidden linear lights along the top of each wall graze the
     # plaster with a cool wash that fades towards the water, so the room reads
     # as a space without competing with the paintings.
-    for yaw in (0, 90, 180, 270):
+    for yaw, left, right in faces:
         wd = bpy.data.lights.new(f"washer_{yaw}", "AREA")
         wd.shape = "RECTANGLE"
-        wd.size = span - 0.4
+        wd.size = right - left - 0.3
         wd.size_y = 0.08
-        wd.energy = WASHER_POWER
+        # the bare walls stay back
+        wd.energy = WASHER_POWER * (right - left) * (1.0 if abs(yaw) < 60 else 0.85)
         wd.color = COVE_COLOR
         wd.spread = math.radians(70)
         wo = bpy.data.objects.new(f"washer_{yaw}", wd)
         d = yaw_dir(yaw)
-        wo.location = d * (ROOM - 0.35) + Vector((0, 0, CEILING - 0.04))
+        a = math.radians(yaw)
+        wo.location = d * (ROOM - 0.35) + Vector((math.cos(a), -math.sin(a), 0)) * (left + right) / 2 + Vector((0, 0, CEILING - 0.04))
         # point down and slightly towards the wall
         aim = d * 0.45 + Vector((0, 0, -1))
         # local Y stays in the vertical plane, so the long X side runs along the wall
@@ -340,7 +380,7 @@ def build(preview=True):
     fill = bpy.data.lights.new("fill", "AREA")
     fill.shape = "SQUARE"
     fill.size = 3.0
-    fill.energy = 35
+    fill.energy = 45
     fill.color = (0.62, 0.72, 0.9)
     fo = bpy.data.objects.new("fill", fill)
     fo.location = (0, 0, CEILING - 0.05)

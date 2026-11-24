@@ -1,12 +1,13 @@
 """Room I — Wave. Inside Hokusai's "Under the Wave off Kanagawa".
 
-The viewer rides low in a fishing boat in the trough between swells. Ahead,
-Mount Fuji sits small on the horizon; on the left the great wave rises and
-its lip curls overhead, breaking into claw-like foam. Flat woodblock colours
-(emission only); outlines and paper are added in post (scripts/looks.py).
+The plate the wave is printed on: sea, sky, Mount Fuji small on the horizon
+and the boat the viewer rides in. The great wave itself, the swells on either
+side and the other two boats are drawn live over it, because they move
+(src/scripts/worlds/great-wave.ts). Flat woodblock colours (emission only);
+outlines and paper are added in post (scripts/looks.py).
 
 Mask pass
-  R  sea surface      G  sky
+  R  sea surface      G  sky      B  our boat, in front of the drawn wave
 """
 
 import math
@@ -50,9 +51,9 @@ WAVES = [
     (38.0, 0.8, 24, 0.7, 2.3),
     (21.0, 0.35, -40, 0.8, 0.7),
     (11.0, 0.22, 55, 0.8, 4.1),
-    (7.3, 0.14, -70, 0.85, 1.9),
-    (4.6, 0.08, 20, 0.9, 5.2),
-    (3.1, 0.045, -35, 0.9, 0.4),
+    (7.3, 0.22, -70, 0.85, 1.9),
+    (4.6, 0.14, 20, 0.9, 5.2),
+    (3.1, 0.08, -35, 0.9, 0.4),
 ]
 
 
@@ -190,244 +191,6 @@ def sea_material():
     return mat
 
 
-# ─── The great wave ───────────────────────────────────────────────────────────
-
-# Cross-section of a plunging breaker (u: towards the viewer, v: up), in units
-# of the wave height, from the trough behind it, over the crest, out along the
-# lip, curling under and back down the hollow face.
-CURL = [
-    (-1.25, -0.06), (-0.75, 0.16), (-0.42, 0.48), (-0.18, 0.80), (0.02, 0.98),
-    (0.24, 1.06), (0.46, 1.04), (0.66, 0.94), (0.82, 0.78), (0.89, 0.62),
-    (0.83, 0.50), (0.68, 0.47), (0.52, 0.53), (0.36, 0.58), (0.22, 0.52),
-    (0.12, 0.38), (0.10, 0.22), (0.18, 0.08), (0.36, -0.02), (0.56, -0.05),
-]
-# The same number of points along a plain swell, so the two blend smoothly.
-SWELL = [
-    (u, 0.42 * math.exp(-(((u + 0.05) / 0.55) ** 2)) - 0.05)
-    for u in np.linspace(-1.25, 0.95, len(CURL))
-]
-PROFILE_N = 90
-
-
-def _profile_marks():
-    """Indices of the crest top and the lip tip on the resampled curl."""
-    c = P.catmull_rom(CURL, PROFILE_N)
-    upper = np.where(c[:, 1] > 0.45)[0]
-    tip = int(upper[np.argmax(c[upper, 0])])
-    top = int(np.argmax(c[:, 1]))
-    return top, tip
-
-
-CREST_I, TIP_I = _profile_marks()
-# stretch of the profile covered in foam: a fringe along the leading edge of the lip
-LIP_T = ((TIP_I - 4) / (PROFILE_N - 1), (TIP_I + 4) / (PROFILE_N - 1))
-
-
-def finger_field(n_s, length, spacing, seed):
-    """Per-slice strength of the foam fingers along the crest (0..1), and a
-    faster pattern that splits each finger tip into three talons."""
-    r = np.random.default_rng(seed)
-    edges = [0.0]
-    while edges[-1] < length + spacing:
-        edges.append(edges[-1] + spacing * r.uniform(0.7, 1.3))
-    edges = np.array(edges)
-    x = np.linspace(0, length, n_s)
-    idx = np.searchsorted(edges, x, side="right") - 1
-    phase = (x - edges[idx]) / (edges[idx + 1] - edges[idx])
-    width = 0.7
-    f = np.clip((phase - (1 - width) / 2) / width, 0, 1)
-    finger = np.sin(np.pi * f) ** 1.1
-    strength = r.uniform(0.55, 1.0, len(edges))[idx]
-    talon = np.abs(np.sin(np.pi * f * 3)) ** 1.5
-    return finger * strength, talon
-
-
-def deform_lip(prof, e, talon):
-    """Pull the lip of one slice out into a finger that hooks downwards.
-    e: finger strength for this slice (0 keeps the plain curl)."""
-    if e <= 1e-3:
-        return prof
-    out = prof.copy()
-    pivot = prof[TIP_I - 9]
-    j = np.arange(len(prof))
-    w = P.smoothstep(TIP_I - 9, TIP_I - 1, j) * (1 - P.smoothstep(TIP_I + 5, TIP_I + 15, j))
-    reach = (0.36 * e + 0.22 * e * talon) * w
-    ang = -0.75 * e * w  # clockwise: the finger curls down and back
-    d = prof - pivot
-    c, s_ = np.cos(ang), np.sin(ang)
-    rot = np.stack([d[:, 0] * c - d[:, 1] * s_, d[:, 0] * s_ + d[:, 1] * c], -1)
-    out = pivot + rot * (1 + reach)[:, None]
-    return out
-
-
-def wave_sheet(name, start, end, base_z, peak_s, height, min_height, width, coll, n_s=180, tail=1.0, max_curl=1.0,
-               finger_spacing=0.0, seed=1):
-    """Sweep the breaker profile along a straight crest from `start` to `end`
-    (x, y). The wave travels to the right of that line, so a ridge running
-    away from the viewer on the left shows its curl in profile, as in the print.
-    """
-    curl = P.catmull_rom(CURL, PROFILE_N)
-    swell = P.catmull_rom(SWELL, PROFILE_N)
-    s = np.linspace(0, 1, n_s)
-    a, b = np.array(start, float), np.array(end, float)
-    along = (b - a) / np.linalg.norm(b - a)
-    travel = np.array([along[1], -along[0]])  # right-hand side of the crest
-    side_w = np.where(s < peak_s, width, width * tail)
-    env = np.exp(-(((s - peak_s) / side_w) ** 2))
-    H = min_height + (height - min_height) * env
-    k = P.smoothstep(0.3, 0.92, env) * max_curl  # how far each slice has curled over
-    length = float(np.linalg.norm(b - a))
-    if finger_spacing > 0:
-        finger, talon = finger_field(n_s, length, finger_spacing, seed)
-    else:
-        finger, talon = np.zeros(n_s), np.zeros(n_s)
-    verts, uvs, lip = [], [], []
-    t = np.linspace(0, 1, PROFILE_N)
-    j = np.arange(PROFILE_N)
-    fringe = P.smoothstep(TIP_I - 2, TIP_I, j) * (1 - P.smoothstep(TIP_I + 2, TIP_I + 4, j))
-    finger_band = P.smoothstep(TIP_I - 5, TIP_I - 1, j) * (1 - P.smoothstep(TIP_I + 4, TIP_I + 9, j))
-    for i in range(n_s):
-        e = finger[i] * P.smoothstep(0.45, 0.9, k[i])
-        prof = deform_lip(swell + (curl - swell) * k[i], e, talon[i])
-        crest = a + (b - a) * s[i]
-        u = prof[:, 0] * H[i] * 1.15
-        v = prof[:, 1] * H[i]
-        x = crest[0] + travel[0] * u
-        y = crest[1] + travel[1] * u
-        z = base_z + v
-        verts.append(np.stack([x, y, z], -1))
-        uvs.append(np.stack([np.full(PROFILE_N, s[i]), t], -1))
-        lip.append(np.clip(k[i] * fringe * 0.8 + e * 1.2 * finger_band, 0, 1))
-    verts = np.concatenate(verts)
-    faces = P.grid_faces(n_s, PROFILE_N)
-    obj = P.mesh_from_arrays(name, verts, faces, coll)
-    P.add_uv(obj, np.concatenate(uvs))
-    P.add_point_attribute(obj, "lip", np.concatenate(lip))
-    P.add_point_attribute(obj, "curl", np.repeat(k, PROFILE_N))
-    for p in obj.data.polygons:
-        p.use_smooth = True
-    mod = obj.modifiers.new("solid", "SOLIDIFY")
-    mod.thickness = 0.12
-    C.assign(obj, wave_material())
-    C.set_mask(obj, (1, 0, 0))
-    obj["line_group"] = "water"
-    frame = {"a": a, "b": b, "travel": travel}
-    return obj, (s, H, k, curl, swell, base_z, frame)
-
-
-def _slice_point(params, i, j, offset=0.0):
-    """World position of profile point j on slice i (offset along the crest)."""
-    s, H, k, curl, swell, base_z, f = params
-    prof = swell + (curl - swell) * k[i]
-    u, v = prof[j] * np.array([H[i] * 1.15, H[i]])
-    along = (f["b"] - f["a"]) / np.linalg.norm(f["b"] - f["a"])
-    c = f["a"] + (f["b"] - f["a"]) * s[i] + along * offset
-    return Vector((c[0] + f["travel"][0] * u, c[1] + f["travel"][1] * u, base_z + v))
-
-
-def wave_material():
-    """Prussian body streaked with light lines that run up the face; white
-    foam with blue flecks on the crest and lip."""
-    if "wave" in bpy.data.materials:
-        return bpy.data.materials["wave"]
-    mat, nt, out = C.new_material("wave")
-    em = C.node(nt, "ShaderNodeEmission", 900, 0)
-    nt.links.new(em.outputs[0], out.inputs["Surface"])
-    uv = C.node(nt, "ShaderNodeUVMap", -1100, 0)
-    sep = C.node(nt, "ShaderNodeSeparateXYZ", -900, 0)
-    nt.links.new(uv.outputs[0], sep.inputs[0])
-    lip = C.node(nt, "ShaderNodeAttribute", -900, -300)
-    lip.attribute_name = "lip"
-
-    # body: deep → prussian up the profile
-    ramp = C.node(nt, "ShaderNodeValToRGB", -500, 300)
-    cr = ramp.color_ramp
-    cr.interpolation = "LINEAR"
-    cr.elements[0].position = 0.0
-    cr.elements[0].color = (*P.hex_to_linear(PRUSSIAN), 1)
-    cr.elements[1].position = 0.45
-    cr.elements[1].color = (*P.hex_to_linear(DEEP), 1)
-    e = cr.elements.new(0.75)
-    e.color = (*P.hex_to_linear(DEEP), 1)
-    e = cr.elements.new(1.0)
-    e.color = (*P.hex_to_linear(PRUSSIAN), 1)
-    nt.links.new(sep.outputs["Y"], ramp.inputs["Fac"])
-
-    # streaks across the sweep (constant s): light blue lines running up the wave
-    noise = C.node(nt, "ShaderNodeTexNoise", -900, 200)
-    noise.inputs["Scale"].default_value = 3.0
-    noise.inputs["Detail"].default_value = 2.0
-    nt.links.new(uv.outputs[0], noise.inputs["Vector"])
-    wobble = C.node(nt, "ShaderNodeMath", -700, 200, operation="MULTIPLY_ADD")
-    wobble.inputs[1].default_value = 0.02
-    nt.links.new(noise.outputs["Fac"], wobble.inputs[0])
-    nt.links.new(sep.outputs["X"], wobble.inputs[2])
-    freq = C.node(nt, "ShaderNodeMath", -550, 200, operation="MULTIPLY")
-    freq.inputs[1].default_value = 75.0
-    nt.links.new(wobble.outputs[0], freq.inputs[0])
-    fr = C.node(nt, "ShaderNodeMath", -400, 200, operation="FRACT")
-    nt.links.new(freq.outputs[0], fr.inputs[0])
-    streak = C.node(nt, "ShaderNodeMath", -250, 200, operation="LESS_THAN")
-    streak.inputs[1].default_value = 0.11
-    nt.links.new(fr.outputs[0], streak.inputs[0])
-    col = C.mix_color(nt, ramp.outputs["Color"], P.hex_to_linear(MID), streak.outputs[0], x=0, y=300)
-
-    # foam on the lip with blue flecks (Hokusai's "snow" of spray)
-    vor = C.node(nt, "ShaderNodeTexVoronoi", -700, -500)
-    vor.inputs["Scale"].default_value = 70.0
-    nt.links.new(uv.outputs[0], vor.inputs["Vector"])
-    fleck = C.node(nt, "ShaderNodeMath", -450, -500, operation="LESS_THAN")
-    fleck.inputs[1].default_value = 0.17
-    nt.links.new(vor.outputs["Distance"], fleck.inputs[0])
-    fnoise = C.node(nt, "ShaderNodeTexNoise", -700, -300)
-    fnoise.inputs["Scale"].default_value = 18.0
-    fnoise.inputs["Detail"].default_value = 3.0
-    nt.links.new(uv.outputs[0], fnoise.inputs["Vector"])
-    fsum = C.node(nt, "ShaderNodeMath", -450, -300, operation="MULTIPLY_ADD")
-    fsum.inputs[1].default_value = 0.5
-    nt.links.new(fnoise.outputs["Fac"], fsum.inputs[0])
-    nt.links.new(lip.outputs["Fac"], fsum.inputs[2])
-    foam = C.node(nt, "ShaderNodeMath", -250, -300, operation="GREATER_THAN")
-    foam.inputs[1].default_value = 0.78
-    nt.links.new(fsum.outputs[0], foam.inputs[0])
-    foam_col = C.mix_color(nt, P.hex_to_linear(FOAM), P.hex_to_linear(MID), fleck.outputs[0], x=0, y=-400)
-    fstreak = C.node(nt, "ShaderNodeMath", -250, -650, operation="LESS_THAN")
-    fstreak.inputs[1].default_value = 0.07
-    nt.links.new(fr.outputs[0], fstreak.inputs[0])
-    foam_col = C.mix_color(nt, foam_col, P.hex_to_linear(LIGHT), fstreak.outputs[0], x=150, y=-500)
-    col = C.mix_color(nt, col, foam_col, foam.outputs[0], x=400, y=0)
-    nt.links.new(col, em.inputs["Color"])
-    return mat
-
-
-def spray(name, params, coll, count=500):
-    """Drops of spray thrown off the lip, like the falling "snow" in the print."""
-    s, H, k, curl, swell, base_z, f = params
-    travel = Vector((f["travel"][0], f["travel"][1], 0))
-    bm = bmesh.new()
-    peak = int(np.argmax(H))
-    for _ in range(count):
-        i = int(np.clip(rng.gauss(peak, len(s) * 0.1), 0, len(s) - 1))
-        if k[i] < 0.3:
-            continue
-        j = rng.randint(CREST_I, TIP_I + 4)
-        p = _slice_point(params, i, j, rng.uniform(-1.0, 1.0))
-        p += travel * rng.uniform(0.5, 7.0) + Vector((0, 0, rng.uniform(-6, 1.5)))
-        r = rng.uniform(0.05, 0.16) * (H[i] / 20)
-        bmesh.ops.create_icosphere(bm, subdivisions=1, radius=r, matrix=Matrix.Translation(p))
-    mesh = bpy.data.meshes.new(name)
-    bm.to_mesh(mesh)
-    bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    coll.objects.link(obj)
-    C.assign(obj, P.flat("foam", FOAM))
-    obj["line_group"] = "spray"
-    # plain white drops, no outlines: leave them out of the line passes
-    for kind in ("depth", "normal", "id"):
-        obj[f"skip_{kind}"] = True
-    return obj
-
-
 # ─── Mount Fuji ───────────────────────────────────────────────────────────────
 
 def fuji(coll, yaw_deg=9.0, dist=2300.0, height=380.0, radius=640.0):
@@ -506,13 +269,14 @@ def hull(name, length=13.0, beam=1.55, depth=0.75, coll=None):
     # floorboards: a flat deck inside the hull, so no sea shows through
     floor_z = -depth * 0.32
     left, right = [], []
-    for ring in rings[1:-3]:
-        xs = [v.co.x for v in ring if v.co.z <= floor_z + 0.02]
+    for ring in rings[1:]:
+        # the boards rise with the keel towards the bow
+        z = max(floor_z, min(v.co.z for v in ring) + 0.05)
+        xs = [v.co.x for v in ring if v.co.z <= z + 0.02]
         y = ring[0].co.y
-        if len(xs) < 2:
-            continue
-        left.append(bm.verts.new((min(xs) * 0.98, y, floor_z)))
-        right.append(bm.verts.new((max(xs) * 0.98, y, floor_z)))
+        half = max(0.012, 0.98 * max(abs(x) for x in xs)) if xs else 0.012
+        left.append(bm.verts.new((-half, y, z)))
+        right.append(bm.verts.new((half, y, z)))
     for i in range(len(left) - 1):
         bm.faces.new((left[i], right[i], right[i + 1], left[i + 1]))
     mesh = bpy.data.meshes.new(name)
@@ -526,11 +290,13 @@ def hull(name, length=13.0, beam=1.55, depth=0.75, coll=None):
     em = C.node(nt, "ShaderNodeEmission", 400, 0)
     nt.links.new(em.outputs[0], out.inputs["Surface"])
     geo = C.node(nt, "ShaderNodeNewGeometry", -600, 0)
-    lw = C.node(nt, "ShaderNodeLayerWeight", -600, -200)
-    lw.inputs["Blend"].default_value = 0.35
+    # the sides in shade, by which way they face in the boat: its starboard side is turned from the light
+    side = C.node(nt, "ShaderNodeVectorMath", -450, -150, operation="DOT_PRODUCT")
+    side.inputs[1].default_value = (-1.0, 0.0, 0.0)
+    nt.links.new(geo.outputs["Normal"], side.inputs[0])
     dark = C.node(nt, "ShaderNodeMath", -300, -100, operation="GREATER_THAN")
-    dark.inputs[1].default_value = 0.55
-    nt.links.new(lw.outputs["Facing"], dark.inputs[0])
+    dark.inputs[1].default_value = 0.35
+    nt.links.new(side.outputs["Value"], dark.inputs[0])
     col = C.mix_color(nt, P.hex_to_linear(BOAT), P.hex_to_linear(BOAT_DARK), dark.outputs[0], x=150, y=0)
     # floorboards: thin dark seams running along the boat
     tc = C.node(nt, "ShaderNodeTexCoord", -800, -400)
@@ -558,56 +324,56 @@ def hull(name, length=13.0, beam=1.55, depth=0.75, coll=None):
     return obj
 
 
-def rower(bm, at, facing, scale=1.0):
-    """A crouched oarsman: hunched back, bowed head, oar over the side."""
-    fwd = Vector((math.sin(facing), math.cos(facing), 0))
-    side = Vector((math.cos(facing), -math.sin(facing), 0))
-    turn = Matrix.Rotation(-facing, 4, "Z")
-    # hips and a back bent low over the oar
-    hips = at + Vector((0, 0, 0.2 * scale))
-    m = Matrix.Translation(hips) @ turn @ Matrix.Diagonal((0.24 * scale, 0.22 * scale, 0.18 * scale, 1))
-    bmesh.ops.create_uvsphere(bm, u_segments=14, v_segments=9, radius=1.0, matrix=m)
-    back = hips + fwd * 0.2 * scale + Vector((0, 0, 0.24 * scale))
-    m = Matrix.Translation(back) @ turn @ Matrix.Rotation(math.radians(-48), 4, "X") @ Matrix.Diagonal((0.23 * scale, 0.17 * scale, 0.33 * scale, 1))
-    bmesh.ops.create_uvsphere(bm, u_segments=14, v_segments=9, radius=1.0, matrix=m)
-    head = back + fwd * 0.3 * scale + Vector((0, 0, 0.1 * scale))
-    bmesh.ops.create_uvsphere(bm, u_segments=12, v_segments=8, radius=0.11 * scale, matrix=Matrix.Translation(head))
-    # arms reaching forward to the oar
+def ellipsoid(bm, at, size, turn=None, segments=14, rings=9):
+    m = Matrix.Translation(at) @ (turn or Matrix.Identity(4)) @ Matrix.Diagonal((*size, 1))
+    bmesh.ops.create_uvsphere(bm, u_segments=segments, v_segments=rings, radius=1.0, matrix=m)
+
+
+def rower(body, heads, hair, at, scale=1.0):
+    """An oarsman bent double over his oar, as in the print: a rounded back, a
+    shaven crown and the hair tied on top. Faces +y."""
+    fwd, side, up = Vector((0, 1, 0)), Vector((1, 0, 0)), Vector((0, 0, 1))
+    ellipsoid(body, at + up * 0.17 * scale, (0.25 * scale, 0.24 * scale, 0.18 * scale))
+    back = at + (fwd * 0.2 + up * 0.36) * scale
+    ellipsoid(body, back, (0.25 * scale, 0.19 * scale, 0.34 * scale), Matrix.Rotation(math.radians(-58), 4, "X"))
+    head = back + (fwd * 0.36 + up * 0.04) * scale
+    ellipsoid(heads, head, (0.115 * scale, 0.125 * scale, 0.12 * scale), segments=16, rings=10)
+    ellipsoid(hair, head + (up * 0.035 - fwd * 0.04) * scale, (0.122 * scale, 0.115 * scale, 0.112 * scale), segments=16, rings=10)
+    ellipsoid(hair, head + (up * 0.14 - fwd * 0.05) * scale, (0.03 * scale, 0.06 * scale, 0.03 * scale), segments=10, rings=6)
     for sgn in (-1, 1):
-        a = back + side * sgn * 0.17 * scale + Vector((0, 0, 0.08 * scale))
-        b = a + fwd * 0.42 * scale - Vector((0, 0, 0.22 * scale))
+        a = back + (side * sgn * 0.2 + up * 0.05) * scale
+        b = a + (fwd * 0.4 + side * sgn * 0.06 - up * 0.22) * scale
         d = b - a
-        m = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Diagonal((0.055 * scale, 0.055 * scale, d.length / 2, 1))
-        bmesh.ops.create_uvsphere(bm, u_segments=8, v_segments=6, radius=1.0, matrix=m)
-    return side
+        ellipsoid(body, (a + b) / 2, (0.06 * scale, 0.06 * scale, d.length / 2), d.to_track_quat("Z", "Y").to_matrix().to_4x4(), 8, 6)
 
 
-def boat(name, location, heading, pitch, roll, coll, rowers=6, first_rower=-1.0):
+def boat(name, location, heading, pitch, roll, coll, rows=5, first_row=-1.6):
+    """The boat we are in, with its crew in pairs behind us."""
     obj = hull(name, coll=coll)
     obj.location = location
     obj.rotation_euler = (pitch, roll, -heading)
-    bm = bmesh.new()
-    bm_oars = bmesh.new()
-    for i in range(rowers):
-        y = first_rower + i * 1.5
-        rower(bm, Vector((0.0, y, -0.15)), 0.0)
-        sgn = 1 if i % 2 == 0 else -1
-        a = Vector((sgn * 0.45, y + 0.1, 0.35))
-        b = Vector((sgn * 2.6, y - 0.9, -0.55))
-        mid = (a + b) / 2
-        d = b - a
-        m = Matrix.Translation(mid) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Diagonal((0.035, 0.035, d.length / 2, 1))
-        bmesh.ops.create_cone(bm_oars, cap_ends=True, segments=6, radius1=1, radius2=1, depth=2, matrix=m)
-    for b_, n_, col in ((bm, "crew", CLOTH), (bm_oars, "oars", BOAT_DARK)):
-        mesh = bpy.data.meshes.new(f"{name}_{n_}")
-        b_.to_mesh(mesh)
-        b_.free()
-        o = bpy.data.objects.new(f"{name}_{n_}", mesh)
+    parts = {"crew": (bmesh.new(), CLOTH), "heads": (bmesh.new(), SKIN), "hair": (bmesh.new(), INK), "oars": (bmesh.new(), BOAT_DARK)}
+    for i in range(rows):
+        for sgn in (-1, 1):
+            y = first_row + i * 1.05 + (0.16 if sgn > 0 else 0.0)
+            rower(parts["crew"][0], parts["heads"][0], parts["hair"][0], Vector((sgn * 0.36, y, -0.16)), 0.98 + 0.06 * rng.random())
+            a = Vector((sgn * 0.5, y + 0.45, 0.32))
+            b = Vector((sgn * 2.9, y - 0.55, -0.62))
+            d = b - a
+            m = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Diagonal((0.04, 0.04, d.length / 2, 1))
+            bmesh.ops.create_cone(parts["oars"][0], cap_ends=True, segments=6, radius1=1, radius2=1, depth=2, matrix=m)
+    for part, (bm, colour) in parts.items():
+        mesh = bpy.data.meshes.new(f"{name}_{part}")
+        bm.to_mesh(mesh)
+        bm.free()
+        o = bpy.data.objects.new(f"{name}_{part}", mesh)
         coll.objects.link(o)
         o.parent = obj
         for p in o.data.polygons:
             p.use_smooth = True
-        C.assign(o, P.flat(n_, col))
+        C.assign(o, P.flat(part, colour))
+        C.set_mask(o, (0, 0, 1))
+    C.set_mask(obj, (0, 0, 1))
     return obj
 
 
@@ -617,7 +383,6 @@ def build(preview=True):
     scene = C.clear_scene()
     P.setup_render(scene, samples=24 if preview else 64)
     sea_c = C.collection("Sea")
-    wave_c = C.collection("Waves")
     boat_c = C.collection("Boats")
     far_c = C.collection("Far")
 
@@ -626,42 +391,18 @@ def build(preview=True):
         [(0.0, HORIZON), (0.07, "#b9b19c"), (0.2, PAPER), (0.75, "#e3d6b8"), (1.0, "#d2c39f")],
         clouds={"color": "#f2ead6", "scale": 2.4, "cover": 0.56, "low": 0.08, "high": 0.4},
     )
-
     build_sea(sea_c)
-
-    trough = sea_height_at(0.0, 0.0)
-    floor = trough + 0.05  # the floorboards of our boat, just above the water
-
-    # the great wave: a ridge on the left running away from us, travelling to
-    # the right, so its curl reads in profile when we look forward-left
-    params = None
-    obj, params = wave_sheet("great_wave", (-31, -45), (-31, 130), base_z=trough - 1.2, peak_s=0.42,
-                             height=28, min_height=3.0, width=0.16, tail=1.5, coll=wave_c,
-                             n_s=1400, finger_spacing=1.5, seed=3)
-    n = 0
-    spray("great_wave_spray", params, wave_c)
-
-    # the small wave in the foreground that echoes the shape of Fuji
-    _, p2 = wave_sheet("small_wave", (-9, 18), (-2, 52), base_z=trough - 0.5, peak_s=0.5,
-                       height=6.0, min_height=1.0, width=0.22, coll=wave_c, n_s=500, finger_spacing=0.45, seed=5)
-
-    # a broad swell behind and to the right, so the trough feels enclosed
-    wave_sheet("rear_swell", (40, -10), (-20, -60), base_z=trough - 1.0, peak_s=0.5,
-               height=8.0, min_height=3.0, width=0.35, coll=wave_c, n_s=90, max_curl=0.0)
-
     fuji(far_c)
 
-    # our boat: we sit at the stern, the crew in front of us
+    trough = sea_height_at(0.0, 0.0)
+    floor = trough + 0.32  # the floorboards of our boat, clear of the chop
     # We sit near the bow; the crew rows behind us. (The hull runs from
     # 3.25 m behind its origin to 9.75 m ahead of it.)
-    boat("our_boat", Vector((0, -8.4, floor + 0.35)), 0.0, 0.0, math.radians(-1.5), boat_c, rowers=5, first_rower=-1.6)
-    # two more boats: one climbing into the hollow of the great wave, one ahead
-    boat("boat_left", Vector((-18, 26, sea_height_at(-18, 26) + 0.2)), math.radians(-14), math.radians(18), math.radians(-14), boat_c, rowers=7)
-    boat("boat_right", Vector((13, 30, sea_height_at(13, 30) + 0.2)), math.radians(24), math.radians(-5), math.radians(6), boat_c, rowers=7)
+    boat("our_boat", Vector((0, -8.4, floor + 0.35)), 0.0, 0.0, math.radians(-1.5), boat_c, rows=6, first_row=0.4)
 
     C.pano_camera(floor + 0.95)
     C.set_resolution(1024 if preview else 8192)
-    print(f"trough {trough:.2f}, claws {n}")
+    print(f"trough {trough:.2f}")
     return scene
 
 

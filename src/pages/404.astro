@@ -1,0 +1,43 @@
+---
+import Page from "../layouts/Page.astro";
+import { rooms } from "../data/rooms";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+---
+
+<Page title="Page not found" description="There is nothing hanging at this address. The four rooms of the exhibition are open.">
+	<header class="doc-hero">
+		<h1>Nothing hangs here</h1>
+		<p class="doc-lede">
+			This address is an empty wall. The page may have moved, or the link may have a letter out of place. The four rooms are
+			open.
+		</p>
+	</header>
+
+	<section class="chapter" aria-labelledby="rooms">
+		<div class="chapter-head">
+			<h2 id="rooms">The rooms</h2>
+		</div>
+		<div class="chapter-body">
+			<dl class="facts">
+				{
+					rooms.map((room) => (
+						<div>
+							<dt>Room {room.numeral}</dt>
+							<dd>
+								<a href={`${base}${room.slug}/`}>{room.theme}</a>: <cite>{room.title}</cite>, {room.artist}
+							</dd>
+						</div>
+					))
+				}
+			</dl>
+		</div>
+	</section>
+
+	<div class="doc-next">
+		<p>Or start at the door.</p>
+		<div class="doc-next-actions">
+			<a class="btn btn-primary" href={base}>Enter the exhibition</a>
+		</div>
+	</div>
+</Page>

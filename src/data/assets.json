@@ -4,16 +4,16 @@
 			"tiers": {
 				"8k": {
 					"avif": "scenes/hub/pano-8k.avif",
-					"bytes": 359039
+					"bytes": 282670
 				},
 				"4k": {
 					"avif": "scenes/hub/pano-4k.avif",
-					"bytes": 229334,
+					"bytes": 184364,
 					"webp": "scenes/hub/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/hub/pano-2k.avif",
-					"bytes": 70770,
+					"bytes": 54766,
 					"webp": "scenes/hub/pano-2k.webp"
 				}
 			},
@@ -31,23 +31,27 @@
 					"960": "scenes/hub/still-960.webp",
 					"1920": "scenes/hub/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRoQAAABXRUJQVlA4IHgAAADwBACdASogABQAPtFWpEwoJKOiMAgBABoJZwDH5CHhbTrluSzf/IIBU7S26cY9dEAA/u9liTgTLbPI95UkGSe1VCErH0wDWcV1QF/FMtdFHDz5MCh2Lb4bE3t2P/EmcUw4WwcP5NOU91fBIFI05dDPfahB4uGeAAA="
+				"lqip": "data:image/webp;base64,UklGRugAAABXRUJQVlA4INwAAADQBQCdASogABQAPtFYpEuoJSOhsAgBABoJZwDIYazxgAzxUk3Wqnrg456b4F49RYbUuU354W4AAP7srroDCrCX2b7QPm7J8x3/AJqz6Lu+LYiuMfykXytHWDoQ+8w69B9Pxki9gr+Xy98fm4i9hPIHnelcOTJbI0T14VeqbjdF8hq3jLqjc6L44sWOgOzRBCl2Rk20fhdwd3T+vmB95WrNb/g1E4okHfmoeEXq2JmM4OlsWwUGdKYhdR367GK8ixAUIW3j7wkmlyoGA14zzkaadqXVGVC1wmtFAAAA"
+			},
+			"depth": {
+				"url": "scenes/hub/depth.webp",
+				"near": 1.58
 			}
 		},
 		"wave": {
 			"tiers": {
 				"8k": {
 					"avif": "scenes/wave/pano-8k.avif",
-					"bytes": 373833
+					"bytes": 349296
 				},
 				"4k": {
 					"avif": "scenes/wave/pano-4k.avif",
-					"bytes": 327396,
+					"bytes": 312720,
 					"webp": "scenes/wave/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/wave/pano-2k.avif",
-					"bytes": 118318,
+					"bytes": 110968,
 					"webp": "scenes/wave/pano-2k.webp"
 				}
 			},
@@ -65,23 +69,27 @@
 					"960": "scenes/wave/still-960.webp",
 					"1920": "scenes/wave/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRgIBAABXRUJQVlA4IPYAAADQBQCdASogABQAPtFYpE0oJSOiKA1RABoJYgC1CQdgqQy5bf9ZdJ+L7Dxudd+q7s3v4OrUSCD4AP5oxYD1NIbzC055alrOxISqktN1B2xDSAhBvTKJ9jtbwivs1H4MWt8K37nlEesztNsLnOXBAXAPbjYIxdCS6egsKTbEWosOObdPwE1T1yDFu3XjUHLTkAzMcW1pDqGRdQxX1o7HBAF4O3Rmq8IxGkYuiaQslYwfdlGfxj51PgxemiHpekv5Q+GXcC5mqFfODtBZQatsxDv6GjkwU4SAA9ICliKs3HrGdnOnfDFIUtUXko+lmvz5D9RAQFPhwAA="
+				"lqip": "data:image/webp;base64,UklGRhoBAABXRUJQVlA4IA4BAABQBgCdASogABQAPs1Wo0unpKMhsBgMAPAZiWgAnTKAooAcBagmcgv9JHW+l+AeFb2BZ6C9qgZf6t5PkAD+7T9g0VmtgvgBVRf3RXhghM/VHPhr3zS5PVfMgNNDrZawf/MmgHvyYcjrkP7asNptxvo1i7eBKV+LDO3SpPLHVPpAmAAZ2G5VSSkt35KuA9H4D1FraQFZ0DvbiH9EaewoKfkIuRgoDIy33SaObDLrEk52ApBITBUEI2rzSohqrvUWxXZFVMkqJsqHNZxPmC2/ZB8Z/R8da4ATJVVrvKhF/VL40+ynBgo5At0oIEH7Y75k/uDn9O8Geh/Vf6ub+A+dteUBhfq1RvSJZDau0+ggOAA="
+			},
+			"depth": {
+				"url": "scenes/wave/depth.webp",
+				"near": 0.468
 			}
 		},
 		"rain": {
 			"tiers": {
 				"8k": {
 					"avif": "scenes/rain/pano-8k.avif",
-					"bytes": 286893
+					"bytes": 400541
 				},
 				"4k": {
 					"avif": "scenes/rain/pano-4k.avif",
-					"bytes": 256630,
+					"bytes": 344076,
 					"webp": "scenes/rain/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/rain/pano-2k.avif",
-					"bytes": 93238,
+					"bytes": 120732,
 					"webp": "scenes/rain/pano-2k.webp"
 				}
 			},
@@ -99,23 +107,27 @@
 					"960": "scenes/rain/still-960.webp",
 					"1920": "scenes/rain/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRqAAAABXRUJQVlA4IJQAAADwBACdASogABQAPsFOnkunpCKht/qoAPAYCWIAygAh1xcam4NeRyz10RndjOaZByAA/UUbSKgiC8peRH//sUjWCosTOAk8qXpXfJ2A8U07YSdxXj9JOufkmv0Lwwms2JjUbWrrmFwQPhj5Z3/2YEfk7ED3HW70lRWkGiMpbpzJxiRgL/HWGAV6uDGbi5wnSRyjAAAA"
+				"lqip": "data:image/webp;base64,UklGRsIAAABXRUJQVlA4ILYAAACQBQCdASogABQAPsFKn0unpCKht/qoAPAYCWwAnTLqL/4Jo/BejMWe6mK/hlPLflQeojWmoAD+nvXj/jzBtszJtV8sUxHEboECy2W2K+ZgvOm/5Avy5pL6RT16eh9UcKYScao+0ajSIJX+2e93H+k+GJsffnOb7uN22PTPP1Ii75iRkFmB5s29vwRJjmqW1DdTUlwAuhBSiXBv+s9cFlRrptdGbillILqKFFD2fJqoUp2167QAAA=="
+			},
+			"depth": {
+				"url": "scenes/rain/depth.webp",
+				"near": 1.538
 			}
 		},
 		"stillness": {
 			"tiers": {
 				"8k": {
 					"avif": "scenes/stillness/pano-8k.avif",
-					"bytes": 2638169
+					"bytes": 1722000
 				},
 				"4k": {
 					"avif": "scenes/stillness/pano-4k.avif",
-					"bytes": 1136034,
+					"bytes": 930718,
 					"webp": "scenes/stillness/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/stillness/pano-2k.avif",
-					"bytes": 251672,
+					"bytes": 325278,
 					"webp": "scenes/stillness/pano-2k.webp"
 				}
 			},
@@ -133,23 +145,27 @@
 					"960": "scenes/stillness/still-960.webp",
 					"1920": "scenes/stillness/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRg4BAABXRUJQVlA4IAIBAACQBQCdASogABQAPtFUo0uoJKMhsAgBABoJYgCo9YzawEKGuczA0PbhsBp5vI58Q4+87+uy0AD+rCEehZztAn+tJHGQZa7b3bhnWxtfjCcV0VKbEI2yJnlJC5+i/RY72jEwtOiwu7PRxT+Lxv6teepyRNwkYo/svsd5zF1XWc7O0Fyl1Z8DAsaHems86O0y6WdCPEbEK4v9EgN6SSYKeLo27mc6fDfaHy7RKk3YjasA4U8zsixfLqCoWgB86zX8L8NdqVTUsRHzcXgxJvCux07oXOSSD8wTgmDLckdi/W7FjHswYG61F6+dx0US53R0py+N0McvUbVRk2mTKIoczoTzkAA="
+				"lqip": "data:image/webp;base64,UklGRqwAAABXRUJQVlA4IKAAAABwBQCdASogABQAPtFQpEuoJCOhsBgMAQAaCWIAsR7aQS/rxS3f1k06m4XsgiHQ2UFTpvYAAP678FzEIxU6oDbRL5qBhK/Kc9CG7nqA777t3RRiXzezoqSD5lG1PAt8i3SLOrKUJf2QoBOnCWksCJkUwy9Xunr9eEKFj3AoJqBsVQB3WjztkLYB4kxWpKw0/Q/8x+/wPQHOA5ecR/1e4AAA"
+			},
+			"depth": {
+				"url": "scenes/stillness/depth.webp",
+				"near": 1.451
 			}
 		},
 		"moonlight": {
 			"tiers": {
 				"8k": {
 					"avif": "scenes/moonlight/pano-8k.avif",
-					"bytes": 101340
+					"bytes": 1130851
 				},
 				"4k": {
 					"avif": "scenes/moonlight/pano-4k.avif",
-					"bytes": 86794,
+					"bytes": 550328,
 					"webp": "scenes/moonlight/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/moonlight/pano-2k.avif",
-					"bytes": 33700,
+					"bytes": 172542,
 					"webp": "scenes/moonlight/pano-2k.webp"
 				}
 			},
@@ -167,7 +183,11 @@
 					"960": "scenes/moonlight/still-960.webp",
 					"1920": "scenes/moonlight/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRrQAAABXRUJQVlA4IKgAAADwBACdASogABQAPtFYpEuoJSOhsAgBABoJZQC90A7H2aFowVYq0oEnxsfq+eu4rAAA/omfvQY7p3meXpAdt1hC/L1euL7LstLsvjDZQ+tsD7iNA7ub+35piFZCret91kUqH96YqECxFC4mphag8NXwhAa9iKWz2D2szzB0tqYPdLHa/dmqLuinxHQQlxy7enm5ekrCslXvbp2IUQR5t7/1yrsk3AAAAAA="
+				"lqip": "data:image/webp;base64,UklGRroAAABXRUJQVlA4IK4AAABwBQCdASogABQAPtFUokuoJKMhsAgBABoJQBUioOhXOFZKwHmooK6p5uXHSTBH4sW0yitgANypob5PQE06yCnU5U0RIVFnrBQYzq3Xputy/bSo5KUCKMM6sEwV4/Y0QpWz9T9zEnSai6eN5bX6HikKZ+rVVFKt52Fig+zY8/n5eZHR1m9pR+4KXBSEgUP8ZRAwgdBHPwnpfCYANeTA92hBMBKUyv11PG0qp4OhgAA="
+			},
+			"depth": {
+				"url": "scenes/moonlight/depth.webp",
+				"near": 1.341
 			}
 		}
 	},
@@ -218,6 +238,372 @@
 			"webp": {
 				"480": "art/moonlight-480.webp",
 				"960": "art/moonlight-960.webp"
+			}
+		}
+	},
+	"process": {
+		"dive-1": {
+			"width": 720,
+			"height": 450,
+			"avif": {
+				"720": "process/dive-1-720.avif"
+			},
+			"webp": {
+				"720": "process/dive-1-720.webp"
+			}
+		},
+		"dive-2": {
+			"width": 720,
+			"height": 450,
+			"avif": {
+				"720": "process/dive-2-720.avif"
+			},
+			"webp": {
+				"720": "process/dive-2-720.webp"
+			}
+		},
+		"dive-3": {
+			"width": 720,
+			"height": 450,
+			"avif": {
+				"720": "process/dive-3-720.avif"
+			},
+			"webp": {
+				"720": "process/dive-3-720.webp"
+			}
+		},
+		"dive-4": {
+			"width": 720,
+			"height": 450,
+			"avif": {
+				"720": "process/dive-4-720.avif"
+			},
+			"webp": {
+				"720": "process/dive-4-720.webp"
+			}
+		},
+		"moonlight-broad": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-broad-800.avif",
+				"1600": "process/moonlight-broad-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-broad-800.webp",
+				"1600": "process/moonlight-broad-1600.webp"
+			}
+		},
+		"moonlight-depth": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-depth-800.avif",
+				"1600": "process/moonlight-depth-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-depth-800.webp",
+				"1600": "process/moonlight-depth-1600.webp"
+			}
+		},
+		"moonlight-final": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-final-800.avif",
+				"1600": "process/moonlight-final-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-final-800.webp",
+				"1600": "process/moonlight-final-1600.webp"
+			}
+		},
+		"moonlight-fine": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-fine-800.avif",
+				"1600": "process/moonlight-fine-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-fine-800.webp",
+				"1600": "process/moonlight-fine-1600.webp"
+			}
+		},
+		"moonlight-first": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-first-800.avif",
+				"1600": "process/moonlight-first-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-first-800.webp",
+				"1600": "process/moonlight-first-1600.webp"
+			}
+		},
+		"moonlight-mask": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-mask-800.avif",
+				"1600": "process/moonlight-mask-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-mask-800.webp",
+				"1600": "process/moonlight-mask-1600.webp"
+			}
+		},
+		"moonlight-middle": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-middle-800.avif",
+				"1600": "process/moonlight-middle-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-middle-800.webp",
+				"1600": "process/moonlight-middle-1600.webp"
+			}
+		},
+		"moonlight-pano": {
+			"width": 2400,
+			"height": 1200,
+			"avif": {
+				"800": "process/moonlight-pano-800.avif",
+				"1600": "process/moonlight-pano-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-pano-800.webp",
+				"1600": "process/moonlight-pano-1600.webp"
+			}
+		},
+		"moonlight-second": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/moonlight-second-800.avif",
+				"1600": "process/moonlight-second-1600.avif"
+			},
+			"webp": {
+				"800": "process/moonlight-second-800.webp",
+				"1600": "process/moonlight-second-1600.webp"
+			}
+		},
+		"rain-beauty": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-beauty-800.avif",
+				"1600": "process/rain-beauty-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-beauty-800.webp",
+				"1600": "process/rain-beauty-1600.webp"
+			}
+		},
+		"rain-depth": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-depth-800.avif",
+				"1600": "process/rain-depth-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-depth-800.webp",
+				"1600": "process/rain-depth-1600.webp"
+			}
+		},
+		"rain-final": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-final-800.avif",
+				"1600": "process/rain-final-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-final-800.webp",
+				"1600": "process/rain-final-1600.webp"
+			}
+		},
+		"rain-first": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-first-800.avif",
+				"1600": "process/rain-first-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-first-800.webp",
+				"1600": "process/rain-first-1600.webp"
+			}
+		},
+		"rain-id": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-id-800.avif",
+				"1600": "process/rain-id-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-id-800.webp",
+				"1600": "process/rain-id-1600.webp"
+			}
+		},
+		"rain-lines": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-lines-800.avif",
+				"1600": "process/rain-lines-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-lines-800.webp",
+				"1600": "process/rain-lines-1600.webp"
+			}
+		},
+		"rain-normal": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-normal-800.avif",
+				"1600": "process/rain-normal-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-normal-800.webp",
+				"1600": "process/rain-normal-1600.webp"
+			}
+		},
+		"rain-people": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-people-800.avif",
+				"1600": "process/rain-people-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-people-800.webp",
+				"1600": "process/rain-people-1600.webp"
+			}
+		},
+		"rain-print": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/rain-print-800.avif",
+				"1600": "process/rain-print-1600.avif"
+			},
+			"webp": {
+				"800": "process/rain-print-800.webp",
+				"1600": "process/rain-print-1600.webp"
+			}
+		},
+		"stillness-close": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/stillness-close-800.avif",
+				"1600": "process/stillness-close-1600.avif"
+			},
+			"webp": {
+				"800": "process/stillness-close-800.webp",
+				"1600": "process/stillness-close-1600.webp"
+			}
+		},
+		"stillness-final": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/stillness-final-800.avif",
+				"1600": "process/stillness-final-1600.avif"
+			},
+			"webp": {
+				"800": "process/stillness-final-800.webp",
+				"1600": "process/stillness-final-1600.webp"
+			}
+		},
+		"stillness-first": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/stillness-first-800.avif",
+				"1600": "process/stillness-first-1600.avif"
+			},
+			"webp": {
+				"800": "process/stillness-first-800.webp",
+				"1600": "process/stillness-first-1600.webp"
+			}
+		},
+		"wave-breaking": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-breaking-800.avif",
+				"1600": "process/wave-breaking-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-breaking-800.webp",
+				"1600": "process/wave-breaking-1600.webp"
+			}
+		},
+		"wave-falling": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-falling-800.avif",
+				"1600": "process/wave-falling-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-falling-800.webp",
+				"1600": "process/wave-falling-1600.webp"
+			}
+		},
+		"wave-final": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-final-800.avif",
+				"1600": "process/wave-final-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-final-800.webp",
+				"1600": "process/wave-final-1600.webp"
+			}
+		},
+		"wave-first": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-first-800.avif",
+				"1600": "process/wave-first-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-first-800.webp",
+				"1600": "process/wave-first-1600.webp"
+			}
+		},
+		"wave-plate": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-plate-800.avif",
+				"1600": "process/wave-plate-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-plate-800.webp",
+				"1600": "process/wave-plate-1600.webp"
+			}
+		},
+		"wave-rising": {
+			"width": 1600,
+			"height": 1000,
+			"avif": {
+				"800": "process/wave-rising-800.avif",
+				"1600": "process/wave-rising-1600.avif"
+			},
+			"webp": {
+				"800": "process/wave-rising-800.webp",
+				"1600": "process/wave-rising-1600.webp"
 			}
 		}
 	}

@@ -1,0 +1,37 @@
+---
+/** A picture from the making-of set (public/process, listed in assets.json). */
+import assets from "../data/assets.json";
+
+interface Props {
+	name: string;
+	alt: string;
+	sizes?: string;
+	eager?: boolean;
+}
+
+type Entry = { width: number; height: number; avif: Record<string, string>; webp: Record<string, string> };
+const { name, alt, sizes = "(min-width: 72em) 60rem, 94vw", eager = false } = Astro.props;
+const entry = (assets as unknown as { process?: Record<string, Entry> }).process?.[name];
+if (!entry) throw new Error(`No making-of picture named "${name}": run scripts/make_process.py and build-assets.mjs process`);
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const srcset = (set: Record<string, string>) =>
+	Object.entries(set)
+		.map(([w, url]) => `${base}${url} ${w}w`)
+		.join(", ");
+const largest = Object.keys(entry.webp).sort((a, b) => Number(b) - Number(a))[0];
+---
+
+<picture>
+	<source type="image/avif" srcset={srcset(entry.avif)} sizes={sizes} />
+	<img
+		src={`${base}${entry.webp[largest]}`}
+		srcset={srcset(entry.webp)}
+		sizes={sizes}
+		alt={alt}
+		width={entry.width}
+		height={entry.height}
+		loading={eager ? "eager" : "lazy"}
+		decoding="async"
+	/>
+</picture>

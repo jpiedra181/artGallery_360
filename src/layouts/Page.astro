@@ -1,0 +1,66 @@
+---
+/** Reading pages around the exhibition (About, How it was made): ordinary documents, no WebGL. */
+import Base from "./Base.astro";
+import "../styles/pages.css";
+import { site } from "../data/rooms";
+
+interface Props {
+	title: string;
+	description: string;
+	/** Left out on pages that are not in the menu, such as the 404. */
+	current?: "about" | "making-of";
+}
+
+const { title, description, current } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+const pages = [
+	{ id: "making-of", href: `${base}making-of/`, label: "How it was made" },
+	{ id: "about", href: `${base}about/`, label: "About" },
+] as const;
+---
+
+<Base title={`${title} — ${site.name}`} description={description} immersive={false}>
+	<a class="skip-link" href="#content">Skip to the content</a>
+	<div class="doc">
+		<header class="doc-bar">
+			<a class="wordmark" href={base}>
+				<span class="wordmark-name">{site.name}</span>
+				<span class="wordmark-room">{site.volume}</span>
+			</a>
+			<nav aria-label="Site">
+				<ul class="doc-nav" role="list">
+					{
+						pages.map((p) => (
+							<li>
+								<a href={p.href} aria-current={p.id === current ? "page" : undefined}>
+									{p.label}
+								</a>
+							</li>
+						))
+					}
+					<li>
+						<a class="btn btn-primary" href={base}>
+							<span>Enter<span class="doc-nav-more"> the exhibition</span></span>
+						</a>
+					</li>
+				</ul>
+			</nav>
+		</header>
+
+		<main id="content" tabindex="-1">
+			<slot />
+		</main>
+
+		<footer class="doc-foot">
+			<p class="doc-foot-name">{site.name}</p>
+			<p class="doc-foot-vol">{site.volume}</p>
+			<ul class="doc-foot-links" role="list">
+				<li><a href={base}>The exhibition</a></li>
+				{pages.map((p) => <li><a href={p.href}>{p.label}</a></li>)}
+			</ul>
+			<p class="doc-foot-by">
+				Concept, 3D, sound and code by <a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>
+			</p>
+		</footer>
+	</div>
+</Base>

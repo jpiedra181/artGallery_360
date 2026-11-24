@@ -1,0 +1,487 @@
+---
+import Compare from "../components/Compare.astro";
+import Shot from "../components/Shot.astro";
+import Page from "../layouts/Page.astro";
+import assets from "../data/assets.json";
+import { roomBySlug } from "../data/rooms";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+type Art = { width: number; height: number; avif: Record<string, string>; webp: Record<string, string> };
+const wave = (assets as unknown as { art: Record<string, Art> }).art.wave;
+const srcset = (set: Record<string, string>) =>
+	Object.entries(set)
+		.map(([w, url]) => `${base}${url} ${w}w`)
+		.join(", ");
+const great = roomBySlug.wave;
+---
+
+<Page
+	title="How it was made"
+	description="How four paintings became places: worlds written as code in Blender, printed or painted after rendering, and kept alive in the browser by a small WebGL viewer."
+	current="making-of"
+>
+	<header class="doc-hero">
+		<h1>How a painting becomes a place</h1>
+		<p class="doc-lede">
+			Each room starts as a flat image in a museum's open collection and ends as a world you can turn around in. Nothing in
+			between is photographed or downloaded. The worlds are written as code, rendered once, and kept alive in the browser by
+			a small viewer made for them.
+		</p>
+	</header>
+
+	<section class="chapter" aria-labelledby="c1">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">1</span>
+			<h2 id="c1">Decide where to stand</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				A painting has one point of view, and the painter chose it. A world needs a place for the visitor. In the Great Wave
+				that place is the bow of a fishing boat, low in the trough, so that the wave is above you. In Hiroshige's shower it is
+				the platform of a fire watch, because he looks down on his bridge; in Monet's garden, a landing at the edge of the pond; on Turner's river, a rowing boat
+				among the colliers.
+			</p>
+			<p>
+				The view each world opens on is composed to echo its painting. Everything else, to the sides and behind you, is not in
+				the picture and had to be made up in the same hand.
+			</p>
+			<div class="pair">
+				<figure class="is-painting">
+					<picture>
+						<source type="image/avif" srcset={srcset(wave.avif)} sizes="(min-width: 62em) 24rem, 90vw" />
+						<img
+							src={`${base}${wave.webp["960"]}`}
+							srcset={srcset(wave.webp)}
+							sizes="(min-width: 62em) 24rem, 90vw"
+							alt="Woodblock print: a towering blue wave curls over three long boats; Mount Fuji, small and snow-capped, sits in the distance."
+							width={wave.width}
+							height={wave.height}
+							loading="eager"
+							decoding="async"
+						/>
+					</picture>
+					<figcaption>
+						{great.artist}, <cite>{great.title}</cite>, {great.date}. {great.museum}.
+					</figcaption>
+				</figure>
+				<figure>
+					<Shot
+						name="wave-final"
+						alt="The same sea from inside it: the bow of a boat in the foreground, the great wave and its claws of foam overhead, Mount Fuji small on the horizon."
+						sizes="(min-width: 62em) 30rem, 94vw"
+						eager
+					/>
+					<figcaption>The world's opening view, from the bow of one of the boats.</figcaption>
+				</figure>
+			</div>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c2">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">2</span>
+			<h2 id="c2">Write the world</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				Every scene is a Python script that builds its world in Blender from an empty file. Nothing is sculpted by hand and no
+				models are imported. The sea is a sum of waves; the long bridge is one frame of piles, repeated; every ship on the Tyne is the same
+				function called with a different length, heading and set of sails.
+			</p>
+			<p>
+				Working this way is slower at first and faster ever after. A world can be rebuilt from nothing in seconds, and
+				corrected by changing a number.
+			</p>
+			<figure>
+				<Shot
+					name="rain-beauty"
+					alt="The rain world as flat areas of colour: yellow deck, grey piles, turquoise river, blue sky, with no outlines or texture."
+				/>
+				<figcaption>Hiroshige's bridge as it leaves Blender: flat colour, lit by nothing.</figcaption>
+			</figure>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c3">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">3</span>
+			<h2 id="c3">A print is drawn, not lit</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				A woodblock print has no light in it, only blocks of colour and a key line. So the two print worlds are rendered with
+				no lighting at all, and their outlines are drawn afterwards from three pictures no visitor sees: which object each
+				pixel belongs to, which way its surface faces, and how far away it is. Where any of the three changes abruptly, there
+				is an edge, and the edge gets ink.
+			</p>
+			<div class="shots">
+				<figure>
+					<Shot name="rain-id" alt="The bridge in flat arbitrary colours, one per object: deck, piles, river, platform." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Which object</strong>One colour for each thing.</figcaption>
+				</figure>
+				<figure>
+					<Shot name="rain-normal" alt="The bridge in violet, pink and blue that follow the way every surface faces." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Which way it faces</strong>The slope of every surface as a colour.</figcaption>
+				</figure>
+				<figure>
+					<Shot name="rain-depth" alt="The bridge in greys: near parts light, the far end of the bridge nearly black, the sky black." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>How far</strong>Near is light, far is dark.</figcaption>
+				</figure>
+			</div>
+			<figure>
+				<Shot name="rain-lines" alt="Dark ink outlines on paper: the deck of the bridge and the crossed timbers of its piles." />
+				<figcaption>The key block: every outline, found by the computer and drawn before any colour.</figcaption>
+			</figure>
+			<p>
+				Colour goes under the line, then the surface of the print: a little mottling where the pressure of the printer's pad
+				would vary across a flat area, and the fibres of the paper. A print world renders in about ten seconds.
+			</p>
+			<Compare before="rain-beauty" after="rain-final" beforeLabel="Flat colour" afterLabel="Printed" alt="The bridge over the river, before the people are drawn on it.">
+				Drag across the picture, or focus it and use the arrow keys.
+			</Compare>
+
+			<h3>The wave that looked like a shell</h3>
+			<p>
+				The first Great Wave was built like everything else, as a surface: a profile, a curl and a row of fingers. From inside
+				the boat it was a mussel. What makes the wave Hokusai's is not its volume but its marks: the bare back, the hollow
+				streaked with two blues, and foam that breaks again and again into the same small claw.
+			</p>
+			<p>
+				So that wave was thrown away, and the new one is drawn. Its curves are read from the print, and every claw on it is
+				one shape, a hook with a swelling line of ink along its back, laid in rows and turned a little each time. There are
+				ten colours and no texture. The sea, the mountain and the boat you sit in are still rendered; the wave is laid over
+				them like another block.
+			</p>
+			<div class="pair">
+				<figure>
+					<Shot
+						name="wave-first"
+						alt="A smooth blue dome with white facets on its inner side, like a shell, over a dark blue sea."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>First attempt: a surface.</figcaption>
+				</figure>
+				<figure>
+					<Shot
+						name="wave-final"
+						alt="The wave drawn as in the print: white back, deep blue hollow, a lip of white claws reaching over a boat."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>After going back to Hokusai: a drawing.</figcaption>
+				</figure>
+			</div>
+			<Compare before="wave-plate" after="wave-final" beforeLabel="Rendered" afterLabel="With the drawing" alt="The sea from the bow of the boat, without and with the great wave.">
+				Drag across the picture, or focus it and use the arrow keys.
+			</Compare>
+
+			<h3>Looking down, like him</h3>
+			<p>
+				The rain was first seen from the bridge itself, and it looked like a comic: round trees with thick outlines, a brown
+				rail across the view, grey air. Hiroshige's sheet is nothing like that. His eye is high above the river; the sky is
+				Prussian blue with black wiped into it by hand; the far bank has no outline at all; the bridge is yellow.
+			</p>
+			<p>
+				So the place to stand moved up. From the platform the bridge crosses as he crosses it, and the people on it are drawn
+				with the same press as the wave, each caught in mid-stride. Look at one of them and they run. Hold, and everyone does.
+			</p>
+			<div class="pair">
+				<figure>
+					<Shot
+						name="rain-first"
+						alt="A pale plank bridge seen at eye level with a thick brown railing and rounded, outlined trees under a grey sky."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>First attempt: on the bridge.</figcaption>
+				</figure>
+				<figure>
+					<Shot
+						name="rain-print"
+						alt="A yellow bridge on grey piles crossing a turquoise river, seen from above, with people under hats and umbrellas and black cloud hanging in a blue sky."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>After going back to Hiroshige: above it.</figcaption>
+				</figure>
+			</div>
+			<figure>
+				<Shot name="rain-people" alt="Close view of the people on the bridge: women under dark umbrellas, a man in a straw hat, two sharing an umbrella, a man under a straw mat." />
+				<figcaption>The people are drawn; the bridge they run on is rendered.</figcaption>
+			</figure>
+
+			<h3>Letting it fall</h3>
+			<p>
+				A drawing can do what a rendered picture cannot: move. The browser draws the wave itself, some seventy thousand flat
+				triangles in the order a printer would lay them down, and every one hangs from a point that can be shifted. Press and
+				hold, and the lip bends over, the claws turn with it, the water breaks, sinks and gathers again. Let go and time stops
+				where it is. Stop it where he did, and it settles on the instant he chose.
+			</p>
+			<div class="shots">
+				<figure>
+					<Shot name="wave-falling" alt="The lip of the wave bent over, its claws reaching down towards the trough." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Falling</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="wave-breaking" alt="The wave collapsing into heaped foam that throws up claws of its own." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Breaking</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="wave-rising" alt="The wave rising again behind the white peak, its arm of foam still short." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Rising again</strong></figcaption>
+				</figure>
+			</div>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c4">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">4</span>
+			<h2 id="c4">An oil is strokes all the way down</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				Monet's pond was first made as a garden, lit and then filtered until it looked painted. It
+				came out pleasant and wrong. The painting has no sky in it and hardly any light. It is russet and bottle green, with
+				yellow strokes let down through the dark, and its subject is the touches of the brush as much as what they stand for.
+			</p>
+			<p>
+				So there is no garden any more. The world is about 430,000 strokes of paint hung in space, each a ribbon with its own
+				bristles and its own dry end, turned to face you. Foliage, bridge, reeds, pads and their reflections are nothing but
+				marks laid in the direction a brush would go. Every colour starts as a pixel of the part of the canvas that mark
+				belongs to: the bridge from the bridge, the blossom from the band of blossom.
+			</p>
+			<div class="pair">
+				<figure>
+					<Shot
+						name="stillness-first"
+						alt="A bright green garden pond under a pale sky, with round lily pads and a small mint-green bridge."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>First attempt: a garden, filtered.</figcaption>
+				</figure>
+				<figure>
+					<Shot
+						name="stillness-final"
+						alt="A dark bridge arching over russet water and turquoise pads, under a curtain of brown and yellow-green strokes."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>After going back to Monet: paint.</figcaption>
+				</figure>
+			</div>
+			<figure>
+				<Shot name="stillness-close" alt="Close view of separate brush strokes: turquoise pads, russet water, the far band of pale blossom." />
+				<figcaption>Closer to: nothing but marks.</figcaption>
+			</figure>
+			<p>
+				It asks for the opposite of the other rooms. Keep still, and after a moment the ripples die and the bridge is whole
+				in the water. Look away and it breaks.
+			</p>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c5-river">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">5</span>
+			<h2 id="c5-river">The river that took three attempts</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				The first version of Turner's room was a believable night: a grey sky, black hulls, a small moon. It was nothing like
+				the painting, because Turner's night is not dark. The second went back to his palette and lit the scene with it, haze,
+				fires and all, for thirteen minutes of rendering. It had his colours and none of his hand: a place, with a filter
+				over it.
+			</p>
+			<div class="pair">
+				<figure>
+					<Shot
+						name="moonlight-first"
+						alt="A dim grey river at night with black ship silhouettes, thin columns of smoke and a small pale moon."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>First attempt: a night.</figcaption>
+				</figure>
+				<figure>
+					<Shot
+						name="moonlight-second"
+						alt="The same river rendered with light: a blue sky with a wide golden glow, hard-edged ships, fires and heavy black smoke."
+						sizes="(min-width: 62em) 27rem, 94vw"
+					/>
+					<figcaption>Second: his colours, not his hand.</figcaption>
+				</figure>
+			</div>
+			<p>
+				The third starts by reading the painting as a copyist would: from the widest brush to the finest, along the forms of
+				the picture, and with a finer brush only where the wider one has not yet said enough. That gives some ninety-five
+				thousand strokes. They hang in front of you where he put them, and his sky, smoke and river are carried on from the
+				margins of the canvas, all the way round, in strokes mixed from the same paint.
+			</p>
+			<div class="shots">
+				<figure>
+					<Shot name="moonlight-broad" alt="The fires and colliers as a few wide, blurred bars of blue, grey and orange." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>The widest brush</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="moonlight-middle" alt="The same part with narrower strokes: masts, smoke and fires can be told apart." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>Two sizes down</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="moonlight-fine" alt="The same part with all its strokes: rigging, men on the keels and the glow on the smoke." sizes="(min-width: 62em) 17rem, 94vw" />
+					<figcaption><strong>The finest</strong></figcaption>
+				</figure>
+			</div>
+			<figure>
+				<Shot name="moonlight-final" alt="Turner's river from a rowing boat: the moon in a wide pale glow, colliers in smoke, fires on the right and more ships beyond the edge of the painting." />
+				<figcaption>The third. The canvas ends at the last tall mast on the right; the rest is carried on.</figcaption>
+			</figure>
+			<p>
+				The picture has two lights, and you choose between them. Look at the fires and they blaze up, and the keelmen heave
+				coal in front of them. Look at the moon and the work stops, and its road runs bright over the water.
+			</p>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c5">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">6</span>
+			<h2 id="c5">Leave it room to move</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				A rendered panorama is a still. Two more small pictures travel with each one so that the browser can bring it back to
+				life. The first says what may move: red where there is water, green where there is sky, blue for anything that burns.
+				The viewer ripples the red, drifts the green and makes the blue flicker, on every frame.
+			</p>
+			<p>
+				The second says how far away everything is. With it the viewer can move your eye a few centimetres around the point
+				the world was rendered from, so that near things slide across far ones as you turn your head, as the mouse moves,
+				as the boat rocks. That small shift is the difference between looking at a picture of a place and being in it. The
+				depth of a whole world is a picture of ten to fifteen kilobytes.
+			</p>
+			<div class="shots">
+				<figure>
+					<Shot name="moonlight-mask" alt="The river view in three flat colours: red water, green sky, black ships, with small blue marks where the fires are." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>What may move</strong>Water, sky and fire.</figcaption>
+				</figure>
+				<figure>
+					<Shot name="moonlight-depth" alt="The river view in greys: the rowing boat nearly white, the water fading to black at the horizon, ships as faint grey shapes." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>How far</strong>The depth the eye moves through.</figcaption>
+				</figure>
+			</div>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c6">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">7</span>
+			<h2 id="c6">Go through the canvas</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				The exhibition is about one moment: the picture on the wall becoming the place you are in. It is the only transition
+				the project has, and it is made of water and pigment, the two things every painting here is made of.
+			</p>
+			<p>
+				A drop lands where you touched the painting. Pigment blooms from that point like ink let into water, in the colour
+				the painting is known for: Prussian blue for Hokusai, white gold for Turner. The surface swells and ripples, and
+				behind the bloom the picture is already a place. Leaving runs the other way: the dark of the gallery closes in on the
+				world until it is a painting on the wall again.
+			</p>
+			<p>
+				For a moment both are on the screen, and they agree. Every painting has a table of where each part of it is in its
+				world: this post of the bridge, that mast, the tip of that claw. The world first appears pulled into the shape of the
+				picture, so that what was painted is what is there, and lets go of it as you come through.
+			</p>
+			<div class="shots shots-film">
+				<figure>
+					<Shot name="dive-1" alt="The Great Wave print on the gallery wall with a small dark-blue stain opening in its middle." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>The drop</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="dive-2" alt="The stain has spread into a ragged blue-edged opening; inside it, the sea of the world." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>The bloom</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="dive-3" alt="The opening now covers most of the print, its edge like ink in water; the wave world fills it." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>Through</strong></figcaption>
+				</figure>
+				<figure>
+					<Shot name="dive-4" alt="The wave world, complete: the great wave overhead, the bow of the boat below." sizes="(min-width: 62em) 27rem, 94vw" />
+					<figcaption><strong>Inside</strong></figcaption>
+				</figure>
+			</div>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c7">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">8</span>
+			<h2 id="c7">What the browser gets</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				One image per world, unrolled like a map of the globe, and a viewer written for this exhibition and nothing else.
+				There is no 3D library and no sphere to wrap the image on: a single program on the graphics card works out, for every
+				pixel of the screen, which way it is looking, and paints what lies in that direction. Worlds arrive at half
+				resolution and, on screens that can show more, sharpen once you have settled.
+			</p>
+			<figure>
+				<Shot
+					name="moonlight-pano"
+					alt="The whole of Turner's river as one wide strip: the pale glow in the middle, ships to both sides, the blue sky behind the viewer at the edges, the rowing boat stretched along the bottom."
+				/>
+				<figcaption>All of Room IV in one picture: 360° across, straight up at the top edge, straight down at the bottom.</figcaption>
+			</figure>
+			<p>
+				The sound is made the same way, from nothing. Sea, rain, leaves, fire and the drop that takes you through a canvas are
+				synthesised as you listen and placed around your head. The gallery keeps a note for each room you have been in, and
+				the four make a chord. No audio file is downloaded.
+			</p>
+			<dl class="facts spec">
+				<div>
+					<dt>Worlds, each one script</dt>
+					<dd>5</dd>
+				</div>
+				<div>
+					<dt>Pixels across each panorama</dt>
+					<dd>8,192</dd>
+				</div>
+				<div>
+					<dt>JavaScript, compressed</dt>
+					<dd>53 KB</dd>
+				</div>
+				<div>
+					<dt>Libraries at run time</dt>
+					<dd>None</dd>
+				</div>
+				<div>
+					<dt>Audio files</dt>
+					<dd>None</dd>
+				</div>
+			</dl>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="c8">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">9</span>
+			<h2 id="c8">Make it for everyone</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				An immersive piece is easy to make for a mouse, a large screen and good eyesight. This one was built the other way
+				round. Every world has a written description, so the exhibition can be followed without seeing it. Everything can be
+				done from the keyboard, or with single clicks and no dragging. Animation can be paused, and is off from the start
+				where the system asks for less motion. Without WebGL, each room is a page of pictures and text.
+			</p>
+			<p>
+				<a href={`${base}about/#accessibility`}>How the exhibition can be used</a> is set out on the About page.
+			</p>
+		</div>
+	</section>
+
+	<div class="doc-next">
+		<p>The rest is better seen from inside.</p>
+		<div class="doc-next-actions">
+			<a class="btn btn-primary" href={base}>Enter the exhibition</a>
+			<a class="btn" href={`${base}about/`}>About and credits</a>
+		</div>
+	</div>
+</Page>

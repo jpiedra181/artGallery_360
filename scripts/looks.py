@@ -62,9 +62,15 @@ def fbm(shape, scales, seed=0, weights=None):
     for s, wt in zip(scales, weights):
         gh, gw = max(2, int(h / s)), max(2, int(w / s))
         g = rng.standard_normal((gh, gw)).astype(np.float32)
-        g = np.concatenate([g, g[:, :1]], axis=1)  # wrap
-        up = cv2.resize(g, (w + int(w / gw) + 1, h), interpolation=cv2.INTER_CUBIC)[:, :w]
-        total += up * wt
+        # Sample the grid as a ring: whole cells on each side for the cubic
+        # filter to read, and the same cell size all the way round, so the last
+        # column runs into the first.
+        ring = np.concatenate([g[:, -3:], g, g[:, :3]], axis=1)
+        x = (np.arange(w, dtype=np.float32) + 0.5) * gw / w - 0.5 + 3
+        y = np.clip((np.arange(h, dtype=np.float32) + 0.5) * gh / h - 0.5, 0, gh - 1)
+        # cv2.remap takes at most 32767 columns on either side: well above any grid here
+        mx, my = np.meshgrid(x, y.astype(np.float32))
+        total += cv2.remap(ring, mx, my, cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE) * wt
     total /= max(1e-6, np.abs(total).max())
     return total
 
@@ -125,7 +131,8 @@ def paper(shape, seed=3, strength=1.0):
     mott = fbm(shape, [w / 6, w / 18, w / 60], seed)
     fibres = fbm(shape, [w / 900, w / 2400], seed + 1, [1.0, 0.6])
     # stretch fibre noise horizontally into short strands
-    fibres = cv2.GaussianBlur(fibres, (0, 0), sigmaX=max(1, w / 1600), sigmaY=0.6)
+    sx = max(1, w / 1600)
+    fibres = wrap_filter(fibres, int(sx * 4) + 2, lambda x: cv2.GaussianBlur(x, (0, 0), sigmaX=sx, sigmaY=0.6))
     fibres /= max(1e-6, np.abs(fibres).max())
     return 1.0 + strength * (0.025 * mott + 0.03 * fibres)
 
@@ -203,6 +210,46 @@ def grade(img, shadows, highlights, saturation=1.0, gamma=1.0):
     return np.clip(img, 0, 1) ** gamma
 
 
+def bloom(img, threshold=0.7, radii=(0.003, 0.012, 0.045), amounts=(0.5, 0.4, 0.3), tint=(1.0, 0.93, 0.78)):
+    """Light spreading from the brightest paint (the moon, flames, their
+    reflections): the glow Turner scumbles around them. Radii are fractions
+    of the panorama's width."""
+    h, w = img.shape[:2]
+    lum = img @ np.array([0.3, 0.59, 0.11], np.float32)
+    bright = img * np.clip((lum - threshold) / (1.0 - threshold), 0, 1)[..., None]
+    tint = np.array(tint, np.float32)
+    out = img
+    for r, amount in zip(radii, amounts):
+        sigma = r * w
+        # wide glows are smooth: blur a reduced copy
+        f = max(1, int(sigma / 6))
+        small = cv2.resize(bright, (w // f, h // f), interpolation=cv2.INTER_AREA) if f > 1 else bright
+        pad = int(sigma / f * 3) + 2
+        glow = wrap_filter(small, pad, lambda x: cv2.GaussianBlur(x, (0, 0), sigma / f))
+        if f > 1:
+            glow = cv2.resize(glow, (w, h), interpolation=cv2.INTER_LINEAR)
+        out = 1.0 - (1.0 - out) * (1.0 - np.clip(glow * amount * tint, 0, 1))
+    return out
+
+
+def scumble(img, reach_px, grain_px, seed):
+    """Break every edge the way stiff paint breaks on the threads of a canvas:
+    look each pixel up a little way off, in a direction that changes from
+    thread to thread."""
+    h, w = img.shape[:2]
+    noise = lambda s: wrap_filter(np.random.default_rng(s).standard_normal((h, w)).astype(np.float32), int(grain_px * 3) + 2, lambda a: cv2.GaussianBlur(a, (0, 0), max(0.6, grain_px * 0.36)))
+    dx, dy = noise(seed), noise(seed + 1)
+    dx *= reach_px / max(1e-6, dx.std() * 1.4)
+    dy *= reach_px / max(1e-6, dy.std() * 1.4)
+    pad = int(reach_px * 4) + 2
+    x, y = np.meshgrid(np.arange(w, dtype=np.float32) + pad, np.arange(h, dtype=np.float32))
+    wide = np.concatenate([img[:, -pad:], img, img[:, :pad]], axis=1)
+    out = np.empty_like(img)
+    # cv2.remap handles at most 32767 pixels a side: fine at 8k
+    cv2.remap(wide, x + dx, np.clip(y + dy, 0, h - 1), cv2.INTER_LINEAR, dst=out)
+    return out
+
+
 def stroke_field(img, length_px, seed, bins=8):
     """Noise smeared along the local direction of the image (perpendicular to
     its gradient), so every area gets dabs that follow its forms."""
@@ -266,16 +313,36 @@ def wave(img, folder):
 
 
 def rain(img, folder):
-    return woodblock(img, folder, ink_hex="#1b2124", width=3.0, seed=23)
+    # Hiroshige: thin lines, and the grain of the block showing in the big wiped areas
+    img = woodblock(img, folder, ink_hex="#24272c", width=2.1, seed=23)
+    h, w = img.shape[:2]
+    grain = fbm((h, max(16, w // 24)), [w / 24 / 5, w / 24 / 12, w / 24 / 30], 77, [1.0, 0.8, 0.6])
+    mx, my = np.meshgrid((np.arange(w, dtype=np.float32) + 0.5) / 24, np.arange(h, dtype=np.float32))
+    ring = np.concatenate([grain, grain[:, :2]], axis=1)
+    grain = cv2.remap(ring, mx, my + 6 * fbm((h, w), [w / 9, w / 30], 78).astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+    grain /= max(1e-6, grain.std() * 2.2)
+    # level grain turns into rings where one looks straight down: let it go there
+    lat = np.abs(np.linspace(90, -90, h, dtype=np.float32))[:, None]
+    grain = np.clip(grain, -1, 1) * np.clip((48 - lat) / 22, 0, 1)
+    return np.clip(img * (1.0 + 0.04 * grain[..., None]), 0, 1)
 
 
 def stillness(img, folder):
-    # Monet: broken colour, violet-blue shadows, warm yellow-green light
-    return oil(img, folder, size=22, weave_px=7, seed=31, stroke_px=34, stroke=0.09, hue_jitter=0.12,
-               shadows=(0.9, 0.94, 1.18), highlights=(1.07, 1.04, 0.88), saturation=1.32, gamma=0.88)
+    # Monet: the strokes are already in the render (blender/scripts/stillness.py). Wet paint: edges drag
+    # a little into their neighbours, the ridges catch the light, the canvas shows through.
+    scale = img.shape[1] / 8192
+    img = scumble(img, 1.0 * scale, 6.0 * scale, 31)
+    img = scumble(img, 0.8 * scale, 2.4 * scale, 37)
+    img = impasto(img, strength=0.09, blur=max(0.8, 1.6 * scale))
+    img = grade(img, shadows=(0.96, 0.98, 1.06), highlights=(1.14, 1.1, 1.02), saturation=1.12)
+    return np.clip(img * canvas_weave(img.shape[:2], max(3.0, 7 * scale), 31)[..., None], 0, 1)
 
 
 def moonlight(img, folder):
-    # Turner: silvery blues against gold, everything softened into haze
-    return oil(img, folder, size=20, weave_px=8, seed=41,
-               shadows=(0.95, 0.98, 1.1), highlights=(1.08, 1.0, 0.82), saturation=1.08, gamma=0.95)
+    # Turner: the strokes are in the render (blender/scripts/moonlight.py). Thin glazes
+    # dragged over one another, light spilling a little from the fires and the moon.
+    scale = img.shape[1] / 8192
+    img = scumble(img, 0.8 * scale, 5.0 * scale, 41)
+    img = bloom(img, threshold=0.86, radii=(0.002, 0.008, 0.03), amounts=(0.22, 0.2, 0.16))
+    img = impasto(img, strength=0.07, blur=max(0.8, 1.6 * scale))
+    return np.clip(img * canvas_weave(img.shape[:2], max(3.0, 7 * scale), 41)[..., None], 0, 1)

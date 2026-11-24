@@ -1,3 +1,4 @@
+import type { Overlay } from "./overlay";
 import { fragmentShader, vertexShader } from "./shaders";
 
 /** Effect parameters for one scene, packed the way the shader reads them. */
@@ -7,6 +8,7 @@ export interface FxUniforms {
 	water: Vec4;
 	rain: Vec4;
 	light: Vec4;
+	mood: Vec4;
 	grade: Vec4;
 	hover: Vec4;
 	hover2: Vec4;
@@ -15,12 +17,21 @@ export interface FxUniforms {
 export interface SceneTextures {
 	pano: WebGLTexture;
 	mask: WebGLTexture | null;
+	/** Disparity map for parallax (see shaders.ts); null leaves the scene flat. */
+	depth: WebGLTexture | null;
+	/** A drawing that hangs in the scene and can move. */
+	overlay?: Overlay | null;
+	/** Distance of the scene's nearest surface (metres), the unit of its disparities. */
+	near: number;
 	width: number;
 }
 
 export interface FrameState {
 	rotA: Float32Array;
 	rotB: Float32Array;
+	/** Eye offset per scene: xyz in units of the scene's nearest surface, w the depth curve. */
+	eyeA: Float32Array;
+	eyeB: Float32Array;
 	fxA: FxUniforms;
 	fxB: FxUniforms;
 	fovV: number; // radians
@@ -28,20 +39,34 @@ export interface FrameState {
 	mix: number;
 	ripple: boolean;
 	center: [number, number];
+	/** Pigment at the front of a transition: linear rgb and strength. */
+	ink: [number, number, number, number];
+	/** The next scene closes in on the origin instead of spreading from it. */
+	close: boolean;
 	time: number;
 	drips: Float32Array; // 4 × vec4
+	/** Pigment in the water of the gallery: 4 × (x, z, radius, strength), 4 × linear rgb, and how far it glows. */
+	stains: Float32Array;
+	stainInks: Float32Array;
+	stainGlow: number;
+	/** How far the world is still looked at through its painting (see shaders.ts). */
+	match: { amount: number; worldIsB: boolean; plane: Vec4; y: number; grid: Float32Array } | null;
 }
 
-const FX_FIELDS = ["water", "rain", "light", "grade", "hover", "hover2"] as const;
+const FX_FIELDS = ["water", "rain", "light", "mood", "grade", "hover", "hover2"] as const;
 
 export const emptyFx = (): FxUniforms => ({
 	water: [0, 1.6, 1, 1],
 	rain: [0, 0, 1, 0],
 	light: [0, 0, 0, 0],
+	mood: [0, 0, 0, 0],
 	grade: [0, 0, 0, 1],
 	hover: [0, 4, 1, 1],
 	hover2: [0, 0, 0, 0],
 });
+
+const NO_SHEET = [0, 1, 0, 1];
+const NO_EYE = new Float32Array([0, 0, 0, 1]);
 
 const nextFrame = () => new Promise<number>((r) => requestAnimationFrame(r));
 
@@ -62,6 +87,8 @@ export class PanoRenderer {
 	private black!: WebGLTexture;
 	private anisotropy: { ext: EXT_texture_filter_anisotropic; max: number } | null = null;
 	private slots: [SceneTextures | null, SceneTextures | null] = [null, null];
+	/** The painting being approached, for the detail the panorama cannot hold. */
+	art: WebGLTexture | null = null;
 	private renderScale = 1;
 	private pixelRatio = 1;
 	private linked = false;
@@ -89,6 +116,7 @@ export class PanoRenderer {
 			e.preventDefault();
 			this.lost = true;
 			this.slots = [null, null];
+			this.art = null;
 		});
 		canvas.addEventListener("webglcontextrestored", () => {
 			this.lost = false;
@@ -161,9 +189,12 @@ export class PanoRenderer {
 		const gl = this.gl;
 		const program = this.program;
 		const names = [
-			"uPanoA", "uPanoB", "uMaskA", "uMaskB", "uRotA", "uRotB",
-			"uAspect", "uTanHalf", "uTanQuarter", "uStereo", "uTime", "uMix", "uRipple", "uCenter",
+			"uPanoA", "uPanoB", "uMaskA", "uMaskB", "uDepthA", "uDepthB", "uRotA", "uRotB", "uEyeA", "uEyeB",
+			"uAspect", "uTanHalf", "uTanQuarter", "uStereo", "uTime", "uMix", "uRipple", "uCenter", "uInk", "uClose",
 			"uDrips", "uResolution",
+			"uMatch", "uMatchB", "uMatchPlane", "uMatchY", "uMatchGrid",
+			"uArt", "uStain", "uStainInk", "uStainGlow",
+			"uSheetA", "uSheetB", "uSheetRectA", "uSheetRectB", "uSheetOnA", "uSheetOnB",
 		];
 		for (const n of names) this.loc[n] = gl.getUniformLocation(program, n);
 		for (const slot of ["uFxA", "uFxB"]) {
@@ -174,6 +205,11 @@ export class PanoRenderer {
 		gl.uniform1i(this.loc.uPanoB, 1);
 		gl.uniform1i(this.loc.uMaskA, 2);
 		gl.uniform1i(this.loc.uMaskB, 3);
+		gl.uniform1i(this.loc.uDepthA, 4);
+		gl.uniform1i(this.loc.uDepthB, 5);
+		gl.uniform1i(this.loc.uSheetA, 6);
+		gl.uniform1i(this.loc.uSheetB, 7);
+		gl.uniform1i(this.loc.uArt, 8);
 	}
 
 	/**
@@ -182,29 +218,33 @@ export class PanoRenderer {
 	 */
 	async uploadTexture(
 		bitmap: ImageBitmap,
-		opts: { srgb: boolean; mipmaps: boolean; stripRows?: number },
+		opts: { srgb: boolean; mipmaps: boolean; stripRows?: number; grey?: boolean },
 	): Promise<WebGLTexture> {
 		const gl = this.gl;
 		const { width, height } = bitmap;
 		const levels = opts.mipmaps ? Math.floor(Math.log2(Math.max(width, height))) + 1 : 1;
 		const tex = gl.createTexture()!;
 		gl.bindTexture(gl.TEXTURE_2D, tex);
-		gl.texStorage2D(gl.TEXTURE_2D, levels, opts.srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, width, height);
+		// a single channel for grey maps: a quarter of the memory
+		const format = opts.grey ? gl.RED : gl.RGBA;
+		gl.texStorage2D(gl.TEXTURE_2D, levels, opts.grey ? gl.R8 : opts.srgb ? gl.SRGB8_ALPHA8 : gl.RGBA8, width, height);
 		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 		gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 		gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
 
 		const rows = opts.stripRows ?? Math.max(128, Math.round((1 << 22) / width)); // ≈16 MB per strip
 		if (rows >= height) {
-			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, format, gl.UNSIGNED_BYTE, bitmap);
 		} else {
 			for (let y = 0; y < height; y += rows) {
 				const h = Math.min(rows, height - y);
-				const strip = await createImageBitmap(bitmap, 0, y, width, h);
 				if (gl.isContextLost()) throw new Error("context lost");
 				gl.bindTexture(gl.TEXTURE_2D, tex);
-				gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y, width, h, gl.RGBA, gl.UNSIGNED_BYTE, strip);
-				strip.close();
+				// Rows are skipped in the upload, not cut out with createImageBitmap(bitmap, 0, y, …):
+				// Firefox takes the top of the picture for every such cut.
+				gl.pixelStorei(gl.UNPACK_SKIP_ROWS, y);
+				gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, y, width, h, format, gl.UNSIGNED_BYTE, bitmap);
+				gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0);
 				await nextFrame();
 			}
 			gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -276,11 +316,24 @@ export class PanoRenderer {
 		bindTex(1, (b ?? a).pano);
 		bindTex(2, a.mask);
 		bindTex(3, (b ?? a).mask);
+		bindTex(4, a.depth);
+		bindTex(5, (b ?? a).depth);
+		const sheetA = a.overlay ?? null, sheetB = (b ?? a).overlay ?? null;
+		bindTex(6, sheetA?.texture ?? null);
+		bindTex(7, sheetB?.texture ?? null);
+		bindTex(8, this.art);
 
 		const L = this.loc;
 		const half = f.fovV / 2;
 		gl.uniformMatrix3fv(L.uRotA, false, f.rotA);
 		gl.uniformMatrix3fv(L.uRotB, false, f.rotB);
+		gl.uniform4fv(L.uSheetRectA, sheetA?.rect ?? NO_SHEET);
+		gl.uniform4fv(L.uSheetRectB, sheetB?.rect ?? NO_SHEET);
+		gl.uniform2f(L.uSheetOnA, sheetA ? 1 : 0, sheetA ? a.near / sheetA.distance : 0);
+		gl.uniform2f(L.uSheetOnB, sheetB ? 1 : 0, sheetB ? (b ?? a).near / sheetB.distance : 0);
+		// without a depth map there is nothing to shift
+		gl.uniform4fv(L.uEyeA, a.depth ? f.eyeA : NO_EYE);
+		gl.uniform4fv(L.uEyeB, (b ?? a).depth ? f.eyeB : NO_EYE);
 		gl.uniform1f(L.uAspect, this.canvas.width / this.canvas.height);
 		gl.uniform1f(L.uTanHalf, Math.tan(half));
 		gl.uniform1f(L.uTanQuarter, Math.tan(half / 2));
@@ -289,7 +342,20 @@ export class PanoRenderer {
 		gl.uniform1f(L.uMix, b ? f.mix : 0);
 		gl.uniform1f(L.uRipple, f.ripple ? 1 : 0);
 		gl.uniform2f(L.uCenter, f.center[0], f.center[1]);
+		gl.uniform4fv(L.uInk, f.ink);
+		gl.uniform1f(L.uClose, f.close ? 1 : 0);
 		gl.uniform4fv(L.uDrips, f.drips);
+		const m = b ? f.match : null;
+		gl.uniform1f(L.uMatch, m?.amount ?? 0);
+		if (m) {
+			gl.uniform1f(L.uMatchB, m.worldIsB ? 1 : 0);
+			gl.uniform4fv(L.uMatchPlane, m.plane);
+			gl.uniform1f(L.uMatchY, m.y);
+			gl.uniform2fv(L.uMatchGrid, m.grid);
+		}
+		gl.uniform4fv(L.uStain, f.stains);
+		gl.uniform3fv(L.uStainInk, f.stainInks);
+		gl.uniform1f(L.uStainGlow, f.stainGlow);
 		gl.uniform2f(L.uResolution, this.canvas.width, this.canvas.height);
 		for (const f2 of FX_FIELDS) {
 			gl.uniform4fv(L[`uFxA.${f2}`], f.fxA[f2]);

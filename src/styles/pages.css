@@ -1,0 +1,589 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   Inside the Frame — reading pages (About, How it was made)
+
+   The printed matter of the exhibition: ink on the same paper as its labels
+   (global.css), set like a catalogue. Chapters between rules, their headings
+   in the margin, pictures wider than the text, facts in ruled lists.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+.doc {
+	--measure: 40rem;
+	--wide: 70rem;
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+}
+
+/* the exhibition's fallback layout centres <main> in a narrow column: these pages lay themselves out */
+html:not(.immersive) .doc main {
+	width: auto;
+	margin: 0;
+	padding: 0;
+	display: block;
+	flex: 1;
+}
+
+.doc main:focus {
+	outline: none;
+}
+
+/* links in the text: Prussian blue, underlined */
+.doc main a:not(.btn) {
+	color: var(--link);
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
+}
+
+@media (hover: hover) {
+	.doc main a:not(.btn):hover {
+		text-decoration-thickness: 2px;
+	}
+}
+
+/* Ibarra's word space is cut for reading sizes; in titles it is closed up a little */
+.doc-hero h1,
+.chapter h2,
+.chapter-body h3,
+.work h3,
+.doc-next p,
+.doc-foot-name {
+	word-spacing: -0.06em;
+}
+
+/* ─── Header and footer ───────────────────────────────────────────────────── */
+
+.doc-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--space-2) var(--space-5);
+	padding: calc(var(--safe-t) + var(--space-3)) calc(var(--safe-r) + var(--gutter)) var(--space-3) calc(var(--safe-l) + var(--gutter));
+	border-bottom: 1px solid var(--rule-strong);
+}
+
+/* a full-size target even when the volume line under the name is left out (narrow screens) */
+.doc-bar .wordmark {
+	min-height: 2.75rem;
+	justify-content: center;
+}
+
+.doc-nav {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-5);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	font-size: var(--step--1);
+	font-weight: 500;
+}
+
+.doc-nav a:not(.btn) {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	text-decoration: none;
+	color: var(--fg-2);
+}
+
+@media (hover: hover) {
+	.doc-nav a:not(.btn):hover {
+		color: var(--fg);
+	}
+}
+
+/* the page you are on: underlined in ink */
+.doc-nav a[aria-current="page"] {
+	color: var(--fg);
+	box-shadow: inset 0 -2px 0 var(--fg);
+}
+
+.doc-foot {
+	display: grid;
+	gap: var(--space-2) var(--space-6);
+	width: min(100% - 2 * var(--gutter), var(--wide));
+	margin: var(--space-7) auto 0;
+	padding: var(--space-5) 0 calc(var(--safe-b) + var(--space-6));
+	border-top: 1px solid var(--rule-strong);
+	color: var(--fg-2);
+	font-size: var(--step--1);
+}
+
+.doc-foot-name {
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: var(--step-2);
+	line-height: 1.05;
+	color: var(--fg);
+}
+
+.doc-foot-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-5);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.doc-foot a {
+	display: inline-flex;
+	align-items: center;
+	min-height: 2.75rem;
+	text-underline-offset: 0.2em;
+	text-decoration-thickness: 1px;
+}
+
+/* the name on the left, where to go and who made it on the right */
+@media (min-width: 48em) {
+	.doc-foot {
+		grid-template-columns: minmax(0, 1fr) auto;
+		align-items: start;
+	}
+
+	.doc-foot-name,
+	.doc-foot-vol {
+		grid-column: 1;
+	}
+
+	.doc-foot-links,
+	.doc-foot-by {
+		grid-column: 2;
+		justify-self: end;
+	}
+
+	.doc-foot-links {
+		grid-row: 1;
+	}
+
+	.doc-foot-by {
+		grid-row: 2;
+	}
+}
+
+/* ─── Opening ─────────────────────────────────────────────────────────────── */
+
+.doc-hero {
+	display: grid;
+	gap: var(--space-5);
+	width: min(100% - 2 * var(--gutter), var(--wide));
+	margin: 0 auto;
+	padding: clamp(2.5rem, 1.5rem + 5vw, 6rem) 0 clamp(2rem, 1.5rem + 3vw, 4rem);
+}
+
+.doc-hero h1 {
+	max-width: 14ch;
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: clamp(2.8rem, 1.5rem + 6.2vw, 6.6rem);
+	line-height: 0.94;
+	letter-spacing: -0.02em;
+	margin-left: -0.04em;
+}
+
+.doc-lede {
+	max-width: 36rem;
+	font-size: var(--step-1);
+	line-height: 1.42;
+}
+
+/* on a wide page the opening paragraph sits in the text column of the chapters below */
+@media (min-width: 62em) {
+	.doc-hero {
+		grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+		column-gap: var(--space-6);
+	}
+
+	.doc-hero h1 {
+		grid-column: 1 / -1;
+	}
+
+	.doc-lede {
+		grid-column: 2;
+	}
+}
+
+/* ─── Chapters ────────────────────────────────────────────────────────────── */
+
+.chapter {
+	width: min(100% - 2 * var(--gutter), var(--wide));
+	margin: 0 auto;
+	padding: var(--space-4) 0 clamp(2.5rem, 2rem + 3vw, 5rem);
+	border-top: 1px solid var(--rule-strong);
+	display: grid;
+	gap: var(--space-5) var(--space-6);
+}
+
+.chapter-head {
+	display: grid;
+	gap: var(--space-2);
+	align-content: start;
+}
+
+/* the number of the chapter, in label type */
+.chapter-numeral {
+	font-size: var(--step--1);
+	font-weight: 600;
+	line-height: 1.55;
+}
+
+.chapter h2 {
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: var(--step-2);
+	line-height: 1.04;
+	letter-spacing: -0.005em;
+}
+
+.chapter-body {
+	display: grid;
+	gap: var(--space-5);
+	min-width: 0;
+}
+
+.chapter-body > p,
+.chapter-body > ul,
+.chapter-body > h3 {
+	max-width: var(--measure);
+}
+
+.chapter-body > p strong {
+	font-weight: 600;
+}
+
+.chapter-body h3 {
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: var(--step-2);
+	line-height: 1.08;
+	margin-top: var(--space-4);
+}
+
+@media (min-width: 62em) {
+	.chapter {
+		grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+	}
+
+	/* the heading keeps its chapter company down the page */
+	.chapter-head {
+		position: sticky;
+		top: var(--space-4);
+	}
+}
+
+/* ─── Pictures ────────────────────────────────────────────────────────────── */
+
+.doc figure {
+	margin: 0;
+	display: grid;
+	gap: var(--space-2);
+}
+
+.doc figure picture,
+.doc figure img {
+	width: 100%;
+}
+
+.doc figure img {
+	background: var(--well);
+}
+
+.doc figcaption {
+	max-width: var(--measure);
+	font-size: var(--step--1);
+	line-height: 1.45;
+	color: var(--fg-2);
+}
+
+/* several pictures of one view, side by side */
+.shots {
+	display: grid;
+	gap: var(--space-4);
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+}
+
+/* the four moments of the dive, two by two */
+.shots-film {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shots figcaption strong {
+	display: block;
+	color: var(--fg);
+	font-weight: 600;
+}
+
+.pair {
+	display: grid;
+	gap: var(--space-4);
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+	align-items: end;
+}
+
+/* a painting is shown whole, at its own shape */
+.pair .is-painting img {
+	width: auto;
+	max-height: 26rem;
+	margin: 0 auto;
+}
+
+/* ─── Compare ─────────────────────────────────────────────────────────────── */
+
+.compare-frame {
+	position: relative;
+	overflow: hidden;
+	isolation: isolate;
+}
+
+.compare-top {
+	position: absolute;
+	inset: 0;
+	clip-path: inset(0 calc(100% - var(--pos)) 0 0);
+}
+
+.compare-top picture,
+.compare-top img {
+	height: 100%;
+	object-fit: cover;
+}
+
+.compare-line {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: var(--pos);
+	width: 2px;
+	margin-left: -1px;
+	background: var(--stock);
+	box-shadow: 0 0 0 1px rgb(11 13 16 / 0.5);
+	pointer-events: none;
+}
+
+/* the handle on the line: a tab of paper with two grip marks */
+.compare-line::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 2rem;
+	height: 2.75rem;
+	translate: -50% -50%;
+	background:
+		linear-gradient(#121418, #121418) calc(50% - 3px) 50% / 1px 0.9rem no-repeat,
+		linear-gradient(#121418, #121418) calc(50% + 3px) 50% / 1px 0.9rem no-repeat,
+		var(--stock);
+	box-shadow: 0 0 0 1px rgb(11 13 16 / 0.5), 0 4px 14px rgb(0 0 0 / 0.4);
+}
+
+/* the range input lies over the whole picture: drag anywhere, or use the arrow keys */
+.compare-range {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	opacity: 0;
+	cursor: ew-resize;
+	touch-action: pan-y;
+}
+
+.compare-frame:has(.compare-range:focus-visible) {
+	outline: 2px solid #fff;
+	outline-offset: 1px;
+	box-shadow: 0 0 0 5px #0b0d10;
+}
+
+.compare-labels {
+	display: flex;
+	justify-content: space-between;
+	gap: var(--space-4);
+	margin-bottom: var(--space-1);
+	color: var(--fg);
+	font-weight: 600;
+}
+
+.doc .compare figcaption {
+	max-width: none;
+}
+
+/* ─── Facts ───────────────────────────────────────────────────────────────── */
+
+.doc .facts {
+	max-width: var(--measure);
+	border-bottom: 1px solid var(--rule);
+}
+
+/* the specification: what the browser gets, as a ruled list like any other */
+.doc .spec div {
+	grid-template-columns: minmax(0, 1fr) 6rem;
+}
+
+.doc .spec dt {
+	color: var(--fg-2);
+}
+
+.doc .spec dd {
+	font-weight: 600;
+	font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ─── The works (About) ───────────────────────────────────────────────────── */
+
+.works {
+	display: grid;
+	gap: var(--space-7);
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.work {
+	display: grid;
+	gap: var(--space-4) var(--space-6);
+	align-items: start;
+}
+
+@media (min-width: 44em) {
+	.work {
+		grid-template-columns: minmax(0, 17rem) minmax(0, 1fr);
+	}
+}
+
+.work img {
+	width: 100%;
+	background: var(--well);
+}
+
+.work-text {
+	display: grid;
+	gap: var(--space-2);
+}
+
+/* the room and its pigment */
+.work-no {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-size: var(--step--1);
+	font-weight: 600;
+}
+
+.work h3 {
+	margin: 0;
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: var(--step-2);
+	line-height: 1.08;
+}
+
+/* a title that is a heading is already set apart: upright */
+.work h3 cite {
+	font-style: normal;
+}
+
+.work-by {
+	color: var(--fg-2);
+	margin-bottom: var(--space-2);
+}
+
+.work .facts {
+	margin-top: var(--space-2);
+}
+
+.work-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 var(--space-5);
+	font-size: var(--step--1);
+	font-weight: 500;
+}
+
+.work-links a {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-height: 2.75rem;
+}
+
+.work-links .icon {
+	width: 1em;
+	height: 1em;
+}
+
+/* a list whose items each begin with their subject in bold, between rules */
+.plain-list {
+	display: grid;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-bottom: 1px solid var(--rule);
+}
+
+.plain-list li {
+	padding-block: var(--space-3);
+	border-top: 1px solid var(--rule);
+	color: var(--fg-2);
+}
+
+.plain-list strong {
+	color: var(--fg);
+	font-weight: 600;
+}
+
+/* ─── Closing ─────────────────────────────────────────────────────────────── */
+
+.doc-next {
+	width: min(100% - 2 * var(--gutter), var(--wide));
+	margin: 0 auto;
+	padding: var(--space-5) 0 0;
+	border-top: 1px solid var(--rule-strong);
+	display: grid;
+	gap: var(--space-4);
+	justify-items: start;
+}
+
+.doc-next p {
+	max-width: 22ch;
+	font-family: var(--font-display), Georgia, serif;
+	font-weight: 500;
+	font-size: var(--step-3);
+	line-height: 1;
+	letter-spacing: -0.01em;
+}
+
+.doc-next-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2);
+}
+
+@media (min-width: 62em) {
+	.doc-next {
+		grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+		column-gap: var(--space-6);
+	}
+
+	.doc-next > * {
+		grid-column: 2;
+	}
+}
+
+@media (max-width: 30em) {
+	.doc-nav-more {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
+@media (forced-colors: active) {
+	.compare-line,
+	.compare-line::after {
+		background: CanvasText;
+	}
+}

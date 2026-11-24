@@ -1,0 +1,248 @@
+---
+import Icon from "../components/Icon.astro";
+import Page from "../layouts/Page.astro";
+import assets from "../data/assets.json";
+import { credits, rooms, site } from "../data/rooms";
+
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
+type Art = { width: number; height: number; avif: Record<string, string>; webp: Record<string, string> };
+const art = (assets as unknown as { art: Record<string, Art> }).art;
+const srcset = (set: Record<string, string>) =>
+	Object.entries(set)
+		.map(([w, url]) => `${base}${url} ${w}w`)
+		.join(", ");
+
+const artAlt: Record<string, string> = {
+	wave: "Woodblock print: a towering blue wave curls over three long boats, its crest breaking into claw-like foam; Mount Fuji, small and snow-capped, sits in the distance.",
+	rain: "Woodblock print: people under hats and straw mats hurry across a long wooden bridge in heavy rain drawn as fine dark lines, while a raft drifts on the river below a dark band of cloud.",
+	stillness: "Oil painting: a green arched footbridge crosses a pond crowded with water lilies, framed by weeping willows and dense foliage in greens, pinks and violets.",
+	moonlight: "Oil painting: a full moon glows through a tunnel of clouds above a calm river; tall ships stand in silhouette and torches burn on barges to the right.",
+};
+const contact = "javierpiedraiglesias@gmail.com";
+---
+
+<Page
+	title="About and credits"
+	description="About Inside the Frame: the four public-domain paintings and the museums that hold them, how the exhibition can be used, and credits."
+	current="about"
+>
+	<header class="doc-hero">
+		<h1>Four paintings you can stand inside</h1>
+		<p class="doc-lede">
+			Online collections show a painting as a flat image with a caption beside it. {site.name} asks what it would be like to
+			step into one. You start in a dark gallery whose floor lies under still water. Choose a painting, and you go through
+			the canvas into the place it shows.
+		</p>
+	</header>
+
+	<section class="chapter" aria-labelledby="works">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">1</span>
+			<h2 id="works">The works</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				Four pictures of water, made within seventy years of each other in Japan, France and England: a wave about to fall, rain
+				in mid-air, a pond holding its breath, a river under the moon. All four are in the public domain, and the museums that
+				hold them have released their images for anyone to use.
+			</p>
+			<ol class="works" role="list">
+				{
+					rooms.map((room) => {
+						const a = art[room.slug];
+						return (
+							<li class="work" style={`--pigment: ${room.pigment}`}>
+								{a && (
+									<picture>
+										<source type="image/avif" srcset={srcset(a.avif)} sizes="(min-width: 44em) 17rem, 92vw" />
+										<img
+											src={`${base}${a.webp["960"]}`}
+											srcset={srcset(a.webp)}
+											sizes="(min-width: 44em) 17rem, 92vw"
+											alt={artAlt[room.slug]}
+											width={a.width}
+											height={a.height}
+											loading="lazy"
+											decoding="async"
+										/>
+									</picture>
+								)}
+								<div class="work-text">
+									<p class="work-no">
+										<span class="swatch" aria-hidden="true" />
+										Room {room.numeral} — {room.theme}
+									</p>
+									<h3>
+										<cite>{room.title}</cite>
+									</h3>
+									<p class="work-by">
+										{room.artist} ({room.artistDates}), {room.date}
+									</p>
+									<p>{room.summary}</p>
+									<dl class="facts">
+										<div>
+											<dt>Medium</dt>
+											<dd>{room.medium}</dd>
+										</div>
+										<div>
+											<dt>Size</dt>
+											<dd>{room.dimensions}</dd>
+										</div>
+										<div>
+											<dt>Collection</dt>
+											<dd>
+												{room.museum}. {room.credit}. {room.accession}.
+											</dd>
+										</div>
+										<div>
+											<dt>Image</dt>
+											<dd>Public domain, released by the museum under CC0.</dd>
+										</div>
+									</dl>
+									<p class="work-links">
+										<a href={`${base}${room.slug}/`}>
+											Enter Room {room.numeral}
+											<Icon name="arrow-right" />
+										</a>
+										<a href={room.museumUrl} rel="noopener" target="_blank">
+											See it in the museum's collection
+											<span class="sr-only">(opens in a new tab)</span>
+											<Icon name="external" />
+										</a>
+									</p>
+								</div>
+							</li>
+						);
+					})
+				}
+			</ol>
+		</div>
+	</section>
+
+	<section class="chapter" id="accessibility" aria-labelledby="a11y">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">2</span>
+			<h2 id="a11y">Using the exhibition</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				The exhibition was built to be used in more than one way. It aims to meet the Web Content Accessibility Guidelines
+				2.2 at level AA, and is checked against them with automated tests (axe-core) and by hand with a keyboard.
+			</p>
+			<ul class="plain-list">
+				<li>
+					<strong>Without seeing it.</strong> Every room has a written description of its world and of the painting. Screen
+					readers get landmarks, headings, a labelled 360° view and an announcement on entering each room.
+				</li>
+				<li>
+					<strong>With a keyboard.</strong> The arrow keys look around, + and − zoom, Tab reaches the paintings and the points
+					of interest, and the view turns to show whatever has focus. Escape closes what is open.
+				</li>
+				<li>
+					<strong>Without dragging.</strong> A button in the corner of the view opens look and zoom buttons that move one
+					step per click or tap. “Look for” on each room's label lists its points of interest, numbered as they are in the view.
+				</li>
+				<li>
+					<strong>With less motion.</strong> Animation can be paused at any time from the top of the screen, and starts paused
+					where the system asks for reduced motion. Paused, nothing moves on its own, the controls stay put and rooms change
+					with a plain cross-fade.
+				</li>
+				<li>
+					<strong>In silence.</strong> Sound is offered, never assumed, and nothing depends on it.
+				</li>
+				<li>
+					<strong>On a small screen, or a large zoom.</strong> It works from 320 pixels wide, in portrait and landscape, with
+					touch targets of at least 44 pixels.
+				</li>
+				<li>
+					<strong>Without WebGL or JavaScript.</strong> Each room is then a page of pictures and text.
+				</li>
+			</ul>
+			<p>
+				If something here gets in your way, I would like to know: <a href={`mailto:${contact}`}>{contact}</a>.
+			</p>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="credits">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">3</span>
+			<h2 id="credits">Credits</h2>
+		</div>
+		<div class="chapter-body">
+			<dl class="facts">
+				<div>
+					<dt>Concept, 3D, sound and code</dt>
+					<dd>
+						<a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>
+					</dd>
+				</div>
+				<div>
+					<dt>Paintings</dt>
+					<dd>
+						{rooms.map((r, i) => (
+							<>
+								{i > 0 && <br />}
+								{r.artist}, <cite>{r.title}</cite> — {r.museum}
+							</>
+						))}
+					</dd>
+				</div>
+				<div>
+					<dt>Textures</dt>
+					<dd>
+						Poly Haven (CC0):{" "}
+						{credits.textures.map((t, i) => (
+							<>
+								{i > 0 && ", "}
+								<a href={t.url} rel="noopener" target="_blank">
+									{t.name}
+								</a>{" "}
+								by {t.author}
+							</>
+						))}
+					</dd>
+				</div>
+				<div>
+					<dt>Type</dt>
+					<dd>
+						Ibarra Real Nova, after the types Joaquín Ibarra printed with in Madrid around 1780, and Libre Franklin (both SIL
+						Open Font License)
+					</dd>
+				</div>
+				<div>
+					<dt>Made with</dt>
+					<dd>Blender 5 and Cycles, scripted in Python; Astro; WebGL 2; the Web Audio API</dd>
+				</div>
+			</dl>
+			<p>
+				<a href={`${base}making-of/`}>How it was made</a> follows one world from the painting to the browser.
+			</p>
+		</div>
+	</section>
+
+	<section class="chapter" aria-labelledby="author">
+		<div class="chapter-head">
+			<span class="chapter-numeral" aria-hidden="true">4</span>
+			<h2 id="author">Who made it</h2>
+		</div>
+		<div class="chapter-body">
+			<p>
+				{site.name} is a personal project by <a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>, a front-end
+				developer who works on 3D for the web and on interfaces that everyone can use. This is the first volume. The same
+				approach suits museums, galleries, foundations and anyone with a collection worth standing in.
+			</p>
+			<p>
+				To talk about one: <a href={`mailto:${contact}`}>{contact}</a>.
+			</p>
+		</div>
+	</section>
+
+	<div class="doc-next">
+		<p>The paintings are waiting.</p>
+		<div class="doc-next-actions">
+			<a class="btn btn-primary" href={base}>Enter the exhibition</a>
+			<a class="btn" href={`${base}making-of/`}>How it was made</a>
+		</div>
+	</div>
+</Page>

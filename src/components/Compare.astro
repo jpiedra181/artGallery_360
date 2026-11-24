@@ -1,0 +1,53 @@
+---
+/**
+ * Two pictures of the same view, one over the other, with a slider between
+ * them. The slider is a native range input: it works with the keyboard and
+ * with touch, and without JavaScript the pictures simply sit half and half.
+ */
+import Shot from "./Shot.astro";
+
+interface Props {
+	before: string;
+	after: string;
+	beforeLabel: string;
+	afterLabel: string;
+	/** What both pictures show, for people who cannot see them. */
+	alt: string;
+}
+
+const { before, after, beforeLabel, afterLabel, alt } = Astro.props;
+---
+
+<figure class="compare">
+	<div class="compare-frame" style="--pos: 50%">
+		<Shot name={after} alt={`${alt} ${afterLabel}.`} />
+		<div class="compare-top" aria-hidden="true">
+			<Shot name={before} alt="" />
+		</div>
+		<span class="compare-line" aria-hidden="true"></span>
+		<input
+			class="compare-range"
+			type="range"
+			min="0"
+			max="100"
+			value="50"
+			aria-label={`Compare: ${beforeLabel} on the left, ${afterLabel} on the right`}
+		/>
+	</div>
+	<figcaption>
+		<span class="compare-labels" aria-hidden="true">
+			<span>{beforeLabel}</span>
+			<span>{afterLabel}</span>
+		</span>
+		<slot />
+	</figcaption>
+</figure>
+
+<script>
+	for (const input of document.querySelectorAll<HTMLInputElement>(".compare-range")) {
+		const frame = input.closest<HTMLElement>(".compare-frame")!;
+		const update = () => frame.style.setProperty("--pos", `${input.value}%`);
+		input.addEventListener("input", update);
+		update();
+	}
+</script>

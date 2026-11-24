@@ -1,546 +1,575 @@
 """Room III — Stillness. Inside Monet's "Water Lily Pond" (1900).
 
-The viewer stands on a small landing at the edge of the pond at Giverny. A
-green Japanese footbridge arches across the water ahead; lily pads crowd the
-surface; weeping willows hang their curtains on every side; irises, grasses
-and flowering shrubs fill the banks. Rendered with real light, then turned
-into paint with an anisotropic Kuwahara filter (scripts/looks.py).
+A world made of brush strokes. Nothing here is modelled and then filtered to
+look painted: every mark is a ribbon of paint hung in space, facing the
+viewer, and its colour is taken from the part of the painting it stands for
+(blender/sources/monet-water-lily-pond.jpg). What the painting leaves out it
+leaves out here too: there is no sky, only dark foliage closing overhead and
+its reflection closing underneath.
+
+The viewer stands on a small landing at the edge of the pond. The footbridge
+crosses close ahead; pads crowd the water in front of it and a band of
+blossom lies beyond; reeds lean in from the left bank; yellow-green streamers
+of willow hang through the dark. Lit by nothing (emission only).
 
 Mask pass
-  R  open water (ripples)      G  sky
+  R  open water (ripples)
 """
 
 import math
-import random
 
-import bmesh
 import bpy
 import numpy as np
-from mathutils import Matrix, Vector
 
 import common as C
-import instancing as I
+import printmaking as P
+from strokes import EYE, K, RAD, Layer, Palette, along, fbm, frame, load_painting, mood, on_dome, reseed, rng, scatter, srgb_to_linear, toward, vnoise
 
-rng = random.Random(9)
-nrng = np.random.default_rng(9)
-
-WATER_Z = 0.0
-BANK_Z = 0.32
-BRIDGE_Y = 13.0
-BRIDGE_HALF = 6.2
-SUN_AZIMUTH = math.radians(215)   # behind the viewer, to the left
-SUN_ELEVATION = math.radians(38)
-
-# The pond: a smooth union of ellipses (centre x, centre y, radius x, radius y)
-POND = [
-    (0.0, 7.6, 15.5, 7.3),   # front lobe; its near edge is at our feet
-    (0.0, 13.0, 5.7, 4.2),   # the narrows under the bridge
-    (1.0, 20.0, 13.5, 6.5),  # back lobe behind the bridge
-    (14.0, 4.5, 7.5, 4.0),   # an arm to the right
-    (-15.0, 10.0, 6.0, 5.0), # an arm to the left
-]
+# the eye is 1.75 m over the water, which is at z = 0
+BANK = 0.16
+BRIDGE_X, BRIDGE_Y, BRIDGE_HALF = 2.3, 8.0, 6.9
 
 
-def pond_sdf(x, y):
-    """Negative inside the pond (in units of the nearest ellipse's size)."""
-    d = np.full(np.shape(x), 9.0)
-    for cx, cy, rx, ry in POND:
-        e = np.sqrt(((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2) - 1.0
-        # smooth minimum keeps the shoreline round where lobes meet
-        k = 0.25
-        h = np.clip(0.5 + 0.5 * (e - d) / k, 0, 1)
-        d = e * (1 - h) + d * h - k * h * (1 - h)
+# ─── The palette: regions of the painting ─────────────────────────────────────
+
+yellowgreen = lambda h, s, v: (h > 50) & (h < 105) & (s > 0.42) & (v > 0.36)
+russet = lambda h, s, v: ((h < 32) | (h > 340)) & (s > 0.18)
+teal = lambda h, s, v: (h > 125) & (h < 230) & (s > 0.14)
+green = lambda h, s, v: (h > 75) & (h < 175) & (s > 0.16)
+
+
+def palette():
+    return Palette(load_painting("monet-water-lily-pond.jpg"), {
+        "shade": (0.02, 0.0, 0.6, 0.3),
+        "russet": (0.2, 0.0, 1, 0.45, russet),
+        "willow": (0.36, 0.02, 0.58, 0.5, yellowgreen),
+        "willow_dark": (0.36, 0.02, 0.58, 0.5, green),
+        "light_tree": (0.6, 0.0, 1, 0.17, lambda h, s, v: v > 0.4),
+        "lilac": (0.0, 0.0, 0.1, 0.22, lambda h, s, v: v > 0.45),
+        "bridge": (0.28, 0.18, 1, 0.42, lambda h, s, v: (h > 120) & (h < 290) & (v < 0.55)),
+        "bridge_light": (0.28, 0.17, 1, 0.34, lambda h, s, v: (v > 0.52) & (((h > 170) & (h < 320)) | (s < 0.2))),
+        "bridge_under": (0.28, 0.32, 1, 0.42, russet),
+        "reeds": (0.0, 0.2, 0.28, 0.62, green),
+        "reeds_light": (0.0, 0.2, 0.28, 0.75, lambda h, s, v: v > 0.5),
+        "reeds_dark": (0.02, 0.4, 0.3, 0.68),
+        "grass": (0.66, 0.38, 1, 0.56, green),
+        "grass_light": (0.6, 0.36, 1, 0.52, lambda h, s, v: v > 0.46),
+        "band": (0.3, 0.5, 1, 0.64),
+        "band_light": (0.3, 0.5, 1, 0.64, lambda h, s, v: v > 0.6),
+        "band_pink": (0.3, 0.48, 1, 0.64, lambda h, s, v: ((h < 30) | (h > 310)) & (s > 0.12) & (v > 0.48)),
+        "band_green": (0.3, 0.5, 1, 0.64, green),
+        "water": (0.3, 0.62, 0.95, 0.68, russet),
+        "water_dark": (0.5, 0.82, 0.95, 0.98, lambda h, s, v: v < 0.5),
+        "water_gold": (0.3, 0.62, 0.7, 0.9, yellowgreen),
+        "pads_far": (0.15, 0.67, 1, 0.78, lambda h, s, v: (h > 150) & (h < 300)),
+        "pads": (0.0, 0.76, 1, 1.0, teal),
+        "pads_light": (0.0, 0.76, 1, 1.0, lambda h, s, v: (h > 125) & (h < 230) & (v > 0.55)),
+        "pads_green": (0.0, 0.7, 1, 1.0, green),
+        "bloom": (0.1, 0.74, 1, 1.0, lambda h, s, v: (v > 0.6) & ((h > 220) | (h < 30) | (s < 0.15))),
+        "gold": (0.0, 0.5, 0.2, 0.75, yellowgreen),
+    })
+
+
+# ─── Where things are ─────────────────────────────────────────────────────────
+
+def ell(x, y, cx, cy, rx, ry):
+    return np.sqrt(((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2) - 1
+
+
+def pond(x, y):
+    """Negative on the water."""
+    x, y = np.asarray(x, float), np.asarray(y, float)
+    d = np.minimum(ell(x, y, 2.0, 5.2, 10.5, 4.9), ell(x, y, 3.4, 11.5, 11.0, 6.0))
+    # the left bank leans in, as in the painting
+    d = np.maximum(d, -ell(x, y, -6.6, 4.6, 4.3, 3.4) * 0.8)
     return d
 
 
-def in_pond(x, y, margin=0.0):
-    return pond_sdf(np.array(x), np.array(y)) < -margin
+def reflect(paths):
+    p = paths.copy()
+    p[..., 2] = -p[..., 2]
+    return p
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────────────
+# ─── The foliage that closes the picture ──────────────────────────────────────
 
-def principled_mat(name, color, roughness=0.5, specular=0.5, translucent=0.0, attr=None, attr_dark=None):
-    """Principled material; with attr, colour varies by a 0..1 attribute."""
-    mat, nt, out = C.new_material(name)
-    bsdf = C.principled(nt)
-    bsdf.inputs["Roughness"].default_value = roughness
-    bsdf.inputs["Specular IOR Level"].default_value = specular
-    if attr:
-        a = C.node(nt, "ShaderNodeAttribute", -500, 100)
-        a.attribute_name = attr
-        col = C.mix_color(nt, attr_dark, color, a.outputs["Fac"], x=-200, y=100)
-        nt.links.new(col, bsdf.inputs["Base Color"])
-    else:
-        bsdf.inputs["Base Color"].default_value = (*color, 1)
-    if translucent > 0:
-        trans = C.node(nt, "ShaderNodeBsdfTranslucent", 200, -250)
-        if attr:
-            nt.links.new(col, trans.inputs["Color"])
-        else:
-            trans.inputs["Color"].default_value = (*color, 1)
-        mix = C.node(nt, "ShaderNodeMixShader", 450, 0)
-        mix.inputs[0].default_value = translucent
-        nt.links.new(bsdf.outputs[0], mix.inputs[1])
-        nt.links.new(trans.outputs[0], mix.inputs[2])
-        nt.links.new(mix.outputs[0], out.inputs["Surface"])
-    else:
-        nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
-    return mat
+def light_tree(yaw, pitch):
+    """Where the pale flowering tree of the painting's upper right stands, and others like it round about."""
+    s = np.zeros(np.shape(yaw))
+    for cy, cp, ry, rp, k in ((33, 33, 23, 13, 1.0), (-58, 36, 17, 10, 0.55), (112, 30, 26, 15, 0.8), (-135, 27, 24, 13, 0.75), (178, 38, 18, 12, 0.6)):
+        dy = (yaw - cy + 180) % 360 - 180
+        s = np.maximum(s, k * np.exp(-((dy / ry) ** 2 + ((pitch - cp) / rp) ** 2)))
+    return s
 
 
-def obj_from_bm(name, bm, coll, mat=None, smooth=True):
-    mesh = bpy.data.meshes.new(name)
+def depth_of(yaw, pitch):
+    """Light and dark in big masses: darkest straight ahead behind the bridge and overhead."""
+    big = mood(np.asarray(yaw) * 0.6, np.asarray(pitch) * 0.6, 201)
+    up = P.smoothstep(38, 80, np.asarray(pitch))
+    return (0.66 + 0.46 * big) * (1 - 0.34 * up)
+
+
+def foliage(pal, layers):
+    dome, mirror = layers["foliage"], layers["mirror"]
+
+    def lay(yaw, pitch, dist, angle, length, width, colours, bend, lift=0.0, mirrored=True, dim=0.8, body=0.75):
+        paths, w = on_dome(yaw, pitch, dist, angle, length, width, bend)
+        dome.add(paths, w, colours, lift, body)
+        if mirrored:
+            # what stands above the water stands in it too: darker, warmer, and drawn downwards
+            low = (pitch > -2) & (rng.random(len(yaw)) < 0.85)
+            r = reflect(paths[low])
+            mid = r.mean(1, keepdims=True)
+            r = mid + (r - mid) * np.array([0.75, 0.75, 1.5])
+            warm = pal.pick("water", int(low.sum()), 0.3)
+            mirror.add(r, w[low] * 1.25, colours[low] * dim * 0.5 + warm * 0.45, lift, body * 0.85)
+
+    # underpainting: russet and umber, broad and upright
+    for density, (lw, ll), dist, val in ((26000, (1.7, 6.5), 34, 0.3), (30000, (1.2, 5.0), 31, 0.42)):
+        yaw, pitch = scatter(density, (-180, 180), (-4, 90))
+        m = mood(yaw, pitch, 5)
+        col = np.where((m > 0.52)[:, None], pal.pick("shade", density, val * m * 1.4), pal.pick("russet", density, val * (1 - m)))
+        col = col * depth_of(yaw, pitch)[:, None]
+        angle = 90 + rng.normal(0, 13 + 60 * P.smoothstep(50, 78, pitch), density)
+        lay(yaw, pitch, np.full(density, float(dist)), angle, ll * rng.uniform(0.6, 1.4, density), lw * rng.uniform(0.7, 1.3, density), col, rng.normal(0, 0.25, density))
+
+    # body: broken greens, violets and reds over it, finer
+    n = 74000
+    yaw, pitch = scatter(n, (-180, 180), (-3, 88))
+    m, g = mood(yaw, pitch, 17), mood(yaw, pitch, 31)
+    # each passage has its own colour; the others only break it
+    own = np.where((m > 0.6)[:, None], pal.mixed({"willow_dark": 1, "reeds_dark": 3, "shade": 2}, n), np.where((m < 0.38)[:, None], pal.mixed({"russet": 4, "shade": 2}, n), pal.pick("shade", n)))
+    other = pal.mixed({"willow_dark": 2, "russet": 2, "bridge": 1, "lilac": 0.12, "grass": 0.6}, n)
+    col = np.where((rng.random(n) < 0.72)[:, None], own, other)
+    col = col * (0.62 + 0.5 * g)[:, None] * depth_of(yaw, pitch)[:, None]
+    dist = 25 + 5 * m
+    angle = 90 + rng.normal(0, 16 + 55 * P.smoothstep(50, 78, pitch), n) + (m - 0.5) * 40
+    lay(yaw, pitch, dist, angle, rng.uniform(1.4, 4.0, n), rng.uniform(0.4, 1.0, n), col, rng.normal(0, 0.4, n), body=0.55)
+
+    # hanging threads: the upright streaks that make the dark read as a curtain of willow
+    n = 11000
+    yaw, pitch = scatter(n, (-180, 180), (2, 66))
+    curtain = mood(yaw * 1.0, pitch * 0.2, 47)
+    keep = curtain > 0.42
+    yaw, pitch = yaw[keep], pitch[keep]
+    n = len(yaw)
+    col = pal.mixed({"willow_dark": 3, "reeds_dark": 1.5, "shade": 2.5, "lilac": 0.25, "gold": 0.35}, n) * rng.uniform(0.7, 1.1, (n, 1)) * depth_of(yaw, pitch)[:, None]
+    lay(yaw, pitch, rng.uniform(19, 23, n), 90 + rng.normal(0, 5, n), rng.uniform(2.5, 6.5, n), rng.uniform(0.2, 0.5, n), col, rng.normal(0, 0.12, n), body=0.5)
+
+    # the pale trees: curling dabs of cream, rose and grey-green
+    n = 74000
+    yaw, pitch = scatter(n, (-180, 180), (8, 62))
+    s = light_tree(yaw, pitch) * (0.55 + 0.9 * mood(yaw * 2.4, pitch * 2.4, 71))
+    keep = rng.random(n) < np.clip((s - 0.3) * 1.25, 0, 0.85)
+    yaw, pitch = yaw[keep], pitch[keep]
+    n = len(yaw)
+    clump = mood(yaw * 5, pitch * 5, 73)
+    col = np.where((clump > 0.5)[:, None], pal.pick("light_tree", n, 0.25 + 0.65 * clump), pal.mixed({"grass": 2, "shade": 1.4, "willow_dark": 1.2}, n))
+    lay(yaw, pitch, 17 + 3 * rng.random(n), rng.uniform(0, 180, n), rng.uniform(0.6, 1.7, n), rng.uniform(0.28, 0.7, n), col, rng.normal(0, 1.3, n), body=0.75)
+
+    # willow streamers: the yellow-green falls through the middle of the picture, and round about
+    groups = [(-4.5, 4.6, 30, 0.95), (3.4, 2.2, 22, 1.0), (-13, 3.0, 9, 0.5), (-74, 7, 34, 0.7), (69, 5, 24, 0.7), (126, 7, 30, 0.65), (-120, 7, 34, 0.7), (163, 5, 20, 0.5), (-158, 5, 24, 0.55), (98, 4, 10, 0.5)]
+    for cy, spread, threads, strength in groups:
+        for _ in range(threads):
+            y0 = cy + rng.normal(0, spread * 0.5)
+            top, low = rng.uniform(26, 62), rng.uniform(-1.5, 9)
+            m = max(2, int((top - low) / 2.6))
+            pitch = np.linspace(top, low, m) + rng.normal(0, 0.7, m)
+            keep = rng.random(m) < 0.5
+            pitch = pitch[keep]
+            m = len(pitch)
+            if not m:
+                continue
+            yaw = y0 + rng.normal(0, 0.35, m) + np.linspace(0, rng.normal(0, 1.2), m)
+            bright = np.clip(strength * (0.95 - np.abs(pitch - 20) / 70) + rng.normal(0, 0.2, m), 0, 1)
+            pick = rng.random(m) < 0.6 * strength
+            col = np.where(pick[:, None], pal.pick("willow", m, bright), pal.mixed({"willow_dark": 3, "russet": 1, "gold": 1}, m))
+            lay(yaw, pitch, np.full(m, rng.uniform(14.5, 17.5)), 90 + rng.normal(0, 4, m), rng.uniform(1.8, 4.4, m), rng.uniform(0.3, 0.66, m), col, rng.normal(0, 0.14, m), dim=1.2, body=0.8)
+
+    # the few places where light comes through: lilac, low on the left and here and there above
+    n = 340
+    spots = np.array([(-45, 30), (-47, 22), (-25, 26), (-23, 22), (64, 40), (-95, 44), (140, 46), (-170, 48), (88, 24)])
+    s = spots[rng.integers(0, len(spots), n)]
+    yaw, pitch = s[:, 0] + rng.normal(0, 1.9, n), s[:, 1] + rng.normal(0, 4.0, n)
+    lay(yaw, pitch, np.full(n, 16.5), 90 + rng.normal(0, 8, n), rng.uniform(1.2, 3.4, n), rng.uniform(0.35, 0.7, n), pal.pick("lilac", n), rng.normal(0, 0.2, n))
+
+
+# ─── The bridge ───────────────────────────────────────────────────────────────
+
+def deck(x):
+    return 1.0 + 1.55 * (1 - ((x - BRIDGE_X) / BRIDGE_HALF) ** 2)
+
+
+def bridge(pal, layers):
+    out, mirror = layers["bridge"], layers["mirror"]
+
+    def lay(paths, widths, colours, lift=0.0, reflected=0.8):
+        out.add(paths, widths, colours, lift)
+        keep = rng.random(len(paths)) < reflected
+        r = reflect(paths[keep])
+        r[..., 2] += rng.normal(0, 0.05, len(r))[:, None]
+        mirror.add(r, np.broadcast_to(widths, len(paths))[keep], colours[keep] * 0.6 + pal.pick("water_dark", int(keep.sum())) * 0.28, 0.02)
+
+    def beam(y, dz, width, count, names, value, lift=0.0, length=(0.7, 1.6), jitter=0.035):
+        """Strokes running along the arch."""
+        x = rng.uniform(BRIDGE_X - BRIDGE_HALF, BRIDGE_X + BRIDGE_HALF, count)
+        L = rng.uniform(*length, count)
+        t = np.linspace(-0.5, 0.5, K)
+        px = np.clip(x[:, None] + t[None] * L[:, None], BRIDGE_X - BRIDGE_HALF, BRIDGE_X + BRIDGE_HALF)
+        pz = deck(px) + dz + rng.normal(0, jitter, count)[:, None]
+        paths = np.stack([px, np.full_like(px, y) + rng.normal(0, 0.02, count)[:, None], pz], -1)
+        w = width * rng.uniform(0.6, 1.15, count)
+        col = pal.mixed(names, count) * (value * rng.uniform(0.85, 1.15, (count, 1)))
+        lay(paths, w, np.clip(col, 0, 1), lift)
+
+    for y, far in ((BRIDGE_Y + 0.95, True), (BRIDGE_Y - 0.95, False)):
+        k = 0.72 if far else 1.0
+        # the body of the arch, dark green over red, then blue
+        beam(y, -0.16, 0.2, 260, {"bridge_under": 2, "bridge": 2}, 0.8 * k, 0.0)
+        beam(y, -0.08, 0.15, 300, {"bridge": 3, "reeds_dark": 1.5, "grass": 0.4}, 0.8 * k, 0.004)
+        beam(y, -0.26, 0.09, 130, {"bridge_under": 3, "russet": 1}, 1.05 * k, 0.006)
+        # rails: each a few strokes thick, blue-green with a violet side and a lit edge
+        for dz, w in ((0.62, 0.13), (1.2, 0.2)):
+            beam(y, dz, w * 1.2, 240, {"bridge": 4, "bridge_under": 1.2, "shade": 1}, 0.62 * k, 0.004)
+            beam(y, dz + 0.012, w * 0.6, 170, {"bridge": 5, "bridge_under": 0.8}, 0.84 * k, 0.009)
+            if not far:
+                beam(y, dz + w * 0.46, w * 0.26, 74 if dz > 1 else 30, {"bridge_light": 3, "lilac": 1}, 1.0, 0.013, (0.25, 0.9), 0.012)
+        # posts
+        for x in np.arange(BRIDGE_X - BRIDGE_HALF + 0.5, BRIDGE_X + BRIDGE_HALF, 2.45):
+            n = 15
+            z0, z1 = deck(x) - 0.3, deck(x) + 1.26
+            c = np.stack([x + rng.normal(0, 0.04, n), np.full(n, y - 0.02), rng.uniform(z0 + 0.2, z1 - 0.2, n)], -1)
+            p = along(c, np.tile([0.0, 0, 1], (n, 1)), rng.uniform(0.4, 0.8, n), rng.normal(0, 0.1, n))
+            lay(p, rng.uniform(0.09, 0.16, n), pal.mixed({"bridge": 4, "bridge_under": 1.4, "shade": 1}, n) * 0.74 * k, 0.012)
+    # planks seen from below and along
+    n = 520
+    x = rng.uniform(BRIDGE_X - BRIDGE_HALF, BRIDGE_X + BRIDGE_HALF, n)
+    y0 = rng.uniform(BRIDGE_Y - 0.9, BRIDGE_Y + 0.9, n)
+    c = np.stack([x, y0, deck(x) - 0.05], -1)
+    lay(along(c, np.tile([0.0, 1, 0.02], (n, 1)), rng.uniform(0.5, 1.0, n)), 0.12, pal.mixed({"bridge_under": 2, "bridge": 1, "russet": 2}, n) * 0.75, 0.0)
+    # piers
+    for x in (BRIDGE_X - 4.6, BRIDGE_X + 4.2):
+        for y in (BRIDGE_Y - 0.85, BRIDGE_Y + 0.85):
+            n = 16
+            c = np.stack([x + rng.normal(0, 0.04, n), np.full(n, y), rng.uniform(0.1, deck(x) - 0.4, n)], -1)
+            lay(along(c, np.tile([0.0, 0, 1], (n, 1)), rng.uniform(0.4, 0.9, n)), 0.13, pal.mixed({"bridge": 3, "russet": 2}, n) * 0.7, 0.004)
+
+
+# ─── The water ────────────────────────────────────────────────────────────────
+
+def on_water(n, yaw=(-100, 100), pitch=(-82, -5.2), power=1.0):
+    """Points of the pond, evenly over the view, with their distance along the water."""
+    y, p = scatter(n, yaw, pitch)
+    r = EYE[2] / np.tan(-p * RAD)
+    x, yy = np.sin(y * RAD) * r, np.cos(y * RAD) * r
+    keep = pond(x, yy) < -0.015
+    return x[keep], yy[keep], r[keep], p[keep]
+
+
+def flat_strokes(x, y, r, size, aspect, wander=0.16):
+    """Marks lying on the water, across the view: paths and widths, foreshortened."""
+    n = len(x)
+    c = np.stack([x, y, np.full(n, 0.004)], -1)
+    across = np.stack([y, -x, np.zeros(n)], -1) / np.maximum(np.hypot(x, y), 1e-6)[:, None]
+    away = np.stack([x, y, np.zeros(n)], -1) / np.maximum(np.hypot(x, y), 1e-6)[:, None]
+    side = P.smoothstep(34, 85, np.abs(np.degrees(np.arctan2(x, y))))[:, None]
+    level = np.array([1.0, 0, 0]) * (1 - side) + across * side * np.sign(across[:, :1] + 1e-9)
+    d = level + away * rng.normal(0, wander, n)[:, None]
+    dist = np.hypot(r, EYE[2])
+    w = np.maximum(size * aspect * (EYE[2] / dist) * 1.25, 0.0042 * dist)
+    return along(c, d, size, rng.normal(0, 0.22, n)), w
+
+
+def cover(x, y):
+    """How crowded with pads the water is, 0..1: drifts lying across the view, open water between them."""
+    drift = fbm(np.stack([x * 0.16 + 3.1, y * 0.62], -1), 3, 7)
+    c = np.clip((drift - 0.5) * 4.2 + 0.56, 0, 1)
+    # the open, russet water in front of and under the bridge, and a dark pool by the landing on the right
+    c *= 1 - 0.96 * np.exp(-(((y - 7.9 + 0.5 * np.sin(x * 0.9) + 0.3 * np.sin(x * 2.3 + 1)) / 0.6) ** 2))
+    c *= 1 - 0.97 * np.exp(-(((x - 1.5) / 1.35) ** 2 + ((y - 3.0) / 0.5) ** 2))
+    c *= 1 - 0.9 * np.exp(-(((x + 0.1) / 1.1) ** 2 + ((y - 5.1) / 0.45) ** 2))
+    c *= 1 - 0.5 * np.exp(-(((x + 2.6) / 0.8) ** 2 + ((y - 3.4) / 0.4) ** 2))
+    # ragged edges
+    c = c + 0.5 * (fbm(np.stack([x * 1.1 + 9, y * 3.4], -1), 2, 13) - 0.5)
+    # beyond the bridge the pads close up
+    far = P.smoothstep(8.4, 9.4, y)
+    return c * (1 - far) + far * np.clip(0.7 + 0.5 * drift, 0, 1)
+
+
+def lilies(pal, layers):
+    glaze, pads, blooms = layers["glaze"], layers["pads"], layers["blooms"]
+
+    # open water: thin russet and green drawn across, broken so the reflections show
+    for count, names, long, thick, body in ((26000, {"water": 5, "water_dark": 1.5, "russet": 1}, (0.05, 0.15), 0.02, 0.5), (9000, {"water": 4, "band_pink": 0.6, "pads_far": 0.8, "lilac": 0.2}, (0.03, 0.09), 0.009, 0.45)):
+        x, y, r, _ = on_water(count)
+        n = len(x)
+        # the reflections keep to the pools where the willow falls; elsewhere the surface is closed
+        willow = np.exp(-(((np.degrees(np.arctan2(x, y)) + 1) / 7.5) ** 2))
+        keep = rng.random(n) < 0.62 - 0.46 * willow
+        x, y, r = x[keep], y[keep], r[keep]
+        n = len(x)
+        dist = np.hypot(r, 1.75)
+        p, _ = flat_strokes(x, y, r, dist * rng.uniform(*long, n), 0.2, 0.04)
+        light = 0.82 + 0.3 * np.exp(-(((y - 7.6) / 1.0) ** 2))
+        glaze.add(p, dist * thick * rng.uniform(0.5, 1.2, n) * np.clip(1.75 / dist * 2.2, 0.35, 1.2), pal.mixed(names, n) * (light * rng.uniform(0.85, 1.08, n))[:, None], 0.0, body)
+
+    # pads: first their shadows, then the turquoise and violet dabs, then the lights
+    for kind, count, scale in (("under", 90000, 1.12), ("body", 190000, 1.0), ("light", 80000, 0.72)):
+        x, y, r, pitch = on_water(count)
+        c = cover(x, y)
+        n = len(x)
+        want = {"under": 0.5, "body": 0.62, "light": 0.36}[kind]
+        # fewer towards us: single marks with the dark water between them
+        close = 1 - 0.34 * P.smoothstep(4.4, 1.6, y) * (kind != "under")
+        keep = rng.random(n) < np.clip((c - 0.34) * 1.5, 0, 1) * want * close
+        x, y, r, c = x[keep], y[keep], r[keep], c[keep]
+        n = len(x)
+        dist = np.hypot(r, 1.75)
+        far = P.smoothstep(8.0, 9.6, y)
+        # the same hand near and far: marks shrink, but never below what the brush can do
+        size = np.maximum(rng.uniform(0.1, 0.34, n) * scale * (1 + 0.5 * far), dist * rng.uniform(0.01, 0.022, n))
+        # at our feet the brush is no bigger than it is further off
+        size = np.minimum(size, dist * rng.uniform(0.028, 0.062, n))
+        p, w = flat_strokes(x, y, r, size, rng.uniform(0.26, 0.54, n) * (1 - 0.35 * far))
+        mid = P.smoothstep(3.2, 4.8, y) * (1 - far)
+        near_c = {"under": {"water_dark": 2, "pads_green": 3, "reeds_dark": 1}, "body": {"pads": 6, "pads_green": 1.2, "pads_light": 1.4, "water_dark": 0.8, "pads_far": 1}, "light": {"pads_light": 5, "bloom": 0.35}}[kind]
+        mid_c = {"under": {"water_dark": 3, "bridge": 2}, "body": {"pads_far": 8, "pads": 1.2, "lilac": 1.2, "pads_green": 1, "russet": 0.6}, "light": {"pads_far": 2, "pads_light": 2, "lilac": 1}}[kind]
+        far_c = {"under": {"band_green": 3, "band": 2, "russet": 1}, "body": {"band": 2.5, "band_green": 2, "band_light": 4, "band_pink": 1.4}, "light": {"band_light": 5, "band_pink": 3}}[kind]
+        roll = rng.random(n)
+        pick = np.where(roll < far, 2, np.where(roll < far + mid * 0.8, 1, 0))
+        col = np.empty((n, 3))
+        for i, weights in enumerate((near_c, mid_c, far_c)):
+            m = pick == i
+            col[m] = pal.mixed(weights, int(m.sum()))
+        col *= rng.uniform(0.82, 1.05, (n, 1)) * (0.74 if kind == "under" else 1.0)
+        col[far > 0.5] *= 1.28
+        pads.add(p, w, np.clip(col, 0, 1), {"under": 0.0, "body": 0.008, "light": 0.016}[kind], {"under": 0.6, "body": 0.78, "light": 0.85}[kind])
+
+    # single strokes of young leaf: the light green notes of the painting
+    x, y, r, _ = on_water(2600)
+    keep = (cover(x, y) > 0.4) & (rng.random(len(x)) < 0.16)
+    x, y, r = x[keep], y[keep], r[keep]
+    n = len(x)
+    p, w = flat_strokes(x, y, r, np.maximum(rng.uniform(0.14, 0.26, n), np.hypot(r, 1.75) * 0.018), 0.45)
+    pads.add(p, w, pal.mixed({"gold": 2, "grass_light": 1, "willow": 1}, n), 0.018)
+
+    # water lilies: a loose rosette of petals, lit from above
+    x, y, r, _ = on_water(1500, yaw=(-75, 80))
+    c = cover(x, y)
+    keep = (c > 0.5) & (rng.random(len(x)) < np.where(y > 8.5, 0.6, 0.2))
+    x, y, r = x[keep], y[keep], r[keep]
+    for bx, by, br in zip(x, y, r):
+        dist = math.hypot(br, 1.75)
+        far = by > 8.5
+        s = min(max(rng.uniform(0.07, 0.12), dist * (0.011 if far else 0.014)), dist * 0.04)
+        m = 5 if far else int(rng.integers(9, 15))
+        a = rng.uniform(0, math.pi * 2, m)
+        rad = s * rng.uniform(0.1, 0.75, m)
+        c3 = np.stack([bx + np.cos(a) * rad, by + np.sin(a) * rad * 0.8, 0.03 + rng.uniform(0.0, 0.75, m) * s], -1)
+        d = np.stack([np.cos(a), np.sin(a) * 0.6, 0.3 + 0.5 * rng.random(m)], -1)
+        col = pal.mixed({"band_pink": 3, "band_light": 2} if far else ({"bloom": 5, "lilac": 1} if rng.random() < 0.62 else {"band_pink": 3, "bloom": 2}), m)
+        blooms.add(along(c3, d, s * rng.uniform(0.6, 1.0, m), rng.normal(0, 0.7, m)), s * rng.uniform(0.34, 0.6, m), col, 0.02, 0.95)
+        if not far:
+            # its heart, and its reflection
+            blooms.add(along(c3[:2] + [0, 0, s * 0.2], d[:2], np.full(2, s * 0.35)), s * 0.22, pal.pick("gold", 2), 0.024)
+            k = 3
+            cr = np.stack([bx + rng.normal(0, s * 0.3, k), by - s * 0.55 + rng.normal(0, s * 0.1, k), np.full(k, 0.006)], -1)
+            pads.add(along(cr, np.tile([1.0, 0, 0], (k, 1)), np.full(k, s * 0.9)), s * 0.12, pal.pick("bloom", k) * 0.7, 0.02)
+
+
+# ─── Banks, reeds and flowers ─────────────────────────────────────────────────
+
+def blades(pal, layer, mirror, x, y, height, names, hook=(0.2, 1.1), width=0.02, lean_to=None, lift=0.0, value=1.0, base=None):
+    """Blades that rise and hook over."""
+    n = len(x)
+    if not n:
+        return
+    a = rng.uniform(0, math.pi * 2, n) if lean_to is None else lean_to + rng.normal(0, 0.6, n)
+    h = height * rng.uniform(0.6, 1.25, n)
+    bend = rng.uniform(*hook, n)
+    t = np.linspace(0, 1, K)[None, :]
+    # a curve from the root, through a knee, to a tip that falls the more it bends
+    b = bend[:, None]
+    up = 2 * t * (1 - t) * (0.95 + 0.1 * b) + t * t * (1.0 - 0.62 * np.minimum(b, 1.6))
+    out = 2 * t * (1 - t) * 0.16 * b + t * t * 0.55 * b
+    z0 = BANK - 0.08 if base is None else base
+    p = np.stack([x[:, None] + np.cos(a)[:, None] * out * h[:, None], y[:, None] + np.sin(a)[:, None] * out * h[:, None], np.broadcast_to(z0, n)[:, None] + up * h[:, None]], -1)
+    dist = np.hypot(x, y)
+    w = np.maximum(width * rng.uniform(0.7, 1.4, n), dist * 0.0042)
+    col = np.clip(pal.mixed(names, n) * value * rng.uniform(0.85, 1.12, (n, 1)), 0, 1)
+    layer.add(p, w, col, lift)
+    near = (pond(x, y) < 0.12) & (rng.random(n) < 0.5)
+    mirror.add(reflect(p[near]), w[near], col[near] * 0.55 + pal.pick("water_dark", int(near.sum())) * 0.25)
+
+
+def banks(pal, layers):
+    ground, reeds, mirror = layers["ground"], layers["reeds"], layers["mirror"]
+
+    # the ground: short marks lying on it, dark near the water
+    for density, value, size in ((26000, 0.8, 1.0), (34000, 1.0, 0.7)):
+        yaw, pitch = scatter(density, (-180, 180), (-62, -2.6))
+        r = (EYE[2] - BANK) / np.tan(-pitch * RAD)
+        x, y = np.sin(yaw * RAD) * r, np.cos(yaw * RAD) * r
+        keep = (pond(x, y) > 0.0) & ~((np.abs(x) < 1.15) & (y > -1.7) & (y < 0.85)) & (r < 30)
+        x, y, r = x[keep], y[keep], r[keep]
+        n = len(x)
+        dist = np.hypot(r, 1.6)
+        c = np.stack([x, y, np.full(n, BANK)], -1)
+        across = np.stack([y, -x, np.zeros(n)], -1) / np.maximum(np.hypot(x, y), 1e-6)[:, None]
+        d = across + rng.normal(0, 0.45, (n, 3)) * [1, 1, 0.6]
+        path = np.abs(np.hypot(x * 1.05, y + 7.5) - 4.6) < 0.8  # a walk that goes round behind us
+        tone = fbm(np.stack([x, y], -1) * 0.5, 3, 91)
+        green = pal.mixed({"reeds_dark": 3, "grass": 3, "pads_green": 1.4, "russet": 1.2, "gold": 0.4}, n) * (0.55 + 0.85 * tone)[:, None]
+        walk = pal.mixed({"water": 4, "band_light": 1.2, "lilac": 1.2, "russet": 1}, n) * (0.75 + 0.4 * tone)[:, None]
+        col = np.where(path[:, None], walk, green) * value
+        ground.add(along(c, d, dist * rng.uniform(0.03, 0.09, n) * size, rng.normal(0, 0.4, n)), dist * rng.uniform(0.009, 0.02, n) * size, np.clip(col, 0, 1), 0.0 if value < 1 else 0.004, 0.6)
+
+    # reeds of the left bank, as in the painting: a dark mass, then pale blades hooking over it
+    def ring(n, lo=-0.03, hi=0.2, box=(-26, 26, -9, 22)):
+        x, y = rng.uniform(box[0], box[1], n * 6), rng.uniform(box[2], box[3], n * 6)
+        d = pond(x, y)
+        ok = (d > lo) & (d < hi) & (np.hypot(x, y) > 2.1)
+        ok &= ~((np.abs(y - BRIDGE_Y) < 1.5) & (x > BRIDGE_X - BRIDGE_HALF - 0.4) & (x < BRIDGE_X + BRIDGE_HALF + 0.4))
+        return x[ok][:n], y[ok][:n]
+
+    left = (-8.2, -2.3, 1.7, 7.0)
+    x, y = ring(5200, -0.02, 0.9, left)
+    blades(pal, reeds, mirror, x, y, 1.5, {"reeds_dark": 5, "russet": 2, "bridge": 0.6}, (0.1, 0.9), 0.05, 0.2, 0.0, 0.72)
+    # a rounded mass, higher away from the water: short hooked touches all through it
+    for n, names, ht, w, lift, val in ((6500, {"reeds_dark": 4, "reeds": 1.5, "russet": 1}, 0.6, 0.045, 0.004, 0.85), (5200, {"reeds": 5, "grass": 1}, 0.55, 0.03, 0.008, 1.0), (3600, {"reeds_light": 4, "grass_light": 1, "gold": 0.5}, 0.5, 0.026, 0.012, 1.05)):
+        x, y = ring(n, -0.02, 0.8, left)
+        m = len(x)
+        rise = np.clip(pond(x, y) * 3.6, 0.1, 1) * (2.1 + 0.6 * np.sin(x * 2.1 + y * 1.3)) * (0.55 + 0.45 * P.smoothstep(-2.4, -4.2, x))
+        blades(pal, reeds, mirror, x, y, ht, names, (0.9, 1.9), w, rng.choice([0.1, 0.5, 2.6], m), lift, val, BANK + rise * np.sqrt(rng.random(m)))
+    # the few large curling leaves at the near corner
+    x, y = ring(150, -0.02, 0.5, (-4.2, -1.9, 1.2, 3.2))
+    blades(pal, reeds, mirror, x, y, 1.0, {"gold": 3, "reeds_light": 2, "willow": 1}, (1.1, 1.9), 0.03, 0.5, 0.014)
+
+    # the far right bank: a bright tuft of grass under the bridge
+    for n, names, h, w, lift, val in ((4200, {"grass": 4, "reeds_dark": 2, "willow_dark": 1}, 1.2, 0.03, 0, 0.75), (3800, {"grass": 4, "gold": 0.8, "reeds": 1}, 1.4, 0.028, 0.004, 1.0), (1500, {"grass_light": 4, "gold": 0.6}, 1.5, 0.022, 0.008, 1.0)):
+        x, y = ring(n, -0.05, 0.32, (4.6, 16, 9.8, 19))
+        h = h * (0.7 + 1.0 * np.sin(x * 0.55 + 0.6) ** 2 + 0.3 * np.sin(x * 2.9) ** 2)
+        blades(pal, reeds, mirror, x, y, h, names, (0.1, 0.8), w, None, lift, val)
+
+    # everywhere else along the shore
+    for n, names, h, lift, val in ((9000, {"reeds_dark": 3, "reeds": 2, "grass": 2, "russet": 1}, 1.0, 0, 0.8), (7500, {"reeds": 3, "grass": 3, "pads_green": 1}, 1.1, 0.004, 1.0), (2400, {"reeds_light": 3, "grass_light": 2, "gold": 1}, 1.2, 0.008, 1.0)):
+        x, y = ring(n)
+        # straight ahead the far shore stays dark under the bridge
+        shade = 1 - 0.5 * np.exp(-((x / 4.2) ** 2)) * (y > 10)
+        blades(pal, reeds, mirror, x, y, h * (0.45 + 0.45 * shade + 0.5 * vnoise(np.stack([x, y], -1) * 0.8, 66)), names, (0.15, 1.1), 0.024, None, lift, val * shade[:, None])
+
+    # the garden behind us: beds of flowers in drifts, shrubs, and irises by the water
+    beds = layers["flowers"]
+    spots = []
+    for _ in range(260):
+        a, r = rng.uniform(0, math.pi * 2), rng.uniform(4.2, 15)
+        x, y = math.cos(a) * r, math.sin(a) * r - 1.5
+        if pond(np.array(x), np.array(y)) < 0.18 or abs(math.hypot(x * 1.05, y + 7.5) - 4.6) < 1.1 or math.hypot(x, y) < 3.4:
+            continue
+        spots.append((x, y, rng.uniform(0.55, 1.5)))
+    mixes = [{"band_pink": 4, "band_light": 1}, {"lilac": 3, "pads_far": 2, "bloom": 2}, {"light_tree": 4, "grass_light": 1}, {"russet": 2, "band_pink": 2}, {"gold": 3, "light_tree": 2}, {"bloom": 4, "band_light": 2}]
+    for x, y, s in spots:
+        dist = math.hypot(x, y)
+        tall = s * rng.uniform(0.7, 1.7) * (1 + 0.05 * dist)
+        m = int(230 * s)
+        u = rng.random(m) ** 0.5
+        th = rng.uniform(0, math.pi * 2, m)
+        ph = rng.random(m)
+        c = np.stack([x + np.cos(th) * s * u * np.cos(ph), y + np.sin(th) * s * u * np.cos(ph), BANK + tall * np.sin(ph * 1.4) * rng.uniform(0.35, 1, m)], -1)
+        shade = 0.5 + 0.6 * (c[:, 2] - BANK) / tall
+        col = pal.mixed({"reeds_dark": 2, "grass": 3, "willow_dark": 1, "shade": 1.5}, m) * shade[:, None]
+        d = rng.normal(0, 1, (m, 3)) + [0, 0, 1.1]
+        beds.add(along(c, d, dist * rng.uniform(0.022, 0.05, m), rng.normal(0, 0.6, m)), dist * rng.uniform(0.008, 0.015, m), np.clip(col, 0, 1))
+        if rng.random() < 0.72:
+            f = int(m * rng.uniform(0.25, 0.7))
+            top = np.argsort(-(c[:, 2] + rng.normal(0, tall * 0.25, m)))[:f]
+            mixw = mixes[int(fbm(np.array([[x * 0.19 + 5, y * 0.19]]), 2, 55)[0] * 2.2 * len(mixes)) % len(mixes)]
+            beds.add(along(c[top] + [0, 0, 0.03], rng.normal(0, 1, (f, 3)), dist * rng.uniform(0.012, 0.028, f), rng.normal(0, 0.9, f)), dist * rng.uniform(0.008, 0.015, f), pal.mixed(mixw, f) * rng.uniform(0.85, 1.1, (f, 1)), 0.02)
+    x, y = ring(420, 0.0, 0.16, (-9, 12, -2, 6))
+    n = len(x)
+    c = np.stack([x, y, BANK + rng.uniform(0.55, 1.0, n)], -1)
+    for _ in range(3):
+        beds.add(along(c + rng.normal(0, 0.03, (n, 3)), rng.normal(0, 1, (n, 3)) + [0, 0, 0.6], rng.uniform(0.07, 0.13, n), rng.normal(0, 0.8, n)), 0.045, pal.mixed({"lilac": 2, "pads_far": 3, "bloom": 1}, n), 0.03)
+
+
+def landing(pal, layers):
+    out = layers["landing"]
+    for i in range(8):
+        x0 = -1.12 + i * 0.28
+        for lift, count, width, names, value in ((0.0, 70, 0.13, {"russet": 3, "shade": 4}, 0.8), (0.004, 120, 0.055, {"russet": 3, "water": 2, "shade": 3}, 0.95), (0.008, 60, 0.03, {"water": 3, "shade": 1, "band_light": 0.5, "lilac": 0.8}, 0.95)):
+            c = np.stack([x0 + 0.14 + rng.uniform(-0.1, 0.1, count), rng.uniform(-1.6, 0.75, count), np.full(count, BANK + 0.1)], -1)
+            out.add(along(c, np.tile([0.0, 1, 0], (count, 1)) + rng.normal(0, 0.02, (count, 3)) * [1, 1, 0], rng.uniform(0.2, 0.55, count)), width * rng.uniform(0.6, 1.1, count), (pal.mixed(names, count) * 0.45 + np.array([0.44, 0.34, 0.31]) * 0.55) * value * rng.uniform(0.82, 1.12, (count, 1)) * (0.9 + 0.16 * (i % 2)), lift, 0.8)
+        # the gap between two boards
+        m = 7
+        c = np.stack([np.full(m, x0), np.linspace(-1.5, 0.65, m), np.full(m, BANK + 0.1)], -1)
+        out.add(along(c, np.tile([0.0, 1, 0], (m, 1)), np.full(m, 0.42)), 0.022, pal.pick("shade", m, 0.02) * 0.55, 0.012)
+
+
+def underpaint(coll, pal):
+    """The ground the strokes are laid on: no bare holes between them."""
+    import bmesh
+
+    def flat(name, colour):
+        return C.emission_material(name, tuple(srgb_to_linear(np.asarray(colour))), 1.0)
+
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=96, v_segments=48, radius=44)
+    for f in bm.faces:
+        f.material_index = 0 if f.calc_center_median().z > -0.5 else 1
+    mesh = bpy.data.meshes.new("prime")
     bm.to_mesh(mesh)
     bm.free()
-    obj = bpy.data.objects.new(name, mesh)
-    coll.objects.link(obj)
-    if smooth:
-        for p in obj.data.polygons:
-            p.use_smooth = True
-    if mat:
-        C.assign(obj, mat)
-    return obj
+    dome = bpy.data.objects.new("prime", mesh)
+    dome.location = EYE
+    coll.objects.link(dome)
+    mesh.materials.append(flat("prime_dark", pal.pick("shade", 400, 0.25).mean(0) * 0.8))
+    mesh.materials.append(flat("prime_water", pal.pick("water", 400, 0.2).mean(0) * 0.62))
+    C.set_mask(dome, (1, 0, 0))  # seen only through the water: above it the strokes are solid
 
-
-def point_attr(obj, name, values):
-    attr = obj.data.attributes.new(name, "FLOAT", "POINT")
-    attr.data.foreach_set("value", np.asarray(values, np.float32))
-
-
-def hair(name, strands, radii, coll, mat, tint=None):
-    """Hair-curves object from a list of (n×3) point arrays of equal length."""
-    n_pts = strands[0].shape[0]
-    cv = bpy.data.hair_curves.new(name)
-    cv.add_curves([n_pts] * len(strands))
-    pos = np.concatenate(strands).astype(np.float32)
-    cv.position_data.foreach_set("vector", pos.ravel())
-    rad = cv.attributes.get("radius") or cv.attributes.new("radius", "FLOAT", "POINT")
-    rad.data.foreach_set("value", np.asarray(radii, np.float32).ravel())
-    if tint is not None:
-        t = cv.attributes.new("tint", "FLOAT", "POINT")
-        t.data.foreach_set("value", np.repeat(np.asarray(tint, np.float32), n_pts))
-    obj = bpy.data.objects.new(name, cv)
-    coll.objects.link(obj)
-    obj.data.materials.append(mat)
-    return obj
-
-
-def beam(bm, a, b, w, h=None):
-    h = h or w
-    d = b - a
-    m = Matrix.Translation((a + b) / 2) @ d.to_track_quat("Z", "Y").to_matrix().to_4x4() @ Matrix.Diagonal((w, h, d.length, 1))
-    bmesh.ops.create_cube(bm, size=1.0, matrix=m)
-
-
-def dabs(centre, radius, height, count, size, squash=0.8, bias_up=0.0, leaves=False):
-    """Leaf clusters filling an ellipsoid, denser towards its surface, like
-    brush dabs. Returns (positions, scales, rotations) for instancing."""
-    u = nrng.random(count) ** 0.35
-    th = nrng.uniform(0, 2 * math.pi, count)
-    ph = np.arccos(nrng.uniform(-1, 1, count))
-    pos = np.stack([
-        centre[0] + radius * u * np.sin(ph) * np.cos(th),
-        centre[1] + radius * u * np.sin(ph) * np.sin(th),
-        centre[2] + height * (u * np.cos(ph) * 0.5 + bias_up),
-    ], 1)
-    r = size * nrng.uniform(0.6, 1.4, count)
-    if leaves:
-        scales = np.stack([r, r, r], 1)
-        rots = I.random_rotations(count, nrng)
-    else:
-        scales = np.stack([r, r * nrng.uniform(0.7, 1.2, count), r * squash], 1)
-        rots = I.rot_z(nrng.uniform(0, 2 * math.pi, count))
-    return pos, scales, rots
-
-
-class Dabs:
-    """Accumulates dab clouds, then builds them as one mesh."""
-
-    def __init__(self):
-        self.parts = []
-
-    def add(self, *args, **kwargs):
-        self.parts.append(dabs(*args, **kwargs))
-
-    def build(self, name, coll, mat, kind="leaf", tint=True):
-        if not self.parts:
-            return None
-        pos = np.concatenate([p[0] for p in self.parts])
-        sc = np.concatenate([p[1] for p in self.parts])
-        rot = np.concatenate([p[2] for p in self.parts])
-        attrs = {"tint": nrng.random(len(pos))} if tint else None
-        obj = I.build(name, kind, pos, sc, rot, coll, attrs)
-        C.assign(obj, mat)
-        return obj
-
-
-# ─── Ground and water ─────────────────────────────────────────────────────────
-
-def build_ground(coll):
-    n = 360
-    xs = np.linspace(-70, 70, n)
-    ys = np.linspace(-60, 80, n)
+    # the banks: a sheet with the pond cut out of it
+    n = 420
+    xs, ys = np.linspace(-32, 32, n), np.linspace(-32, 32, n)
     X, Y = np.meshgrid(xs, ys, indexing="ij")
-    d = pond_sdf(X, Y)
-    bank = 1 - np.clip(-d * 6, 0, 1)            # 1 on land, 0 a little inside the pond
-    noise = np.sin(X * 0.21) * np.cos(Y * 0.17) * 0.12 + np.sin(X * 0.05 + 1) * np.cos(Y * 0.07) * 0.25
-    Z = np.where(d < 0, -0.6 + bank * (BANK_Z + 0.6), BANK_Z + np.clip(d, 0, 2) * 0.15 + noise * np.clip(d * 0.5, 0, 1))
+    Z = np.full_like(X, BANK - 0.02)
     verts = np.stack([X.ravel(), Y.ravel(), Z.ravel()], -1)
-    import printmaking as P
     faces = P.grid_faces(n, n)
-    obj = P.mesh_from_arrays("ground", verts, faces, coll)
-    for p in obj.data.polygons:
-        p.use_smooth = True
-    point_attr(obj, "shore", np.clip(1 - d.ravel() * 3, 0, 1))
-    mat, nt, out = C.new_material("ground")
-    bsdf = C.principled(nt)
-    bsdf.inputs["Roughness"].default_value = 0.9
-    a = C.node(nt, "ShaderNodeAttribute", -800, 200)
-    a.attribute_name = "shore"
-    noise_t = C.node(nt, "ShaderNodeTexNoise", -800, -100)
-    noise_t.inputs["Scale"].default_value = 0.8
-    noise_t.inputs["Detail"].default_value = 6
-    grass = C.mix_color(nt, (0.06, 0.17, 0.07), (0.36, 0.42, 0.08), noise_t.outputs["Fac"], x=-500, y=0)
-    col = C.mix_color(nt, grass, (0.10, 0.08, 0.04), a.outputs["Fac"], x=-250, y=100)
-    nt.links.new(col, bsdf.inputs["Base Color"])
-    nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
-    C.assign(obj, mat)
-    return obj
-
-
-def build_water(coll):
-    bm = bmesh.new()
-    bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=60)
-    obj = obj_from_bm("pond", bm, coll, smooth=False)
-    obj.location = (0, 10, WATER_Z)
-    mat, nt, out = C.new_material("pond")
-    bsdf = C.principled(nt)
-    bsdf.inputs["Base Color"].default_value = (0.012, 0.03, 0.026, 1)
-    bsdf.inputs["Roughness"].default_value = 0.025
-    bsdf.inputs["Specular IOR Level"].default_value = 0.6
-    noise = C.node(nt, "ShaderNodeTexNoise", -600, -300)
-    noise.inputs["Scale"].default_value = 3.0
-    bump = C.node(nt, "ShaderNodeBump", -300, -300)
-    bump.inputs["Strength"].default_value = 0.04
-    nt.links.new(noise.outputs["Fac"], bump.inputs["Height"])
-    nt.links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
-    nt.links.new(bsdf.outputs[0], out.inputs["Surface"])
-    C.assign(obj, mat)
-    C.set_mask(obj, (1, 0, 0))
-    return obj
-
-
-def build_landing(coll):
-    """The little timber landing we stand on."""
-    bm = bmesh.new()
-    for i in range(9):
-        x = -1.2 + i * 0.3
-        beam(bm, Vector((x, -1.8, BANK_Z + 0.1)), Vector((x, 0.7, BANK_Z + 0.1)), 0.27, 0.06)
-    for x in (-1.25, 1.25):
-        for y in (-1.6, 0.6):
-            beam(bm, Vector((x, y, -0.5)), Vector((x, y, BANK_Z + 0.08)), 0.12)
-    mat = principled_mat("landing", (0.2, 0.11, 0.05), roughness=0.9, specular=0.25)
-    return obj_from_bm("landing", bm, coll, mat, smooth=False)
-
-
-# ─── Lilies ───────────────────────────────────────────────────────────────────
-
-def build_lilies(coll):
-    pads_v, pads_f, tint = [], [], []
-    petals = {"pink": ([], []), "white": ([], [])}
-    # clusters drift across the pond in loose horizontal bands, as in the painting
-    clusters = []
-    for _ in range(170):
-        x = nrng.uniform(-24, 24)
-        y = nrng.uniform(1.0, 27)
-        band = math.sin(y * 0.9) * 0.5 + 0.5
-        if not in_pond(x, y, 0.12) or rng.random() > 0.45 + 0.55 * band:
-            continue
-        if abs(y - BRIDGE_Y) < 1.0 and abs(x) < BRIDGE_HALF:
-            continue
-        clusters.append((x, y, nrng.uniform(0.8, 2.6)))
-    seg = 18
-    for cx, cy, cr in clusters:
-        count = int(cr * cr * 9)
-        for _ in range(count):
-            a = rng.uniform(0, 2 * math.pi)
-            rr = cr * math.sqrt(rng.random())
-            x, y = cx + math.cos(a) * rr * 1.6, cy + math.sin(a) * rr * 0.8
-            if not in_pond(x, y, 0.06):
-                continue
-            r = rng.uniform(0.11, 0.3)
-            notch = rng.uniform(0, 2 * math.pi)
-            base = len(pads_v)
-            pads_v.append((x, y, WATER_Z + 0.006 + rng.uniform(0, 0.004)))
-            for k in range(seg + 1):
-                ang = notch + 0.35 + (2 * math.pi - 0.7) * k / seg
-                pads_v.append((x + math.cos(ang) * r, y + math.sin(ang) * r, WATER_Z + 0.004))
-            for k in range(seg):
-                pads_f.append((base, base + 1 + k, base + 2 + k))
-            t = rng.random()
-            tint.extend([t] * (seg + 2))
-            if rng.random() < 0.075:
-                starts, ends = petals["pink" if rng.random() < 0.6 else "white"]
-                fr = r * rng.uniform(0.35, 0.5)
-                # a cup of pointed petals
-                for k in range(8):
-                    ang = k / 8 * 2 * math.pi + rng.uniform(-0.2, 0.2)
-                    starts.append((x, y, WATER_Z + 0.02))
-                    ends.append((x + math.cos(ang) * fr, y + math.sin(ang) * fr, WATER_Z + fr * 0.9))
-    mesh = bpy.data.meshes.new("lily_pads")
-    mesh.from_pydata(pads_v, [], pads_f)
-    mesh.update()
-    pads = bpy.data.objects.new("lily_pads", mesh)
-    coll.objects.link(pads)
-    point_attr(pads, "tint", tint)
-    pad_mat = principled_mat("lily_pad", (0.22, 0.34, 0.07), roughness=0.38, specular=0.6, attr="tint", attr_dark=(0.05, 0.16, 0.06))
-    C.assign(pads, pad_mat)
-    for key, col in (("pink", (0.85, 0.36, 0.48)), ("white", (0.86, 0.8, 0.7))):
-        starts, ends = petals[key]
-        if starts:
-            fl = I.beams(f"lilies_{key}", starts, ends, [0.05] * len(starts), [0.014] * len(starts), coll)
-            C.assign(fl, principled_mat(f"lily_{key}", col, roughness=0.5, translucent=0.3))
-    return pads
-
-
-# ─── The Japanese bridge ──────────────────────────────────────────────────────
-
-def bridge_z(x):
-    return 0.85 + 1.25 * (1 - (x / BRIDGE_HALF) ** 2)
-
-
-def build_bridge(coll):
-    bm = bmesh.new()
-    xs = np.linspace(-BRIDGE_HALF, BRIDGE_HALF, 40)
-    w = 0.85
-    # deck planks across the arch
-    for x in np.arange(-BRIDGE_HALF, BRIDGE_HALF, 0.17):
-        z = bridge_z(x)
-        beam(bm, Vector((x, BRIDGE_Y - w, z)), Vector((x, BRIDGE_Y + w, z)), 0.15, 0.06)
-    for side in (-1, 1):
-        y = BRIDGE_Y + side * (w + 0.02)
-        prev = None
-        for x in xs:
-            z = bridge_z(x)
-            p = Vector((x, y, z))
-            if prev is not None:
-                beam(bm, prev - Vector((0, 0, 0.12)), p - Vector((0, 0, 0.12)), 0.1, 0.24)        # stringer
-                beam(bm, prev + Vector((0, 0, 0.92)), p + Vector((0, 0, 0.92)), 0.08, 0.07)       # handrail
-                beam(bm, prev + Vector((0, 0, 0.5)), p + Vector((0, 0, 0.5)), 0.05, 0.05)         # mid rail
-            prev = p
-        for x in np.arange(-BRIDGE_HALF, BRIDGE_HALF + 0.01, 0.82):
-            z = bridge_z(x)
-            beam(bm, Vector((x, y, z - 0.05)), Vector((x, y, z + 0.95)), 0.075)                  # posts
-    # piers standing in the water
-    for x in (-BRIDGE_HALF + 0.4, -2.2, 2.2, BRIDGE_HALF - 0.4):
-        for side in (-1, 1):
-            y = BRIDGE_Y + side * (w - 0.1)
-            beam(bm, Vector((x, y, -0.6)), Vector((x, y, bridge_z(x) - 0.1)), 0.14)
-        beam(bm, Vector((x, BRIDGE_Y - w, bridge_z(x) - 0.25)), Vector((x, BRIDGE_Y + w, bridge_z(x) - 0.25)), 0.14)
-    mat = principled_mat("bridge_green", (0.11, 0.27, 0.16), roughness=0.55)
-    return obj_from_bm("bridge", bm, coll, mat, smooth=False)
-
-
-# ─── Willows, trees, shrubs and the banks ─────────────────────────────────────
-
-def build_willow(coll, base, height=8.5, crown=5.5, strands=3200, lean=(0.0, 0.0), dabs_out=None):
-    """A weeping willow: a short trunk, a crown of branch clusters, and long
-    hanging strands with an uneven hem that falls almost to the water."""
-    bm = bmesh.new()
-    top = base + Vector((lean[0], lean[1], height * 0.62))
-    beam(bm, base, top, 0.55)
-    clusters = []
-    for _ in range(rng.randint(28, 36)):
-        a = rng.uniform(0, 2 * math.pi)
-        r = crown * math.sqrt(rng.uniform(0.05, 1.0))
-        c = base + Vector((lean[0] + math.cos(a) * r, lean[1] + math.sin(a) * r,
-                           height * (0.66 + 0.34 * (1 - (r / crown) ** 2)) + rng.uniform(-0.6, 0.5)))
-        clusters.append((c, rng.uniform(0.8, 1.6), rng.uniform(0.5, 1.0)))
-        if rng.random() < 0.35:
-            beam(bm, top, c, 0.12)
-    obj_from_bm("willow_trunk", bm, coll, principled_mat("bark", (0.12, 0.1, 0.08), roughness=0.9))
-    wind = Vector((0.35, 0.15, 0))
-    lines, radii, tints = [], [], []
-    n_pts = 12
-    for k in range(strands):
-        c, cr, reach = clusters[k % len(clusters)]
-        a = rng.uniform(0, 2 * math.pi)
-        rr = cr * math.sqrt(rng.random())
-        start = c + Vector((math.cos(a) * rr, math.sin(a) * rr, rng.uniform(-0.4, 0.5) - rr * 0.25))
-        length = reach * rng.uniform(0.45, 1.0) * (start.z - WATER_Z - 0.05)
-        out = (start - base).normalized() * rng.uniform(0.3, 1.0)
-        out.z = 0
-        pts = []
-        for i in range(n_pts):
-            t = i / (n_pts - 1)
-            p = start + out * math.sin(t * 1.5) * 0.9 + wind * t * t + Vector((0, 0, -length * t))
-            pts.append(tuple(p))
-        lines.append(np.array(pts))
-        radii.append(np.linspace(0.045, 0.018, n_pts))
-        tints.append(rng.random())
-    if dabs_out is not None:
-        for c, cr, _ in clusters:
-            dabs_out.add(tuple(c), cr * 1.2, cr * 0.8, int(cr * cr * 500), 0.1, bias_up=0.15, leaves=True)
-    mat = principled_mat("willow", (0.36, 0.48, 0.12), roughness=0.6, translucent=0.35, attr="tint", attr_dark=(0.07, 0.18, 0.05))
-    return hair("willow_leaves", lines, radii, coll, mat, tint=tints)
-
-
-def build_reeds(coll, count=9000):
-    """Irises, rushes and long grass along the shore."""
-    lines, radii, tints = [], [], []
-    flowers = []
-    n_pts = 6
-    placed = 0
-    while placed < count:
-        x = nrng.uniform(-28, 30)
-        y = nrng.uniform(-6, 30)
-        d = float(pond_sdf(np.array(x), np.array(y)))
-        if not (-0.08 < d < 0.22):
-            continue
-        if math.hypot(x, y + 0.5) < 2.4:
-            continue  # keep the landing clear
-        if abs(y - BRIDGE_Y) < 1.3 and abs(x) < BRIDGE_HALF + 1:
-            continue
-        h = rng.uniform(0.5, 1.5) * (1.3 if d < 0.05 else 1.0)
-        lean = Vector((rng.uniform(-0.3, 0.3), rng.uniform(-0.3, 0.3), 0))
-        base = Vector((x, y, BANK_Z - 0.1))
-        pts = [tuple(base + lean * (t * t) * h + Vector((0, 0, h * t))) for t in np.linspace(0, 1, n_pts)]
-        lines.append(np.array(pts))
-        radii.append(np.linspace(0.02, 0.004, n_pts))
-        tints.append(rng.random())
-        if rng.random() < 0.06:
-            flowers.append(pts[-1])
-        placed += 1
-    mat = principled_mat("reeds", (0.42, 0.5, 0.16), roughness=0.6, translucent=0.25, attr="tint", attr_dark=(0.12, 0.24, 0.06))
-    hair("reeds", lines, radii, coll, mat, tint=tints)
-    if flowers:
-        fl = I.build("irises", "ico", np.array(flowers), np.tile([0.035, 0.035, 0.06], (len(flowers), 1)), None, coll)
-        C.assign(fl, principled_mat("iris", (0.36, 0.22, 0.6), roughness=0.5, translucent=0.3))
-
-
-def build_shrubs(coll):
-    """Masses of foliage and flowers that ring the pond and fill the garden."""
-    green, pink, red = Dabs(), Dabs(), Dabs()
-    for _ in range(160):
-        x = rng.uniform(-40, 40)
-        y = rng.uniform(-30, 45)
-        d = float(pond_sdf(np.array(x), np.array(y)))
-        if d < 0.25 or math.hypot(x, y) < 7.0:
-            continue
-        size = rng.uniform(1.0, 2.6) * (1 + min(d, 3) * 0.3)
-        green.add((x, y, BANK_Z), size, size * rng.uniform(1.0, 1.7), int(size * size * 700), 0.09, bias_up=0.6, leaves=True)
-        if rng.random() < 0.35:
-            (pink if rng.random() < 0.6 else red).add((x, y, BANK_Z + size * 0.5), size * 0.9, size * 0.9, int(size * size * 40), 0.07, bias_up=0.6)
-    green.build("shrubs", coll, principled_mat("shrub", (0.3, 0.45, 0.1), roughness=0.6, translucent=0.2, attr="tint", attr_dark=(0.04, 0.13, 0.05)))
-    pink.build("blossom_pink", coll, principled_mat("blossom_pink", (0.85, 0.42, 0.55), roughness=0.6, translucent=0.2), kind="ico0", tint=False)
-    red.build("blossom_red", coll, principled_mat("blossom_red", (0.7, 0.12, 0.12), roughness=0.6, translucent=0.2), kind="ico0", tint=False)
-
-
-def build_trees(coll):
-    """Tall trees beyond the pond: trunks and broad canopies of leaf dabs."""
-    starts, ends, widths = [], [], []
-    canopy = Dabs()
-    for _ in range(46):
-        a = rng.uniform(0, 2 * math.pi)
-        r = rng.uniform(26, 48)
-        x, y = math.cos(a) * r, 10 + math.sin(a) * r * 0.9
-        h = rng.uniform(11, 19)
-        starts.append((x, y, BANK_Z))
-        ends.append((x, y, h * 0.6))
-        widths.append(0.5)
-        canopy.add((x, y, h * 0.72), h * 0.42, h * 0.5, 9000, 0.32, leaves=True)
-    tr = I.beams("tree_trunks", starts, ends, widths, coll=coll)
-    C.assign(tr, principled_mat("trunk", (0.1, 0.09, 0.07), roughness=0.9))
-    canopy.build("tree_canopy", coll, principled_mat("canopy", (0.26, 0.4, 0.1), roughness=0.6, translucent=0.2, attr="tint", attr_dark=(0.03, 0.1, 0.05)))
-
-
-# ─── Sky and light ────────────────────────────────────────────────────────────
-
-def build_sky(scene):
-    world = scene.world
-    world.use_nodes = True
-    nt = world.node_tree
-    nt.nodes.clear()
-    out = C.node(nt, "ShaderNodeOutputWorld", 900, 0)
-    bg = C.node(nt, "ShaderNodeBackground", 700, 0)
-    nt.links.new(bg.outputs[0], out.inputs["Surface"])
-    sky = C.node(nt, "ShaderNodeTexSky", 0, 0)
-    sky.sky_type = "MULTIPLE_SCATTERING"
-    sky.sun_disc = False
-    sky.sun_elevation = SUN_ELEVATION
-    sky.sun_rotation = SUN_AZIMUTH
-    sky.air_density = 1.2
-    sky.aerosol_density = 1.2
-    # soft summer clouds over the top
-    coord = C.node(nt, "ShaderNodeTexCoord", -600, -300)
-    mp = C.node(nt, "ShaderNodeMapping", -400, -300)
-    mp.inputs["Scale"].default_value = (1, 1, 2.5)
-    nt.links.new(coord.outputs["Generated"], mp.inputs["Vector"])
-    noise = C.node(nt, "ShaderNodeTexNoise", -200, -300)
-    noise.inputs["Scale"].default_value = 2.2
-    noise.inputs["Detail"].default_value = 5
-    nt.links.new(mp.outputs[0], noise.inputs["Vector"])
-    cover = C.node(nt, "ShaderNodeMapRange", 0, -300)
-    cover.inputs["From Min"].default_value = 0.5
-    cover.inputs["From Max"].default_value = 0.68
-    nt.links.new(noise.outputs["Fac"], cover.inputs["Value"])
-    lit = C.node(nt, "ShaderNodeMath", 150, -300, operation="MULTIPLY")
-    lit.inputs[1].default_value = 0.75
-    nt.links.new(cover.outputs["Result"], lit.inputs[0])
-    col = C.mix_color(nt, sky.outputs["Color"], (1.6, 1.58, 1.52), lit.outputs[0], x=300, y=0)
-    nt.links.new(col, bg.inputs["Color"])
-    bg.inputs["Strength"].default_value = 0.55
-
-    sun = bpy.data.lights.new("sun", "SUN")
-    sun.energy = 6.0
-    sun.angle = math.radians(1.2)
-    sun.color = (1.0, 0.93, 0.82)
-    obj = bpy.data.objects.new("sun", sun)
-    d = Vector((math.sin(SUN_AZIMUTH) * math.cos(SUN_ELEVATION), math.cos(SUN_AZIMUTH) * math.cos(SUN_ELEVATION), math.sin(SUN_ELEVATION)))
-    obj.rotation_euler = (-d).to_track_quat("-Z", "Y").to_euler()
-    scene.collection.objects.link(obj)
+    mid = verts[faces].mean(1)
+    faces = faces[pond(mid[:, 0], mid[:, 1]) > 0.0]
+    obj = P.mesh_from_arrays("bank", verts, faces, coll)
+    C.assign(obj, flat("bank", pal.pick("reeds_dark", 400, 0.2).mean(0) * 0.75))
+    boards = P.mesh_from_arrays("boards", [(-1.15, -1.65, BANK + 0.09), (1.15, -1.65, BANK + 0.09), (1.15, 0.8, BANK + 0.09), (-1.15, 0.8, BANK + 0.09)], [(0, 1, 2, 3)], coll)
+    C.assign(boards, flat("boards", pal.pick("russet", 400, 0.2).mean(0) * 0.7))
 
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 def build(preview=True):
+    reseed(1900)
+    EYE[:] = (0.0, 0.0, 1.75)
     scene = C.clear_scene()
-    C.use_gpu(scene)
-    garden = C.collection("Garden")
-    pond = C.collection("Pond")
-    build_sky(scene)
-    build_ground(garden)
-    build_water(pond)
-    build_landing(garden)
-    build_lilies(pond)
-    build_bridge(pond)
-    crowns = Dabs()
-    build_willow(garden, Vector((-8.0, 18.5, BANK_Z)), height=9.5, crown=6.0, strands=5200, lean=(0.6, -0.4), dabs_out=crowns)
-    build_willow(garden, Vector((7.5, 19.5, BANK_Z)), height=10.5, crown=6.5, strands=5600, lean=(-0.5, -0.6), dabs_out=crowns)
-    build_willow(garden, Vector((-15.5, 4.0, BANK_Z)), height=9.0, crown=5.5, strands=4400, lean=(0.8, 0.3), dabs_out=crowns)
-    build_willow(garden, Vector((17.0, 11.0, BANK_Z)), height=9.0, crown=5.0, strands=4000, lean=(-0.7, 0.0), dabs_out=crowns)
-    crowns.build("willow_crowns", garden, principled_mat("willow_crown", (0.34, 0.46, 0.12), roughness=0.6, translucent=0.3, attr="tint", attr_dark=(0.06, 0.16, 0.05)))
-    build_reeds(garden)
-    build_shrubs(garden)
-    build_trees(garden)
-
-    cy = scene.cycles
-    cy.samples = 128 if preview else 512
-    cy.use_adaptive_sampling = True
-    cy.adaptive_threshold = 0.02
-    cy.use_denoising = True
-    cy.max_bounces = 6
-    cy.diffuse_bounces = 3
-    cy.glossy_bounces = 3
-    cy.transmission_bounces = 4
-    cy.transparent_max_bounces = 8
-    cy.sample_clamp_indirect = 6.0
-    cy.caustics_reflective = False
-    cy.caustics_refractive = False
-    scene.cycles_curves.shape = "RIBBONS"
-    C.set_view_transform("AgX", "AgX - Punchy", exposure=0.2)
-    C.pano_camera(BANK_Z + 0.16 + 1.6)
-    bpy.context.scene.camera.location.y = -0.4
+    P.setup_render(scene, samples=24 if preview else 64)
+    scene.cycles.transparent_max_bounces = 48
+    scene.world.use_nodes = True
+    for node in scene.world.node_tree.nodes:
+        if node.type == "BACKGROUND":
+            node.inputs[0].default_value = (0.01, 0.01, 0.01, 1)
+    coll = C.collection("Paint")
+    pal = palette()
+    underpaint(coll, pal)
+    layers = {
+        "mirror": Layer("mirror", "water"),
+        "glaze": Layer("glaze", "water"),
+        **{k: Layer(k) for k in ("foliage", "bridge", "pads", "blooms", "ground", "reeds", "flowers", "landing")},
+    }
+    foliage(pal, layers)
+    bridge(pal, layers)
+    lilies(pal, layers)
+    banks(pal, layers)
+    landing(pal, layers)
+    for layer in layers.values():
+        layer.build(coll)
+    cam = C.pano_camera(EYE[2])
+    cam.location = EYE
     C.set_resolution(1024 if preview else 8192)
     return scene
 
