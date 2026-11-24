@@ -21,6 +21,7 @@ import {
 	project,
 	rotation,
 	screenRay,
+	radiansPerPixel,
 	toWorld,
 	type Projection,
 	type Vec3,
@@ -89,7 +90,7 @@ interface PaintingGeometry {
 interface Config {
 	base: string;
 	route: SceneId;
-	hub: { title: string; effects: Effects; entrance?: Entrance; opening?: Entrance; returning?: Entrance; pigment: string; view: { yaw: number; pitch: number; zoom: number }; geometry: { water: number; paintings: PaintingGeometry[] } };
+	hub: { title: string; effects: Effects; entrance?: Entrance; opening?: Entrance; returning?: Entrance; pigment: string; view: { yaw: number; pitch: number; zoom: number }; geometry: { water: number; room: number; paintings: PaintingGeometry[] } };
 	rooms: RoomConfig[];
 	scenes: Record<string, SceneAssets>;
 	registration: Partial<Record<RoomSlug, number[]>>;
@@ -1249,35 +1250,86 @@ function start(withSound: boolean) {
 	}
 
 	// ─── Hub hotspots ───────────────────────────────────────────────────────
-	const spotWidth = new Map<HTMLElement, number>();
+	// The names are lettered on the walls: each hangs in the plane of its wall, under the corner of the
+	// frame that is nearer the middle of the room, all on one line round the hall.
+	/** Height of the letters (m), the smallest they may look on screen (px), and the top of the line over the water (m). */
+	const LETTERS = 0.25;
+	const LETTERS_MIN = 20;
+	const LETTERS_TOP = 0.62;
+	const spotSize = new Map<HTMLElement, { w: number; h: number; font: number }>();
 	function measureSpots() {
-		for (const s of spots) spotWidth.set(s, s.offsetWidth);
+		for (const s of spots) spotSize.set(s, { w: s.offsetWidth, h: s.offsetHeight, font: parseFloat(getComputedStyle(s).fontSize) });
 	}
 	document.fonts?.ready.then(measureSpots);
 
 	const hubNear = config.scenes.hub?.depth?.near ?? 0;
+	/** Half the width of the frame of a painting (m). */
+	const frameHalf = (g: PaintingGeometry) => g.width / 2 + (g.centerY - Math.tan(g.frameBottom * DEG) * config.hub.geometry.room - g.height / 2);
+
+	/** Where 3D transforms are drawn without their perspective (WebKit with no compositing), they come out askew. */
+	const hasPerspective = (() => {
+		const probe = document.createElement("div");
+		probe.style.cssText = "position:absolute;top:0;left:0;width:100px;height:10px;visibility:hidden;transform-origin:0 0;transform:matrix3d(1,0,0,.01,0,1,0,0,0,0,1,0,0,0,0,1)";
+		look.append(probe);
+		const { width } = probe.getBoundingClientRect();
+		probe.remove();
+		return width < 75;
+	})();
+
+	/** The CSS transform that takes a w × h box to four points: top left, top right, bottom right, bottom left. */
+	function toQuad(w: number, h: number, q: [number, number][]) {
+		const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = q;
+		if (!hasPerspective) {
+			// the parallelogram nearest to it
+			const ax = (x1 - x0 + x2 - x3) / 2, ay = (y1 - y0 + y2 - y3) / 2, bx = (x3 - x0 + x2 - x1) / 2, by = (y3 - y0 + y2 - y1) / 2;
+			const ox = (x0 + x1 + x2 + x3) / 4 - (ax + bx) / 2, oy = (y0 + y1 + y2 + y3) / 4 - (ay + by) / 2;
+			return `matrix(${[ax / w, ay / w, bx / h, by / h, ox, oy].map((v) => v.toFixed(5)).join()})`;
+		}
+		const dx1 = x1 - x2, dx2 = x3 - x2, sx = x0 - x1 + x2 - x3;
+		const dy1 = y1 - y2, dy2 = y3 - y2, sy = y0 - y1 + y2 - y3;
+		const det = dx1 * dy2 - dx2 * dy1;
+		const g = (sx * dy2 - dx2 * sy) / det, k = (dx1 * sy - sx * dy1) / det;
+		const m = [(x1 - x0 + g * x1) / w, (y1 - y0 + g * y1) / w, 0, g / w, (x3 - x0 + k * x3) / h, (y3 - y0 + k * y3) / h, 0, k / h, 0, 0, 1, 0, x0, y0, 0, 1];
+		return `matrix3d(${m.map((v) => v.toFixed(7)).join()})`;
+	}
+
 	function updateSpots() {
 		const show = current === "hub" && !trans && entered;
 		if (!show) return;
 		const proj = currentProjection();
 		const w = look.clientWidth;
 		const h = look.clientHeight;
+		const { room, water } = config.hub.geometry;
+		const pxPerMetre = 1 / radiansPerPixel(proj, h) / room;
+		// the size is of the wall, not of the moment: zooming brings the letters nearer like everything else
+		const metres = Math.max(LETTERS, LETTERS_MIN / (pxPerMetre * (view.zoom / zoomFor("hub"))));
+		const font = metres * pxPerMetre * 1.2;
 		for (const s of spots) {
-			const yaw = Number(s.dataset.yaw) * DEG;
-			const pitch = (Number(s.dataset.pitch) - 2.2) * DEG;
-			// the label hangs on the wall under its painting
 			const g = paintingBySlug[s.dataset.room as RoomSlug];
-			const far = g.distance / Math.max(Math.cos(pitch), 0.2);
-			const ndc = project(seenFrom(dirFromAngles(yaw, pitch), hubNear / far), view.yaw, view.pitch, proj);
-			const visible = !!ndc && Math.abs(ndc[0]) < 1.05 && ndc[1] > -1.05 && ndc[1] < 1.05;
-			s.dataset.visible = String(visible);
-			if (!ndc) continue;
-			const width = spotWidth.get(s) ?? 0;
-			let x = (ndc[0] * 0.5 + 0.5) * w - width / 2;
-			// a label whose painting is partly out of view stays whole while its middle can be seen
-			if (Math.abs(ndc[0]) < 1) x = clamp(x, 8, Math.max(8, w - width - 8));
-			const y = (0.5 - ndc[1] * 0.5) * h;
-			s.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+			let size = spotSize.get(s);
+			if (!size || Math.abs(Math.log2(size.font / font)) > 0.3) {
+				// laid out about as large as it is seen, so that it stays sharp
+				s.style.fontSize = `${font.toFixed(1)}px`;
+				size = { w: s.offsetWidth, h: s.offsetHeight, font };
+				spotSize.set(s, size);
+			}
+			const k = metres / size.font; // metres to a pixel of the box
+			const edge = frameHalf(g) + 0.36 * metres;
+			const u0 = s.dataset.side === "right" ? edge - size.w * k : -edge;
+			const top = LETTERS_TOP - water;
+			const a = g.yaw * DEG;
+			const corner = (u: number, y: number): [number, number] | null => {
+				const x = Math.sin(a) * room + Math.cos(a) * u, z = Math.cos(a) * room - Math.sin(a) * u;
+				const far = Math.hypot(x, y, z);
+				const ndc = project(seenFrom([x / far, y / far, z / far], hubNear / far), view.yaw, view.pitch, proj);
+				return ndc && [(ndc[0] * 0.5 + 0.5) * w, (0.5 - ndc[1] * 0.5) * h];
+			};
+			const u1 = u0 + size.w * k, bottom = top - size.h * k;
+			const q = [corner(u0, top), corner(u1, top), corner(u1, bottom), corner(u0, bottom)];
+			const whole = q.every(Boolean);
+			const cx = whole ? (q[0]![0] + q[2]![0]) / 2 : -1, cy = whole ? (q[0]![1] + q[2]![1]) / 2 : -1;
+			s.dataset.visible = String(whole && cx > -0.1 * w && cx < 1.1 * w && cy > -40 && cy < h + 40);
+			if (whole) s.style.transform = toQuad(size.w, size.h, q as [number, number][]);
 			s.classList.toggle("is-hot", hovered === s.dataset.room);
 		}
 	}
@@ -1342,12 +1394,12 @@ function start(withSound: boolean) {
 		const slug = s.dataset.room as RoomSlug;
 		s.addEventListener("pointerenter", () => setHovered(slug));
 		s.addEventListener("pointerleave", () => setHovered(null));
-		// keyboard users: bring the painting into view when its label gets focus
+		// keyboard users: bring the painting and its name into view when the name gets focus
 		s.addEventListener("focus", () => {
 			if (current !== "hub" || busy) return;
 			setHovered(slug);
 			const g = paintingBySlug[slug];
-			bringIntoView(g.yaw * DEG, g.pitch * DEG);
+			bringIntoView(g.yaw * DEG, g.frameBottom * DEG);
 		});
 		s.addEventListener("blur", () => setHovered(null));
 	}

@@ -68,6 +68,8 @@ export interface Room {
 	/** Full catalogue title, as given by the museum. */
 	catalogueTitle: string;
 	artist: string;
+	/** As lettered on the wall of the gallery, where the full name is too long. */
+	artistShort?: string;
 	artistDates: string;
 	date: string;
 	medium: string;
@@ -338,6 +340,7 @@ export const rooms: Room[] = [
 		title: "Keelmen Heaving in Coals by Moonlight",
 		catalogueTitle: "Keelmen Heaving in Coals by Moonlight",
 		artist: "Joseph Mallord William Turner",
+		artistShort: "J. M. W. Turner",
 		artistDates: "1775–1851",
 		date: "1835",
 		medium: "Oil on canvas",

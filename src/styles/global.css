@@ -54,7 +54,7 @@
 
 /* On paper: the document, and every label, note and sheet over the view. */
 :root,
-.immersive :is(.spot, .room-card, .poi-card, .details, .tool-label),
+.immersive :is(.room-card, .poi-card, .details, .tool-label),
 .guide {
 	--bg: var(--stock);
 	--fg: #121418;
@@ -1173,7 +1173,7 @@ html.immersive body {
 	display: none;
 }
 
-/* the labels under the four frames */
+/* the names under the four frames */
 .spots ul {
 	list-style: none;
 	margin: 0;
@@ -1199,25 +1199,30 @@ html.immersive body {
 	transition: opacity 0.5s var(--ease);
 }
 
-/* a wall label: the number of the room in its own column, then its name and its painter */
+/* Lettering on the wall, like the words on the walls beside the paintings. The script sets its size and
+   hangs it in the perspective of its wall (updateSpots in app.ts), so everything here is in em. */
 .spot {
 	position: absolute;
 	top: 0;
 	left: 0;
-	display: inline-flex;
-	align-items: stretch;
-	min-height: 2.75rem;
-	border-radius: var(--radius);
-	background: var(--bg);
-	color: var(--fg);
-	box-shadow: var(--lift);
+	display: grid;
+	padding: 0.3em 0.36em;
+	color: #cfcdc6;
+	font-family: var(--font-display);
+	font-weight: 500;
+	line-height: 1.1;
 	text-decoration: none;
 	white-space: nowrap;
 	pointer-events: auto;
+	transform-origin: 0 0;
 	will-change: transform;
 	transition:
 		opacity 0.35s var(--ease),
-		background-color 0.2s var(--ease);
+		color 0.25s var(--ease);
+}
+
+.spot[data-side="right"] {
+	text-align: right;
 }
 
 .spot[data-visible="false"] {
@@ -1231,54 +1236,30 @@ html.immersive body {
 
 .spot:active,
 .spot.is-hot {
-	background: #fff;
-}
-
-.spot:active .spot-theme,
-.spot.is-hot .spot-theme {
-	text-decoration: underline;
-	text-decoration-thickness: 1px;
-	text-underline-offset: 0.18em;
+	color: #fff;
 }
 
 @media (hover: hover) {
 	.spot:hover {
-		background: #fff;
+		color: #fff;
 	}
-
-	.spot:hover .spot-theme {
-		text-decoration: underline;
-		text-decoration-thickness: 1px;
-		text-underline-offset: 0.18em;
-	}
-}
-
-.spot-numeral {
-	display: grid;
-	place-items: center;
-	min-width: 2.5rem;
-	padding-inline: 0.65rem;
-	background: var(--fg);
-	color: var(--bg);
-	font-size: var(--step--1);
-	font-weight: 600;
-}
-
-.spot-text {
-	display: grid;
-	align-content: center;
-	padding: 0.4rem 0.95rem 0.45rem 0.75rem;
-	line-height: 1.2;
 }
 
 .spot-theme {
-	font-size: var(--step-0);
-	font-weight: 600;
+	word-spacing: -0.06em;
+	text-decoration: underline transparent;
+	text-decoration-thickness: 0.045em;
+	text-underline-offset: 0.16em;
+	transition: text-decoration-color 0.25s var(--ease);
+}
+
+:is(.spot:active, .spot.is-hot, .spot:focus-visible) .spot-theme {
+	text-decoration-color: currentColor;
 }
 
 .spot-artist {
-	font-size: var(--step--2);
-	color: var(--fg-2);
+	font-size: 0.6em;
+	line-height: 1.3;
 }
 
 /* ─── Look controls ───────────────────────────────────────────────────────── */
@@ -2062,15 +2043,9 @@ html:not(.immersive) .poi-card {
 	}
 }
 
-/* four labels side by side: where there is no room for the painters' names they give way */
+/* on a short screen the wall under the frames is a narrow strip: where there is no room for the painters' names they give way */
 @media (max-height: 30em) {
 	.immersive .spot-artist {
-		display: none;
-	}
-}
-
-@media (max-width: 22em) {
-	.immersive .spot-numeral {
 		display: none;
 	}
 }
@@ -2412,15 +2387,6 @@ html:not(.immersive) .poi-card {
 		}
 	}
 
-	.spot-numeral {
-		min-width: 2.25rem;
-		padding-inline: 0.5rem;
-	}
-
-	.spot-text {
-		padding-inline: 0.65rem 0.8rem;
-	}
-
 	.spot-artist {
 		display: none;
 	}
@@ -2613,7 +2579,6 @@ html:not(.immersive) .poi-card {
 @media (forced-colors: active) {
 	.btn,
 	.tool,
-	.spot,
 	.icon-btn,
 	.room-card,
 	.poi-card,
@@ -2630,7 +2595,6 @@ html:not(.immersive) .poi-card {
 		forced-color-adjust: none;
 	}
 
-	.spot-numeral,
 	.tool[aria-pressed="true"],
 	.room-actions .btn[aria-expanded="true"],
 	.poi-dot[aria-expanded="true"] .poi-ring {

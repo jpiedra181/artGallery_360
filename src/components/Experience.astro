@@ -117,18 +117,12 @@ const clientConfig = {
 									class="spot"
 									href={href(room.slug)}
 									data-room={room.slug}
-									data-yaw={g.yaw}
-										data-pitch={g.frameBottom}
-									>
-									<span class="spot-numeral" aria-hidden="true">
-										{room.numeral}
-									</span>
-									<span class="spot-text">
-										<span class="spot-theme">{room.theme}</span>
-										{/* the comma keeps theme and artist apart in the accessible name ("StillnessCLAUDE MONET");
-										    inside the artist span so it goes away with it on small screens */}
-										<span class="spot-artist"><span class="sr-only">, </span>{room.artist}</span>
-									</span>
+									data-side={g.yaw < 0 ? "right" : "left"}
+								>
+									<span class="spot-theme">{room.theme}</span>
+									{/* the comma keeps theme and artist apart in the accessible name; inside the artist span so
+									    it goes away with it on small screens */}
+									<span class="spot-artist"><span class="sr-only">, </span>{room.artistShort ?? room.artist}</span>
 									<span class="sr-only">
 										: enter {room.title}, by {room.artist}
 									</span>
