@@ -25,8 +25,11 @@ import {
 	type Projection,
 	type Vec3,
 } from "./engine/math";
+import type { Loose } from "./engine/loose";
 import type { Overlay } from "./engine/overlay";
 import { PanoRenderer, emptyFx, type FxUniforms, type SceneTextures } from "./engine/renderer";
+import type { Feature } from "./engine/shaders";
+import type { Life } from "./worlds/life";
 
 // ─── Config from the page ─────────────────────────────────────────────────────
 
@@ -34,10 +37,13 @@ type RoomSlug = "wave" | "rain" | "stillness" | "moonlight";
 type SceneId = "hub" | RoomSlug;
 
 interface Effects {
-	water?: { height: number; strength: number; scale: number; speed: number; drips?: number };
+	water?: { height: number; strength: number; scale: number; speed: number; drips?: number; float?: number; glints?: number };
+	wind?: { amount: number; sun: number };
 	rain?: { density: number; angle: number; speed: number };
 	flicker?: { strength: number };
-	sky?: { shimmer: number };
+	sky?: { shimmer: number; run?: number; speed?: number };
+	riding?: [number, number, number, number][];
+	brush?: number;
 	seam?: boolean;
 	grade?: { vignette: number; grain: number };
 	boat?: { pitch: number; roll: number; period: number };
@@ -389,10 +395,10 @@ function start(withSound: boolean) {
 	let dolly = 0;
 	let dollyDir: Vec3 = [0, 0, 1];
 	let heave = 0;
-	const drips = new Float32Array(16);
+	const drips = new Float32Array(32);
+	const rocks = new Float32Array(28);
 	let dripIndex = 0;
 	let boatAmount = 0;
-	let rockPitch = 0;
 	let nextDrip = 2;
 	/** The prologue holds the camera on the water. */
 	let holding = false;
@@ -413,11 +419,25 @@ function start(withSound: boolean) {
 		const fx = emptyFx();
 		if (e.water) {
 			fx.water = [e.water.strength, e.water.height, e.water.scale, e.water.speed];
-			fx.grade[2] = e.water.drips ? 1 : 0;
+			fx.grade[2] = e.water.drips ?? 0;
+			fx.live[2] = e.water.float ?? 0;
+			fx.air[2] = e.water.glints ?? 0;
 		}
 		if (e.rain) fx.rain = [e.rain.density, e.rain.angle * DEG, e.rain.speed, 1];
 		if (e.flicker) fx.light[0] = e.flicker.strength;
-		if (e.sky) fx.light[1] = e.sky.shimmer;
+		if (e.sky) {
+			fx.light[1] = e.sky.shimmer;
+			fx.live[1] = (e.sky.run ?? 0) * DEG;
+		}
+		if (e.wind) {
+			fx.live[0] = e.wind.amount * DEG;
+			fx.air[1] = e.wind.sun;
+		}
+		fx.air[0] = e.riding ? 1 : 0;
+		fx.air[3] = sceneAssets(id).depth?.near ?? 1;
+		fx.darks[3] = e.brush ?? 0;
+		// what the sky turns about: the moon, or nothing (it goes by)
+		fx.mood = id === "moonlight" ? [0, 0, -10 * DEG, 20.5 * DEG] : [0, 0, Math.PI, -1];
 		if (e.seam) fx.light[2] = 1;
 		if (e.grade) {
 			fx.grade[0] = e.grade.vignette;
@@ -425,6 +445,15 @@ function start(withSound: boolean) {
 		}
 		return fx;
 	}
+
+	/** What each scene asks of the shader (see shaders.ts). */
+	const FEATURES: Record<SceneId, readonly Feature[]> = {
+		hub: ["GALLERY", "DRIPS"],
+		wave: ["SHEET", "SKY"],
+		rain: ["SHEET", "RAIN"],
+		stillness: ["WIND", "HOUR", "DRIPS", "GLINTS"],
+		moonlight: ["SHEET", "SKY", "RIDE", "FIRES", "DRIPS", "GLINTS", "SEAM"],
+	};
 
 	// ─── Scene loading ──────────────────────────────────────────────────────
 	const loaded = new Map<SceneId, SceneTextures>();
@@ -444,6 +473,8 @@ function start(withSound: boolean) {
 		const pending = loading.get(id);
 		if (pending) return pending;
 		const p = (async () => {
+			// the driver can start on its program while the pictures come
+			renderer.prepare(FEATURES[id]);
 			const ready = await predecoded.get(id)?.catch(() => null);
 			predecoded.delete(id);
 			let bitmap: ImageBitmap;
@@ -476,7 +507,9 @@ function start(withSound: boolean) {
 			const depth = depthBitmap ? await renderer.uploadTexture(depthBitmap, { srgb: false, mipmaps: true, stripRows: 4096, grey: true }) : null;
 			if (depthBitmap) measurePoiDepths(id, depthBitmap);
 			const overlay = await makeOverlay(id);
-			const textures: SceneTextures = { pano, mask, depth, overlay, near: sceneAssets(id).depth?.near ?? 1, width: bitmap.width };
+			const features = FEATURES[id];
+			await renderer.prepare(features).ready;
+			const textures: SceneTextures = { pano, mask, depth, overlay, features, near: sceneAssets(id).depth?.near ?? 1, width: bitmap.width };
 			bitmap.close();
 			maskBitmap?.close();
 			depthBitmap?.close();
@@ -538,12 +571,13 @@ function start(withSound: boolean) {
 	}
 
 	// ─── Letting time run ───────────────────────────────────────────────────
-	// In the two prints what moves is drawn live, and stands at the instant of
-	// the print until the visitor lets time run: press and hold anywhere in the
-	// view, hold the space bar, or the button on the room's label, which runs it
-	// until pressed again. Time stops where it is let go.
-	// The wave has one clock, and close to the instant Hokusai chose it settles
-	// on it. In the rain everyone has their own: whoever is looked at runs.
+	// What moves stands at the instant of the picture until the visitor lets
+	// time run: press and hold anywhere in the view, hold the space bar, or the
+	// button on the room's label, which runs it until pressed again. Time stops
+	// where it is let go.
+	// The wave has one clock, and so have the hours over the pond: close to the
+	// instant the painter chose, they settle on it. In the rain everyone has
+	// their own: whoever is looked at runs.
 	let overlayNow: Overlay | null = null;
 	let crowd: typeof import("./worlds/sudden-shower") | null = null;
 	/** Seconds each party in the rain has run, and how fast its clock is going (0..1). */
@@ -552,20 +586,81 @@ function start(withSound: boolean) {
 	/** Whoever is within this of the middle of the view runs (radians). */
 	const GAZE = 9 * DEG;
 	const tide = { t: 0, rate: 0, held: false, running: false, home: false, away: false };
-	/** Seconds from one wave to the next. */
-	const TIDE_SECONDS = 13;
+	/** Seconds from one wave to the next, and from one afternoon to the next. */
+	const tideSeconds = () => (current === "stillness" ? 27 : 13);
+	/** One clock runs the room on screen: the wave's, or the day's. */
+	const clocked = () => current === "stillness" || drawnRoom === "wave";
 	/** Let go this close to the instant of the print (fraction of the cycle), before or after, and it settles there. */
 	const TIDE_CATCH = 0.055;
 
 	const hasAct = () => current !== "hub";
 	/** Seconds the keelmen have worked, how fast they go, and the two lights of their river. */
 	const river = { seconds: 0, pace: 0, fire: 0, moon: 0 };
-	/** How still the pond lies (0..1), how long since anything moved, and the view it lay under. */
-	const still = { calm: 0, since: 0, yaw: 0, pitch: 0 };
 	let drawnRoom: SceneId | null = null;
-	const sheetState = () => (crowd ? clocks : drawnRoom === "moonlight" ? [river.seconds] : [tide.t]);
+	const sheetState = () => (crowd ? clocks : drawnRoom === "moonlight" ? [river.seconds, aliveFor] : [tide.t]);
+
+	// ─── What is loose in the air ───────────────────────────────────────────
+	// Leaves, smoke, spray: strokes drawn over the panorama (engine/loose.ts).
+	let loose: Loose | null = null;
+	let hours: typeof import("./worlds/hours") | null = null;
+	let wave: typeof import("./worlds/great-wave") | null = null;
+	const lives = new Map<SceneId, Life>();
+	/** Seconds the room on screen has been alive, how far its air has come in, and the clock of its sky. */
+	let aliveFor = 0;
+	let presence = 0;
+	let skyClock = 0;
+
+	async function makeLife(id: SceneId) {
+		if (id !== "wave" && id !== "stillness" && id !== "moonlight") return;
+		const [engine, worlds, light] = await Promise.all([
+			import("./engine/loose"),
+			import("./worlds/life"),
+			id === "stillness" ? import("./worlds/hours") : null,
+		]);
+		hours = light ?? hours;
+		loose ??= new engine.Loose(renderer.gl);
+		lives.set(id, id === "wave" ? worlds.spray() : id === "stillness" ? worlds.garden() : worlds.river());
+	}
+
+	function drawLoose(dt: number) {
+		const here = entered && !trans && !busy;
+		presence += ((here ? 1 : 0) - presence) * Math.min(1, dt * (here ? 0.9 : 5));
+		const life = lives.get(current);
+		if (!life || !loose || presence < 0.004) return;
+		const proj = currentProjection();
+		const rot = trans ? trans.rotA : rotA;
+		const count = life(loose.data, {
+			time: aliveFor,
+			dt: motion ? dt : 0,
+			// with animation paused what drifts on its own is put away; the spray belongs to the wave
+			presence: motion || current === "wave" ? presence : 0,
+			clock: tide.t,
+			fire: river.fire,
+			lights: fxA.lights,
+			drop: (x, z, strength) => dropAt(x, z, strength),
+		});
+		const tex = renderer.getSlot(0);
+		loose.draw(count, { rot, eye: eyeA, near: tex?.near ?? 1, depth: tex?.depth ?? null, aspect: renderer.canvas.width / renderer.canvas.height, fovV: proj.fovV, stereo: proj.stereo });
+	}
+
+	/** The light over the pond at the hour it has come to. */
+	function lightHour(fx: FxUniforms) {
+		if (!hours) return;
+		const h = hours.hour(tide.t);
+		const still = fxFor("stillness");
+		fx.lights = [...h.lights, h.saturation];
+		fx.darks = [...h.darks, 0];
+		fx.mist = [...h.mist, h.fog];
+		fx.live[0] = still.live[0] * h.wind;
+		fx.air[1] = h.sun;
+		fx.air[2] = h.glints;
+		fx.light[3] = h.calm;
+		if (Math.abs(h.calm - calmHeard) > 0.02) audio.setCalm((calmHeard = h.calm));
+	}
+	let calmHeard = 0;
 
 	async function makeOverlay(id: SceneId): Promise<Overlay | null> {
+		await makeLife(id).catch(() => {});
 		// the act of the pond draws nothing: its button is ready with it
 		if (id === "stillness") showTide();
 		if (id !== "wave" && id !== "rain" && id !== "moonlight") return null;
@@ -576,6 +671,7 @@ function start(withSound: boolean) {
 		const wanted = bestTier === "8k" ? 4096 : bestTier === "2k" ? 2048 : matchMedia("(pointer: coarse)").matches ? 2560 : 3072;
 		const before = crowd, beforeRoom = drawnRoom;
 		crowd = "PARTIES" in sheet ? sheet : null;
+		if (id === "wave") wave = sheet as typeof import("./worlds/great-wave");
 		drawnRoom = id;
 		Object.assign(river, { seconds: 0, pace: 0, fire: 0, moon: 0 });
 		clocks = new Float32Array(crowd?.PARTIES.length ?? 0);
@@ -583,7 +679,7 @@ function start(withSound: boolean) {
 		resetTide();
 		try {
 			// the men on the river are touches of paint: no sharper than the paint round them
-			const width = id === "moonlight" ? 760 : wanted;
+			const width = id === "moonlight" ? Math.min(wanted, 2500) : wanted;
 			const made = await Overlay.create(renderer.gl, Math.min(width, renderer.maxTextureSize), sheet, sheetState());
 			overlayNow = made;
 			return made;
@@ -603,10 +699,7 @@ function start(withSound: boolean) {
 	}
 
 	function showTide() {
-		const going = tide.held || tide.running;
 		root.classList.toggle("is-held", tide.held);
-		// the points marked on the wave wait while it is elsewhere; those in the rain do not move
-		document.getElementById("room-wave")?.classList.toggle("is-away", drawnRoom === "wave" && (going || tide.away));
 		for (const b of tideButtons) {
 			b.hidden = false;
 			const on = tide.running && b === tideButtonNow();
@@ -625,7 +718,6 @@ function start(withSound: boolean) {
 		Object.assign(tide, what);
 		if (tide.held || tide.running) {
 			tide.home = false;
-			setPoi(null);
 			if (!hint.hidden) hint.classList.add("is-faded");
 		}
 		showTide();
@@ -641,10 +733,10 @@ function start(withSound: boolean) {
 	}
 
 	function updateTide(dt: number): boolean {
-		const lay = updateStill(dt);
-		if (!overlayNow) return lay;
-		if (crowd) return updateCrowd(dt) || lay;
-		if (drawnRoom === "moonlight") return updateRiver(dt) || lay;
+		if (!clocked()) {
+			if (crowd) return updateCrowd(dt);
+			return drawnRoom === "moonlight" && updateRiver(dt);
+		}
 		const before = tide.t;
 		const going = tide.held || tide.running;
 		// time gathers way, and is brought up short
@@ -660,7 +752,7 @@ function start(withSound: boolean) {
 			}
 		} else {
 			// on its own the first time, a little faster than when it is let run
-			tide.t += (tide.rate * dt * (runningOnce ? 1.5 : 1)) / TIDE_SECONDS;
+			tide.t += (tide.rate * dt * (runningOnce ? 1.5 : 1)) / tideSeconds();
 			if (runningOnce && going && tide.t > 1 - TIDE_CATCH * 0.9) {
 				runningOnce = false;
 				tide.running = false;
@@ -678,8 +770,10 @@ function start(withSound: boolean) {
 		if (tide.t >= 1) tide.t -= 1;
 		if (tide.t < 0) tide.t += 1;
 		// what is heard: the lip gathering, then the break
-		if (going && before < 0.07 && tide.t >= 0.07) audio.gather(-14, TIDE_SECONDS * 0.2);
-		if (going && before < 0.285 && tide.t >= 0.285) audio.breaker(-10);
+		if (current === "wave") {
+			if (going && before < 0.07 && tide.t >= 0.07) audio.gather(-14, tideSeconds() * 0.2);
+			if (going && before < 0.285 && tide.t >= 0.285) audio.breaker(-10);
+		}
 		const away = tide.t > TIDE_CATCH && tide.t < 1 - TIDE_CATCH ? true : tide.t === 0 ? false : tide.away;
 		if (away !== tide.away) {
 			tide.away = away;
@@ -688,8 +782,9 @@ function start(withSound: boolean) {
 		return tide.t !== before;
 	}
 
-	// The river has two lights. Looked at, the fires blaze up and the men heave; the moon, and
-	// the fires sink, the work stops and its road runs bright over the water.
+	// The river has two lights, and the men are always at work between them. Looked at, the fires
+	// blaze up and the men heave harder; the moon, and the fires sink, the work slows and its road
+	// runs bright over the water.
 	function updateRiver(dt: number): boolean {
 		const here = current === "moonlight" && !trans && !busy && entered;
 		const all = (tide.held || tide.running) && here;
@@ -699,7 +794,8 @@ function start(withSound: boolean) {
 		const atMoon = looks ? 1 - clamp((toward(-10, 17) - 9) / 12, 0, 1) : 0;
 		const before = river.pace + river.fire + river.moon;
 		const ease = Math.min(1, dt * 1.6);
-		river.pace += ((atFires > 0.4 ? 1 : 0) - river.pace) * Math.min(1, dt * 2.4);
+		const pace = atFires > 0.4 ? 1 : motion && here ? 0.6 - 0.42 * atMoon : 0;
+		river.pace += (pace - river.pace) * Math.min(1, dt * 2.4);
 		if (river.pace < 0.003) river.pace = 0;
 		river.fire += (atFires * 0.85 - atMoon * 0.6 - river.fire) * ease;
 		river.moon += (atMoon - river.moon) * ease;
@@ -707,26 +803,8 @@ function start(withSound: boolean) {
 		const heaved = Math.floor(river.seconds / 1.15);
 		if (Math.abs(river.fire - fireHeard) > 0.02) audio.setFire((fireHeard = river.fire));
 		river.seconds += river.pace * dt;
-		if (river.pace > 0.5 && Math.floor(river.seconds / 1.15) !== heaved) audio.shovel(30 + Math.random() * 20);
+		if (river.pace > 0.8 && Math.floor(river.seconds / 1.15) !== heaved) audio.shovel(30 + Math.random() * 20);
 		return river.pace > 0 || Math.abs(river.pace + river.fire + river.moon - before) > 1e-5;
-	}
-
-	// The pond answers stillness: with nothing moving, its ripples die and what stands over it
-	// is whole in the water. Any movement of the view breaks it.
-	const STILL_AFTER = 1.5;
-	function updateStill(dt: number): boolean {
-		const here = current === "stillness" && !trans && !busy && entered;
-		const moved = Math.abs(angleDelta(still.yaw, view.yaw)) + Math.abs(still.pitch - view.pitch) > 0.0006;
-		still.yaw = view.yaw;
-		still.pitch = view.pitch;
-		still.since = moved || !here ? 0 : still.since + dt;
-		const asked = here && (tide.held || tide.running);
-		const goal = asked || (here && motion && still.since > STILL_AFTER) ? 1 : 0;
-		const before = still.calm;
-		still.calm += (goal - still.calm) * Math.min(1, dt * (goal ? 0.75 : 4.5));
-		if (still.calm < 0.002) still.calm = 0;
-		if (Math.abs(still.calm - before) > 1e-4) audio.setCalm(still.calm);
-		return Math.abs(still.calm - before) > 1e-5;
 	}
 
 	function updateCrowd(dt: number): boolean {
@@ -760,7 +838,7 @@ function start(withSound: boolean) {
 
 	// The first time into a print on this visit, it moves at once, as the prologue said it would: the wave
 	// comes down and rises again to the instant of the print; in the rain everyone breaks into a run, and
-	// is caught. Any touch takes over.
+	// is caught; over the pond a day goes by. Any touch takes over.
 	let runningOnce = false;
 	function runOnce() {
 		const room = current;
@@ -778,20 +856,21 @@ function start(withSound: boolean) {
 					runningOnce = false;
 					if (room === "rain") say(tideButtonNow()?.dataset.hint ?? "", 8000);
 				},
-				room === "wave" ? 99000 : 3400,
+				room === "rain" ? 3400 : 99000,
 			);
 		}, 1400);
 	}
 
-	/** Time was stopped where Hokusai stopped it. */
+	/** Time was stopped where the painter stopped it. */
 	function showMoment() {
 		const text = tideButtonNow()?.dataset.caught ?? "";
-		const first = visit.get("caught:wave") !== "yes";
-		visit.set("caught:wave", "yes");
+		const room = current;
+		const first = visit.get(`caught:${room}`) !== "yes";
+		visit.set(`caught:${room}`, "yes");
 		say(text, first ? 3600 : 5200);
 		live.textContent = text;
 		// the first time it was not the visitor who stopped it: say how they can
-		if (first) window.setTimeout(() => current === "wave" && !tide.held && !tide.running && say(tideButtonNow()?.dataset.hint ?? "", 8000), 3900);
+		if (first) window.setTimeout(() => current === room && !tide.held && !tide.running && say(tideButtonNow()?.dataset.hint ?? "", 8000), 3900);
 	}
 
 	/** A line over the view for a while. */
@@ -838,7 +917,7 @@ function start(withSound: boolean) {
 	let heldOnce = visit.get("held") === "yes";
 	let ringWas = "";
 	function ringState() {
-		const on = entered && !busy && hasAct() && current !== "stillness" && (tide.held || !!holdFrom || (!heldOnce && ringAt.shown && !root.classList.contains("is-idle")));
+		const on = entered && !busy && hasAct() && (tide.held || !!holdFrom || (!heldOnce && ringAt.shown && !root.classList.contains("is-idle")));
 		// written only when they change: this runs on every frame
 		const state = `${on}|${!!holdFrom && !tide.held}|${tide.held}`;
 		if (state === ringWas) return on;
@@ -923,6 +1002,7 @@ function start(withSound: boolean) {
 	renderer.onRestored = () => {
 		// GPU textures were lost with the context: reload what is on screen.
 		loaded.clear();
+		loose = null;
 		artTextures.clear();
 		artSlug = artWanted = null;
 		load(current).then((t) => {
@@ -1012,9 +1092,14 @@ function start(withSound: boolean) {
 		updateArt(dt);
 		const tideMoved = updateTide(dt);
 
+		if (motion) aliveFor += dt;
+		const sky = current === "hub" ? undefined : roomBySlug[current].effects.sky;
+		// over the wave the sky stands with it
+		if (sky?.speed && !trans) skyClock += dt * sky.speed * (current === "wave" ? tide.rate : motion ? 1 : 0);
+
 		const animating = motion || tideMoved || artChanging || tweens.size > 0 || hoverChanging || parallaxChanging || swaying || !entered;
 		if (moved || animating || needsRender) {
-			draw();
+			draw(dt);
 			needsRender = false;
 			perfAcc += dt;
 			perfFrames++;
@@ -1026,7 +1111,7 @@ function start(withSound: boolean) {
 		adaptResolution();
 	}
 
-	function draw() {
+	function draw(dt: number) {
 		if (renderer.resize()) needsRender = true;
 		const proj = currentProjection();
 		if (!trans) {
@@ -1038,9 +1123,16 @@ function start(withSound: boolean) {
 				dp = boat.pitch * DEG * Math.sin(time * w) * boatAmount;
 				roll = boat.roll * DEG * Math.sin(time * w * 0.83 + 1.3) * boatAmount;
 			}
-			rockPitch = dp;
+			let lift = 0;
+			if (current === "wave" && motion && !reduced() && tide.t > 0.2) {
+				// the water the wave throws out takes the boat up, and lets it down
+				const beat = (at: number, w: number) => Math.exp(-(((tide.t - at) / w) ** 2));
+				dp += DEG * (3.4 * beat(0.37, 0.05) - 2.6 * beat(0.47, 0.06) + 1.2 * beat(0.57, 0.05));
+				roll += DEG * (-3.2 * beat(0.35, 0.05) + 3.6 * beat(0.44, 0.06) - 1.6 * beat(0.55, 0.06));
+				lift = 0.3 * beat(0.41, 0.07) - 0.12 * beat(0.53, 0.06);
+			}
 			// the boat lifts and settles as it rocks
-			heave = boat ? 0.035 * Math.sin(time * ((2 * Math.PI) / boat.period) * 0.83 + 0.4) * boatAmount : 0;
+			heave = lift + (boat ? 0.035 * Math.sin(time * ((2 * Math.PI) / boat.period) * 0.83 + 0.4) * boatAmount : 0);
 			rotation(view.yaw, view.pitch + dp, rotA, roll);
 			setEye(eyeA, current, rotA, true);
 		} else {
@@ -1053,9 +1145,15 @@ function start(withSound: boolean) {
 		overlayNow?.print(sheetState());
 		const fx = fxA;
 		lightPainting(current === "hub" ? fxA : null, trans ? 0 : hoverAmount);
-		if (current === "stillness") fx.light[3] = still.calm;
+		if (current === "stillness") lightHour(fx);
 		if (current === "moonlight") fx.mood = [river.fire, river.moon, -10 * DEG, 20.5 * DEG];
+		fx.live[3] = skyClock;
 		if (trans?.to === "hub") lightPainting(fxB, 0);
+		const riding = roomBySlug[(trans && trans.to !== "hub" ? trans.to : current) as RoomSlug]?.effects.riding;
+		for (let i = 0; i < 7; i++) {
+			const r = riding?.[i];
+			for (let k = 0; k < 4; k++) rocks[i * 4 + k] = r ? r[k] * (k < 3 ? DEG : 1) : 0;
+		}
 		renderer.render({
 			rotA: trans ? trans.rotA : rotA,
 			rotB: trans ? trans.rotB : rotA,
@@ -1072,11 +1170,13 @@ function start(withSound: boolean) {
 			close: trans?.close ?? false,
 			time,
 			drips,
+			rocks,
 			stains,
 			stainInks,
 			stainGlow,
 			match,
 		});
+		drawLoose(dt);
 	}
 
 	// ─── Parallax ───────────────────────────────────────────────────────────
@@ -1194,10 +1294,37 @@ function start(withSound: boolean) {
 			z = Math.random() * 6.6 - 1.8;
 			// not on the dais, nor on the walk to the door
 		} while (Math.hypot(x, z) > 5 || (Math.abs(x) < 1.1 && Math.abs(z) < 1.1) || (Math.abs(x) < 0.7 && z < 0));
-		const i = dripIndex++ % 4;
-		drips.set([x, z, time, 0.6 + Math.random() * 0.6], i * 4);
+		dropAt(x, z, 0.6 + Math.random() * 0.6);
 		audio.drip(x, -config.hub.geometry.water, z);
 	}
+
+	/** Rings spread from here on the water of the scene. */
+	function dropAt(x: number, z: number, strength: number) {
+		if (motion) drips.set([x, z, time, strength], (dripIndex++ % 8) * 4);
+	}
+
+	// The water answers whoever touches it: rings follow the pointer over it, and a tap drops on it.
+	let lastTouch = { x: 0, z: 0, at: 0, heard: 0 };
+	function touchWater(clientX: number, clientY: number, tapped: boolean) {
+		const water = (current === "hub" ? config.hub.effects : roomBySlug[current].effects).water;
+		if (!water?.drips || busy || trans || !entered || !motion) return;
+		const rect = look.getBoundingClientRect();
+		const d = toWorld(rotA, screenRay(((clientX - rect.left) / rect.width) * 2 - 1, 1 - ((clientY - rect.top) / rect.height) * 2, currentProjection()));
+		if (d[1] > -0.06) return;
+		const out = water.height / -d[1];
+		const x = d[0] * out, z = d[2] * out, dist = Math.hypot(x, z);
+		const now = performance.now();
+		const gone = Math.hypot(x - lastTouch.x, z - lastTouch.z);
+		if (dist > 16 || (!tapped && (gone < 0.1 + dist * 0.07 || now - lastTouch.at < 110))) return;
+		dropAt(x, z, tapped ? 1.5 : 0.55);
+		if (tapped || now - lastTouch.heard > 420) {
+			audio.drip(x, -water.height, z, tapped ? 1 : 0.35);
+			lastTouch.heard = now;
+		}
+		Object.assign(lastTouch, { x, z, at: now });
+	}
+	look.addEventListener("pointermove", (e) => touchWater(e.clientX, e.clientY, false));
+	look.addEventListener("pointerdown", (e) => touchWater(e.clientX, e.clientY, true));
 
 	// ─── The painting approached ────────────────────────────────────────────
 	// The panorama gives a painting a few hundred pixels. The one pointed at,
@@ -1624,8 +1751,11 @@ function start(withSound: boolean) {
 		const h = look.clientHeight;
 		for (const p of pois) {
 			if ((p.closest("article") as HTMLElement).hidden) continue;
-			const dir = seenFrom(dirFromAngles(Number(p.dataset.yaw) * DEG, Number(p.dataset.pitch) * DEG), poiDisparity.get(p) ?? 0);
-			const ndc = project(dir, view.yaw, view.pitch + rockPitch, proj);
+			let yaw = Number(p.dataset.yaw), pitch = Number(p.dataset.pitch);
+			// on the wave they go where the water and the boat take them
+			if (current === "wave" && wave && tide.t) [yaw, pitch] = wave.carry(p.querySelector(".poi-card")!.id.replace("poi-wave-", ""), yaw, pitch, tide.t);
+			const dir = seenFrom(dirFromAngles(yaw * DEG, pitch * DEG), poiDisparity.get(p) ?? 0);
+			const ndc = project(dir, view.yaw, view.pitch, proj, rotA);
 			const visible = !!ndc && Math.abs(ndc[0]) < 0.97 && Math.abs(ndc[1]) < 0.95;
 			p.dataset.visible = String(visible);
 			if (!ndc) continue;
@@ -1750,7 +1880,7 @@ function start(withSound: boolean) {
 		closeAllDetails();
 		setPoi(null);
 		if (hasAct()) sendTideHome();
-		tide.home = tide.home && drawnRoom === "wave";
+		tide.home = tide.home && clocked();
 		if (push) history.pushState({ scene: target }, "", href(target));
 		const from = current;
 		const keyboardFocus = document.activeElement !== document.body && document.activeElement !== look;
@@ -1778,6 +1908,14 @@ function start(withSound: boolean) {
 		}
 
 		const arrived = ok ? target : from;
+		if (arrived !== current) {
+			lives.delete(current);
+			presence = 0;
+			skyClock = 0;
+			calmHeard = 0;
+			if (arrived !== "wave") tide.t = tide.rate = 0;
+			tide.home = tide.away = false;
+		}
 		current = arrived;
 		trans = null;
 		mix = 0;
@@ -1797,7 +1935,7 @@ function start(withSound: boolean) {
 		live.textContent = !ok
 			? `Sorry, ${sceneTitle(target)} could not be loaded.`
 			: arrived === "hub"
-				? `${config.hub.title}. Four paintings hang side by side in front of you; press Tab to reach their labels and step inside.`
+				? `${config.hub.title}. Four paintings hang on the walls in front of you; press Tab to reach their labels and step inside.`
 				: `${sceneTitle(arrived)}: ${roomBySlug[arrived as RoomSlug].title}, by ${roomBySlug[arrived as RoomSlug].artist}.`;
 		if (ok && from !== "hub") release(from);
 		if (arrived === "hub") showHint();
@@ -2330,7 +2468,7 @@ function start(withSound: boolean) {
 	let hasInteracted = false;
 	/** Once the camera has settled, say that time can be let run (until it has been, on this visit). */
 	function showTideHint(after: number) {
-		if ((current === "wave" || current === "rain") && motion && !reduced() && visit.get(`ran:${current}`) !== "yes") return runOnce();
+		if ((current === "wave" || current === "rain" || current === "stillness") && motion && !reduced() && visit.get(`ran:${current}`) !== "yes") return runOnce();
 		window.setTimeout(() => {
 			if (hasAct() && !busy && !tide.held && !tide.running && tide.t === 0) say(tideButtonNow()?.dataset.hint ?? "", 8000);
 		}, after);
@@ -2358,8 +2496,8 @@ function start(withSound: boolean) {
 	view.locked = true;
 	updateDocument(current);
 
-	Promise.all([first, renderer.ready])
-		.then(([tex]) => {
+	first
+		.then((tex) => {
 			renderer.setSlot(0, tex);
 			fxA = fxFor(current);
 			needsRender = true;
@@ -2372,6 +2510,8 @@ function start(withSound: boolean) {
 				window.setTimeout(() => {
 					const order: SceneId[] = ["hub", ...config.rooms.map((r) => r.slug)];
 					order.filter((id) => id !== current).forEach((id, i) => window.setTimeout(() => prefetchScene(id), i * 400));
+					// and their programs, one after another
+					order.reduce((before, id) => before.then(() => renderer.prepare(FEATURES[id]).ready).catch(() => {}), Promise.resolve());
 				}, 2500);
 			}
 		})

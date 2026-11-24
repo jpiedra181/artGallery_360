@@ -1,7 +1,7 @@
 /**
  * Encode the rendered panoramas and artwork images for the web.
  *
- *   node scripts/build-assets.mjs [scene ...] [--depth-only]
+ *   node scripts/build-assets.mjs [scene ...] [--depth-only | --mask-only]
  *
  * Input  blender/renders/<scene>/{final|beauty}.png, mask.png, still.png, depth.png
  *        blender/sources/tex/<room>.jpg (artwork images)
@@ -23,6 +23,7 @@ const MANIFEST = path.join(ROOT, "src", "data", "assets.json");
 const SCENES = ["hub", "wave", "rain", "stillness", "moonlight"];
 const ROOMS = SCENES.slice(1);
 const DEPTH_ONLY = process.argv.includes("--depth-only");
+const MASK_ONLY = process.argv.includes("--mask-only");
 
 sharp.concurrency(4);
 
@@ -166,11 +167,34 @@ async function buildSceneDepth(scene, entry) {
 	console.log(`  ${scene} depth ${((await size(depthOut)) / 1024).toFixed(0)} KB, nearest surface ${entry.depth.near} m`);
 }
 
+async function buildSceneMask(scene, entry) {
+	const out = path.join(PUBLIC, "scenes", scene);
+	const maskSrc = path.join(RENDERS, scene, "mask.png");
+	if (existsSync(maskSrc)) {
+		const maskOut = path.join(out, "mask.webp");
+		// G (sky) is wherever the mask render saw the background: alpha 0
+		const { data: m } = await sharp(maskSrc).resize({ width: 2048, height: 1024 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+		for (let i = 0; i < m.length; i += 4) m[i + 1] = Math.max(m[i + 1], 255 - m[i + 3]);
+		if (PRINTS.includes(scene)) pullWaterBack(m, 2048, 1024, 4);
+		// soft masks survive lossy compression well; 2k is plenty for effect regions
+		await sharp(m, { raw: { width: 2048, height: 1024, channels: 4 } })
+			.removeAlpha()
+			.webp({ quality: 90, effort: 6 })
+			.toFile(maskOut);
+		entry.mask = rel(maskOut);
+		console.log(`  ${scene} mask ${((await size(maskOut)) / 1024).toFixed(0)} KB`);
+	}
+}
+
 async function buildScene(scene, manifest) {
 	const dir = path.join(RENDERS, scene);
 	if (DEPTH_ONLY) {
 		// add or refresh the depth map without re-encoding the panoramas
 		if (manifest.scenes[scene]) await buildSceneDepth(scene, manifest.scenes[scene]);
+		return;
+	}
+	if (MASK_ONLY) {
+		if (manifest.scenes[scene]) await buildSceneMask(scene, manifest.scenes[scene]);
 		return;
 	}
 	const source = ["final.png", "beauty.png"].map((f) => path.join(dir, f)).find(existsSync);
@@ -200,21 +224,7 @@ async function buildScene(scene, manifest) {
 		}
 	}
 
-	const maskSrc = path.join(dir, "mask.png");
-	if (existsSync(maskSrc)) {
-		const maskOut = path.join(out, "mask.webp");
-		// G (sky) is wherever the mask render saw the background: alpha 0
-		const { data: m } = await sharp(maskSrc).resize({ width: 2048, height: 1024 }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
-		for (let i = 0; i < m.length; i += 4) m[i + 1] = Math.max(m[i + 1], 255 - m[i + 3]);
-		if (PRINTS.includes(scene)) pullWaterBack(m, 2048, 1024, 4);
-		// soft masks survive lossy compression well; 2k is plenty for effect regions
-		await sharp(m, { raw: { width: 2048, height: 1024, channels: 4 } })
-			.removeAlpha()
-			.webp({ quality: 90, effort: 6 })
-			.toFile(maskOut);
-		entry.mask = rel(maskOut);
-		console.log(`  ${scene} mask ${((await size(maskOut)) / 1024).toFixed(0)} KB`);
-	}
+	await buildSceneMask(scene, entry);
 
 	const stillSrc = path.join(dir, "still.png");
 	if (existsSync(stillSrc)) {
@@ -286,7 +296,7 @@ for (const scene of SCENES) {
 	console.log(`▸ ${scene}`);
 	await buildScene(scene, manifest);
 }
-if (!DEPTH_ONLY && (!only.length || only.includes("art"))) await buildArt(manifest);
-if (!DEPTH_ONLY && (!only.length || only.includes("process"))) await buildProcess(manifest);
+if (!DEPTH_ONLY && !MASK_ONLY && (!only.length || only.includes("art"))) await buildArt(manifest);
+if (!DEPTH_ONLY && !MASK_ONLY && (!only.length || only.includes("process"))) await buildProcess(manifest);
 await writeFile(MANIFEST, JSON.stringify(manifest, null, "\t") + "\n");
 console.log("manifest written");

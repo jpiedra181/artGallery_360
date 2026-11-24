@@ -1,4 +1,4 @@
-<a href="https://artgallery360.art"><img src="public/og.jpg" alt="Four paintings side by side in a dark flooded gallery, over a paper label that reads: Inside the Frame, Vol. I — Water. Hokusai, Hiroshige, Monet, Turner" width="100%"></a>
+<a href="https://artgallery360.art"><img src="public/og.jpg" alt="Four paintings in a dark flooded gallery, over a paper label that reads: Inside the Frame, Vol. I — Water. Hokusai, Hiroshige, Monet, Turner" width="100%"></a>
 
 # Inside the Frame — Vol. I: Water
 
@@ -27,14 +27,15 @@ The same approach suits museums, galleries, cultural foundations, hotels and bra
 
 - **Worlds built in Blender, generated from code.** Every scene is produced by Python scripts in Blender 5 and rendered as an 8K equirectangular panorama with Cycles.
 - **Painted, not just rendered.** The two woodblock prints are lit by emission only (flat colours), with ink outlines drawn afterwards from depth, normal and object-id passes, plus paper grain and block mottling. The two oils are made of paint: Monet's pond is about 430,000 strokes hung in space, each coloured from the part of the painting it stands for; Turner's river is his painting read as some 95,000 strokes, from broad to fine, and carried on from its margins all the way round. Impasto relief and canvas weave are added afterwards.
-- **A wave that falls.** The Great Wave is not rendered but drawn, live, from a few curves read off the print and one shape of claw (about 70,000 flat triangles in painter's order, no image). Press and hold, and time runs: the lip comes down, breaks, sinks and rises again. Let go and it stops; stop it where Hokusai did, and it settles on the instant he chose.
+- **A wave that falls.** The Great Wave is not rendered but drawn, live, from a few curves read off the print and one shape of claw (about 125,000 flat triangles in painter's order, no image). Press and hold, and time runs: the lip comes down, breaks, sinks and rises again. Let go and it stops; stop it where Hokusai did, and it settles on the instant he chose.
 - **People who run.** In the rain, the print's passers-by are drawn live by the same engine, caught in mid-stride; whoever the visitor looks at starts to run, and holding sets everyone going. The rain itself is drawn in the shader as long thin lines at two angles, as cut in the block.
-- **Stillness and two lights.** In Monet's garden, keeping still lets the ripples die until the bridge is whole in the water. On Turner's river the fires blaze up and the keelmen work when looked at; look at the moon, and they stop and its road brightens.
-- **Living stills.** A semantic mask per world (R water, G sky, B light sources) drives real-time layers on top of the render: ripples on water (with drops falling in the gallery), rain in two directions with impacts on the river, flickering fires, a drifting sky, a rocking boat.
+- **A day and two lights.** In Monet's garden the wind crosses the strokes, the pads ride the pond and rings follow the pointer; press and hold, and a day goes by over it, from the afternoon of the painting through sunset, a night of fireflies, mist and noon, back to the light he chose. On Turner's river the clouds turn round the moon, smoke and sparks go up and keels are rowed across its road; the fires blaze up and the men heave harder when looked at, and looking at the moon brightens its road.
+- **Living stills.** A semantic mask per world (R water, G sky, B light sources) drives real-time layers on top of the render: ripples on water (with drops falling in the gallery), rain in two directions with impacts on the river, flickering fires, a drifting sky, a rocking boat, clouds that run, ships that ride the water, wind in the leaves and the hour of the day.
+- **Loose strokes.** Leaves, petals, dragonflies, smoke, embers, gulls and spray are single touches of a brush, instanced over the panorama with the same projection, parallax and depth.
 - **Depth, not a flat sphere.** Each world ships a depth map from the same Blender scene. The viewer uses it to move the eye a few centimetres around the point the panorama was rendered from: near things slide over far ones as you turn, as the mouse moves and as the boat rocks.
 - **Authored entrances.** Arriving in a world is a camera move: the view starts off its mark and a little way back, and settles as the scene opens. Dragging during it simply joins in.
 - **Through the canvas.** Entering a painting, a drop lands where you touched it. Pigment blooms from that point like ink let into water — Prussian blue for Hokusai, white gold for Turner — the surface swells and ripples, and behind the bloom the picture is already a place: the world first appears warped onto its painting by a registration grid (`scripts/registration.py`), so what is painted turns into what is there. Leaving runs the other way: the dark of the gallery closes in on the world until it is a painting on the wall again.
-- **A beginning and an end.** Two lines are read over the dark water before the gallery comes into view, with its four paintings side by side. Each room entered leaves its pigment in the water under its painting; after the fourth, the view goes down to the water again, the rooms are named one by one while their colours spread and meet, and the closing words stand where the title stood.
+- **A beginning and an end.** Two lines are read over the dark water before the gallery comes into view, with its four paintings, one to a wall. Each room entered leaves its pigment in the water under its painting; after the fourth, the view goes down to the water again, the rooms are named one by one while their colours spread and meet, and the closing words stand where the title stood.
 - **Detail where it is looked at.** The painting pointed at, entered or left borrows the fine detail of its own picture, which the gallery's panorama has no pixels for.
 - **Generative sound.** Synthesised live with Web Audio and positioned in 3D (HRTF) around the visitor — no audio files. The gallery holds a note for each room visited; the four make a chord.
 
@@ -43,13 +44,13 @@ The same approach suits museums, galleries, cultural foundations, hotels and bra
 | Area | Choice |
 |---|---|
 | Site | Static [Astro](https://astro.build): one page per room, readable without JavaScript, navigated without reloads when it is available; two plain reading pages (`/making-of/`, `/about/`), a sitemap and robots.txt |
-| Viewer | A dependency-free **WebGL 2** renderer (~35 KB gzipped for the app, plus 18 KB for what is drawn live in three of the rooms, loaded with them) |
+| Viewer | A dependency-free **WebGL 2** renderer (~38 KB gzipped for the app, plus 26 KB for what is drawn live in the rooms, loaded with them) |
 | 3D production | Blender 5 + Cycles, scripted in Python (`blender/scripts/`) |
 | Post-processing | Python (`scripts/looks.py`, `scripts/post.py`) |
 | Audio | Web Audio API with HRTF panning |
 | Testing | axe-core; Playwright in Chrome, Firefox and WebKit |
 
-- **No sphere mesh.** A single fullscreen shader casts a ray per pixel and samples the panorama: exact projection, seam-safe mipmapping, and a stereographic blend for wide portrait screens.
+- **No sphere mesh.** A fullscreen shader, compiled per scene with only what that scene uses, casts a ray per pixel and samples the panorama: exact projection, seam-safe mipmapping, and a stereographic blend for wide portrait screens.
 - **Parallax in the same shader.** The ray is bent by eye offset ÷ distance, solved in three rounds per pixel against an 8-bit disparity map (10–15 KB per world). Foreground edges are dilated when the map is built, so silhouettes move whole instead of tearing.
 - **Streaming without stalls.** Panoramas stream in strips so uploads never block a frame (rows are skipped with `UNPACK_SKIP_ROWS`: cutting strips with `createImageBitmap` fails in Firefox); scenes open at 4K and upgrade to 8K on capable screens; resolution adapts to keep the frame rate smooth.
 
@@ -57,7 +58,7 @@ The same approach suits museums, galleries, cultural foundations, hotels and bra
 
 - Every room has a written description of its world and of the painting; the exhibition can be followed entirely without seeing it.
 - **Keyboard:** arrow keys look around, + and − zoom, Tab reaches the paintings and points of interest (the view turns to show what has focus, clear of the panels), Escape closes panels and button labels.
-- **The act of each room** (the wave falling, people running, the pond clearing, the keelmen at work) needs no long press and no steady hand: the button on the room's label starts and stops it, and the space bar does what holding does. With animation paused or reduced motion nothing runs on being looked at, but the button still works.
+- **The act of each room** (the wave falling, people running, the day going by, the fires) needs no long press and no steady hand: the button on the room's label starts and stops it, and the space bar does what holding does. With animation paused or reduced motion nothing runs on being looked at, but the button still works.
 - **Single pointer, no dragging or pinching:** a button in the corner opens look and zoom buttons that turn and zoom one step per click or tap (it stays open on later visits), and "Look for" on each room card lists its points of interest; choosing one turns the view to it and opens its note.
 - **Controls that step back:** after a few seconds without input the interface fades and leaves the view to the painting; any movement, touch or key brings it back. It never fades while something is open, while the keyboard is on a control or with animation paused, and it stays in the tab order and the accessibility tree throughout.
 - **Screen readers:** semantic landmarks and headings, a labelled 360° view, announcements when moving between rooms, focus management.
@@ -116,7 +117,7 @@ To add or refresh only the depth maps, render the pass alone and encode it witho
 
 ```sh
 blender -b blender/wave.blend -P blender/scripts/render.py -- --name wave --width 4096 --no-beauty --no-mask --passes depth
-node scripts/build-assets.mjs wave --depth-only
+node scripts/build-assets.mjs wave --depth-only   # or --mask-only
 ```
 
 Moonlight starts from strokes read off the painting; run this once before building it:
@@ -136,6 +137,7 @@ Scenes: `hub`, `wave`, `rain`, `stillness`, `moonlight`. The hub script also wri
 - Claude Monet, *Water Lily Pond* — The Art Institute of Chicago, Mr. and Mrs. Lewis Larned Coburn Memorial Collection (1933.441). Public domain, CC0.
 - J. M. W. Turner, *Keelmen Heaving in Coals by Moonlight* — National Gallery of Art, Washington, Widener Collection (1942.9.86). Open access, CC0.
 - Textures from [Poly Haven](https://polyhaven.com) (CC0): Plastered Wall 04 and Square Floor by Rob Tuytel, Oak Wood Planks by Dimitrios Savva.
+- The lettering on the gallery walls: Ibarra Real Nova (`blender/fonts/`), SIL Open Font License.
 - Type: Ibarra Real Nova and Libre Franklin (SIL Open Font License).
 
 ---

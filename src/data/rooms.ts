@@ -20,13 +20,20 @@ export interface Hotspot {
 /** Real-time layers the viewer adds on top of the rendered panorama. */
 export interface SceneEffects {
 	/** Ripples on the water plane (mask R). height = eye height above water in metres. */
-	water?: { height: number; strength: number; scale: number; speed: number; drips?: number };
+	/** drips: rings from what falls on it. float: what is marked as floating (mask B) moves with it. glints: light broken on it. */
+	water?: { height: number; strength: number; scale: number; speed: number; drips?: number; float?: number; glints?: number };
+	/** Wind in what the mask marks as able to move (G), in degrees, and sun through it. */
+	wind?: { amount: number; sun: number };
 	/** Falling rain streaks; angle in degrees from vertical. */
 	rain?: { density: number; angle: number; speed: number };
 	/** Flicker of light sources (mask B). */
 	flicker?: { strength: number };
-	/** Slow shimmer of the sky (mask G). */
-	sky?: { shimmer: number };
+	/** The sky (mask G): slow shimmer, and how far it runs round its light (degrees, at so many turns a second). */
+	sky?: { shimmer: number; run?: number; speed?: number };
+	/** Ships and buoys that ride the water: yaw, pitch of the waterline, half width (degrees), amplitude. */
+	riding?: [number, number, number, number][];
+	/** The drawing that hangs in the scene is laid with a brush (0..1). */
+	brush?: number;
 	/** Soften the line behind the viewer where the panorama's edges meet (smooth skies only: it costs a little sharpness there). */
 	seam?: boolean;
 	/** Final colour treatment. */
@@ -115,14 +122,14 @@ export const finale = {
 export const hub = {
 	title: "The Flooded Gallery",
 	scene:
-		"A dark, many-sided gallery whose floor lies under a sheet of still, black water. You stand on a small timber platform in the middle of the room. Four paintings hang side by side on the walls in front of you, each under a warm spotlight and each mirrored in the water below. From left to right: Hokusai's Great Wave, Hiroshige's rain-swept bridge, Monet's lily pond and Turner's moonlit harbour. Behind you a plank walk leads back to a tall doorway with pale daylight in it. Now and then a drop falls from the ceiling and rings spread across the water. Each room you visit leaves its pigment in the water under its painting.",
+		"A dark, many-sided gallery whose floor lies under a sheet of still, black water. You stand on a small timber platform in the middle of the room. Four paintings hang on the walls in front of you, one to a wall with bare wall between them, each under a warm spotlight and each mirrored in the water below. From left to right: Hokusai's Great Wave, Hiroshige's rain-swept bridge, Monet's lily pond and Turner's moonlit harbour. On the wall to the left of them is the title of the exhibition; on the one to the right it says: Four painters stopped the water. Step inside, and it moves again. Behind you a plank walk leads back to a tall doorway with pale daylight in it. Now and then a drop falls from the ceiling and rings spread across the water, as they do wherever the pointer passes over it. Each room you visit leaves its pigment in the water under its painting.",
 	effects: {
-		water: { height: 1.66, strength: 0.4, scale: 1.0, speed: 0.6, drips: 4 },
+		water: { height: 1.66, strength: 0.4, scale: 1.0, speed: 0.6, drips: 1 },
 		grade: { vignette: 0.35, grain: 0.035 },
 		depth: { amount: 1, curve: 1 },
 	} satisfies SceneEffects,
-	/** All four paintings in view. */
-	view: { yaw: 1, pitch: -4, zoom: 1.05 },
+	/** Two paintings whole, and the others coming into view at the sides. */
+	view: { yaw: 0, pitch: -3, zoom: 1.24 },
 	/** First steps into the gallery: up from the reflection in the water to the painting. */
 	entrance: { yaw: 0, pitch: -17, dolly: 0.7, seconds: 5 } satisfies Entrance,
 	/** The same after the prologue, which is read looking down at the water. */
@@ -194,7 +201,8 @@ export const rooms: Room[] = [
 			caught: "Here. This is the instant Hokusai chose.",
 		},
 		effects: {
-			water: { height: 1.0, strength: 0.12, scale: 0.35, speed: 0.6 },
+			water: { height: 1.0, strength: 0.16, scale: 0.35, speed: 0.75 },
+			sky: { shimmer: 0.05, run: 2.2, speed: 0.09 },
 			grade: { vignette: 0.28, grain: 0.035 },
 			boat: { pitch: 1.4, roll: 2.4, period: 7.5 },
 			depth: { amount: 0.45, curve: 0.6 },
@@ -291,7 +299,7 @@ export const rooms: Room[] = [
 			"For the rest of his life the pond was his main subject. The later water lily paintings drop the bridge and the bank entirely and show nothing but water.",
 		],
 		scene:
-			"You stand on a small wooden landing at the edge of a pond. There is no sky: dark foliage, russet and green, closes overhead and all round. Just ahead a footbridge, blue-green and almost black in its own shade, arches from one side of the view to the other. Turquoise and violet pads crowd the water in front of it, with russet water between them; beyond the bridge lies a band of pale blossom. Yellow-green streamers of willow hang through the dark, a pale flowering tree leans in on the right, and reeds hook over from the bank on the left. Behind you a path of reddish earth curves between beds of flowers. Everything is made of separate strokes of paint.",
+			"You stand on a small wooden landing at the edge of a pond. There is no sky: dark foliage, russet and green, closes overhead and all round. Just ahead a footbridge, blue-green and almost black in its own shade, arches from one side of the view to the other. Turquoise and violet pads crowd the water in front of it, with russet water between them; beyond the bridge lies a band of pale blossom. Yellow-green streamers of willow hang through the dark, a pale flowering tree leans in on the right, and reeds hook over from the bank on the left. Behind you a path of reddish earth curves between beds of flowers. Everything is made of separate strokes of paint, and the strokes move: wind crosses the leaves, the pads rise and fall, petals drop on the water, dragonflies hang over it. Let the day pass, and the light goes from afternoon to sunset, the blue hour, a night of fireflies, mist at dawn and noon, and comes round to the light of the painting.",
 		// viridian, the green of the bridge
 		pigment: "#2c6b55",
 		view: { yaw: 3, pitch: -2 },
@@ -321,13 +329,14 @@ export const rooms: Room[] = [
 			},
 		],
 		act: {
-			run: "Hold your breath",
-			stop: "Breathe",
-			hint: "Keep still, and the water clears.",
-			caught: "",
+			run: "Let the day pass",
+			stop: "Stop the day",
+			hint: "Touch the water. Press and hold: the day goes by.",
+			caught: "Here. This is the light Monet chose.",
 		},
 		effects: {
-			water: { height: 1.75, strength: 0.19, scale: 0.8, speed: 0.32 },
+			water: { height: 1.75, strength: 0.24, scale: 0.8, speed: 0.42, drips: 1.9, float: 0.5, glints: 0.8 },
+			wind: { amount: 0.62, sun: 0.34 },
 			grade: { vignette: 0.28, grain: 0.03 },
 			depth: { amount: 1, curve: 0.7 },
 		},
@@ -356,7 +365,7 @@ export const rooms: Room[] = [
 			"Most of the canvas is given to light itself. The moon sits in a funnel of luminous cloud, and its glow spills down into a pale path across the water, painted in thick, blended strokes.",
 		],
 		scene:
-			"You sit in a small rowing boat on a broad, calm river, on a night that is nowhere near dark. Ahead and a little to the left a full moon hangs high in a tunnel of cream and blue cloud, and its light falls in a pale column to the water and runs over it to your bow. On the left a tall ship under grey sails passes close, with others fading into blue haze behind it; a buoy and a cask float nearby. On the right colliers crowd together in brown smoke, and by the glare of braziers keelmen heave coal up out of their low boats; the firelight lies in long streaks on the river. A man sits on a raft of timber between you and them. Behind you the river opens under a deep blue sky, with ships at anchor like ghosts. Everything is made of strokes of paint, most of them read off the canvas itself.",
+			"You sit in a small rowing boat on a broad, calm river, on a night that is nowhere near dark. Ahead and a little to the left a full moon hangs high in a tunnel of cream and blue cloud, and its light falls in a pale column to the water and runs over it to your bow. On the left a tall ship under grey sails passes close, with others fading into blue haze behind it; a buoy and a cask float nearby. On the right colliers crowd together in brown smoke, and by the glare of braziers keelmen heave coal up out of their low boats; the firelight lies in long streaks on the river. A man sits on a raft of timber between you and them. Everything stirs: the clouds turn slowly round the moon and gulls with them, smoke and sparks go up from the fires, ships and buoys ride the water, and keels row across the moonlight. Behind you the river opens under a deep blue sky, with ships at anchor like ghosts. Everything is made of strokes of paint, most of them read off the canvas itself.",
 		// the white gold around the moon
 		pigment: "#f2d596",
 		view: { yaw: 0, pitch: 4 },
@@ -386,16 +395,26 @@ export const rooms: Room[] = [
 			},
 		],
 		act: {
-			run: "Let them work",
-			stop: "Let them rest",
+			run: "Feed the fires",
+			stop: "Let them sink",
 			hint: "Look at the fires, then at the moon.",
 			caught: "",
 		},
 		effects: {
-			water: { height: 1.5, strength: 0.16, scale: 0.7, speed: 0.4 },
-			sky: { shimmer: 0.12 },
+			water: { height: 1.5, strength: 0.22, scale: 0.7, speed: 0.55, drips: 2, glints: 1.3 },
+			sky: { shimmer: 0.16, run: 3.2, speed: 0.06 },
 			seam: true,
-			flicker: { strength: 0.35 },
+			flicker: { strength: 0.7 },
+			brush: 1,
+			riding: [
+				[-38.9, -2.5, 6, 0.02],
+				[-58, -3, 11, 0.013],
+				[-94, -0.5, 12, 0.015],
+				[-25.2, -8, 3, 0.08],
+				[-26.3, -12, 2.5, 0.1],
+				[19.8, -13.5, 8, 0.022],
+				[66, -2, 13, 0.012],
+			],
 			grade: { vignette: 0.32, grain: 0.035 },
 			boat: { pitch: 0.5, roll: 0.9, period: 9 },
 			depth: { amount: 0.6, curve: 0.6 },

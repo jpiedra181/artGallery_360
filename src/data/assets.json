@@ -4,16 +4,16 @@
 			"tiers": {
 				"8k": {
 					"avif": "scenes/hub/pano-8k.avif",
-					"bytes": 282670
+					"bytes": 319570
 				},
 				"4k": {
 					"avif": "scenes/hub/pano-4k.avif",
-					"bytes": 184364,
+					"bytes": 209690,
 					"webp": "scenes/hub/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/hub/pano-2k.avif",
-					"bytes": 54766,
+					"bytes": 64740,
 					"webp": "scenes/hub/pano-2k.webp"
 				}
 			},
@@ -31,7 +31,7 @@
 					"960": "scenes/hub/still-960.webp",
 					"1920": "scenes/hub/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRugAAABXRUJQVlA4INwAAADQBQCdASogABQAPtFYpEuoJSOhsAgBABoJZwDIYazxgAzxUk3Wqnrg456b4F49RYbUuU354W4AAP7srroDCrCX2b7QPm7J8x3/AJqz6Lu+LYiuMfykXytHWDoQ+8w69B9Pxki9gr+Xy98fm4i9hPIHnelcOTJbI0T14VeqbjdF8hq3jLqjc6L44sWOgOzRBCl2Rk20fhdwd3T+vmB95WrNb/g1E4okHfmoeEXq2JmM4OlsWwUGdKYhdR367GK8ixAUIW3j7wkmlyoGA14zzkaadqXVGVC1wmtFAAAA"
+				"lqip": "data:image/webp;base64,UklGRugAAABXRUJQVlA4INwAAABQBgCdASogABQAPtFcp04oJSOiKAqpABoJZwDNn1/OMTwFSfNHBlzOinkfHXAfvCRoiTaZK2eElefzAAD+7Cqt9nQYHXekbQSrFpmSI1MsQ+kGuTONXsXc2mLhi3KLpJsfVrpQsOuKXt97F22bFLAFjfASEeq3ZP/tWRzg2DGjjafvGPxCQH6t38h0B+NjUWNkivmCiFFOQUPqNvl+n52ankM3jRrAo39EYIvk6SRXEN88REy4MXikwzKJTzlCwmGDX1JPNoB6z7t2MXNG1VI/yF+NZuKIwMZ/ZAAA"
 			},
 			"depth": {
 				"url": "scenes/hub/depth.webp",
@@ -69,7 +69,7 @@
 					"960": "scenes/wave/still-960.webp",
 					"1920": "scenes/wave/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRhoBAABXRUJQVlA4IA4BAABQBgCdASogABQAPs1Wo0unpKMhsBgMAPAZiWgAnTKAooAcBagmcgv9JHW+l+AeFb2BZ6C9qgZf6t5PkAD+7T9g0VmtgvgBVRf3RXhghM/VHPhr3zS5PVfMgNNDrZawf/MmgHvyYcjrkP7asNptxvo1i7eBKV+LDO3SpPLHVPpAmAAZ2G5VSSkt35KuA9H4D1FraQFZ0DvbiH9EaewoKfkIuRgoDIy33SaObDLrEk52ApBITBUEI2rzSohqrvUWxXZFVMkqJsqHNZxPmC2/ZB8Z/R8da4ATJVVrvKhF/VL40+ynBgo5At0oIEH7Y75k/uDn9O8Geh/Vf6ub+A+dteUBhfq1RvSJZDau0+ggOAA="
+				"lqip": "data:image/webp;base64,UklGRhgBAABXRUJQVlA4IAwBAAAwBgCdASogABQAPs1Yo0unpaMhsBgMAPAZiWgAnTKAhgHuC35jfZpF1WumiJlqtCCp4Le7Fga7iv4AAP7tP2X5B6dgAjTCav4O1qEZhGCtB5+8yZ7mwGfgEx0b8AeaU6hxWHfJg+ukP/tqwBMF1FyrF3dQ+Icl93BUm+ijqn0gTAAM7DaYw0gkjuRc7nMQeBgbtNuKYsTUzfyXOc7fKpL726Kv4Su42c1J7qJS1rxWg2/+PHf5EkDP7n2J+EW8DK1XKVpTFnaZZtJ2/YN8U17LLaTAZm1M0fo/YbuUv7F/Vst4fPNGUHvHs/3ocug2/TDoWLUYW1/KL3C45WWSFF6EVTNyJZDau0+ggOAA"
 			},
 			"depth": {
 				"url": "scenes/wave/depth.webp",

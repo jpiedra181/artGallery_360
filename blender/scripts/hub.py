@@ -1,7 +1,8 @@
 """Hub: a dark, flooded gallery with the four paintings side by side.
 
-The room is a many-sided hall. The four walls ahead carry one painting each,
-close enough together to be seen at once; the rest are bare, and behind the
+The room is a regular nonagon, a wall every 40 degrees. The four ahead carry
+one painting each, with as much wall as painting between one and the next; on
+the walls to either side of them are words, as in any gallery, and behind the
 viewer is the doorway one came in by, with a plank walk from it to the small
 timber dais in the middle. The floor is covered by a sheet of still water
 that mirrors the lit canvases; the web viewer animates ripples on it using the
@@ -31,16 +32,22 @@ HANG = 2.0         # height of the painting centres
 
 # id, texture, yaw (deg), image height (m), kind
 PAINTINGS = [
-    ("wave", "wave.jpg", -42.5, 1.6, "print"),
-    ("rain", "rain.jpg", -12.0, 1.94, "print"),
-    ("stillness", "stillness.jpg", 15.0, 1.9, "oil"),
-    ("moonlight", "moonlight.jpg", 44.5, 1.74, "oil"),
+    ("wave", "wave.jpg", -60, 1.7, "print"),
+    ("rain", "rain.jpg", -20, 2.0, "print"),
+    ("stillness", "stillness.jpg", 20, 2.0, "oil"),
+    ("moonlight", "moonlight.jpg", 60, 1.85, "oil"),
 ]
 
-# the walls: the four with paintings, and bare ones closing the hall behind
-WALLS = [-42.5, -12.0, 15.0, 44.5, 84, 125, 180, 235, 274]
+# the walls: the four with paintings, and those closing the hall behind
+WALLS = [-60, -20, 20, 60, 100, 140, 180, 220, 260]
 DOOR = 180
 DOOR_W, DOOR_H, PASSAGE = 1.9, 3.1, 3.2
+
+# lettering on the walls beside the paintings: yaw, lines (text, height of the line in m)
+LETTERING = [
+    (260, [("Inside", 0.5), ("the Frame", 0.5), ("", 0.16), ("Volume I: Water", 0.21)]),
+    (100, [("Four painters", 0.34), ("stopped the water.", 0.34), ("", 0.16), ("Step inside,", 0.34), ("and it moves again.", 0.34)]),
+]
 
 WALL_TINT = (0.13, 0.17, 0.19)
 REFLECT_MIN = 0.42  # mirror strength looking straight down (physical water ≈ 0.02)
@@ -321,7 +328,7 @@ def build(preview=True):
         ld.energy = 640
         ld.color = LIGHT_COLOR
         dist = (target - spot_pos).length
-        half = max(w, outer_h) / 2 + 0.35
+        half = max(w, outer_h) / 2 + 0.6
         ld.spot_size = 2 * math.atan(half / dist) + math.radians(6)
         ld.spot_blend = 0.55
         ld.shadow_soft_size = 0.06
@@ -352,6 +359,35 @@ def build(preview=True):
                 c.objects.unlink(o)
             lights.objects.link(o)
 
+    # Lettering: cut vinyl, ranged left, level with the paintings
+    vinyl, nt, out = C.new_material("vinyl")
+    em = C.node(nt, "ShaderNodeEmission", 0, 0)
+    em.inputs["Color"].default_value = (0.62, 0.63, 0.62, 1)
+    em.inputs["Strength"].default_value = 0.2
+    nt.links.new(em.outputs[0], out.inputs["Surface"])
+    font = bpy.data.fonts.load(os.path.join(C.BLENDER_DIR, "fonts", "ibarra-real-nova-500.ttf"), check_existing=True)
+    for yaw, lines in LETTERING:
+        z = HANG + sum(h for _, h in lines) * 1.18 / 2
+        a = math.radians(yaw)
+        objs = []
+        for text, h in lines:
+            z -= h * 1.18
+            if not text:
+                continue
+            curve = bpy.data.curves.new(f"words_{yaw}", "FONT")
+            curve.body, curve.font, curve.size = text, font, h
+            curve.space_word = 0.9
+            o = bpy.data.objects.new(f"words_{yaw}", curve)
+            art.objects.link(o)
+            place_on_wall(o, yaw, 0.006, z + h * 0.25)
+            o.rotation_euler = (math.pi / 2, 0, -a)
+            objs.append(o)
+            C.assign(o, vinyl)
+        bpy.context.view_layer.update()
+        wide = max(o.dimensions.x for o in objs)
+        for o in objs:
+            o.location -= Vector((math.cos(a), -math.sin(a), 0)) * wide / 2
+
     # Wall washers: hidden linear lights along the top of each wall graze the
     # plaster with a cool wash that fades towards the water, so the room reads
     # as a space without competing with the paintings.
@@ -361,7 +397,7 @@ def build(preview=True):
         wd.size = right - left - 0.3
         wd.size_y = 0.08
         # the bare walls stay back
-        wd.energy = WASHER_POWER * (right - left) * (1.0 if abs(yaw) < 60 else 0.85)
+        wd.energy = WASHER_POWER * (right - left) * (1.0 if abs(yaw) <= 60 else 0.85)
         wd.color = COVE_COLOR
         wd.spread = math.radians(70)
         wo = bpy.data.objects.new(f"washer_{yaw}", wd)

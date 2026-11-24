@@ -92,10 +92,9 @@ export function radiansPerPixel(p: Projection, heightPx: number) {
 
 /**
  * Project a world direction to normalised device coordinates for the camera
- * at yaw/pitch. Returns null when the point is behind the viewer.
+ * at yaw/pitch (or turned as `m` says). Returns null when the point is behind the viewer.
  */
-export function project(dir: Vec3, yaw: number, pitch: number, p: Projection): [number, number] | null {
-	const m = rotation(yaw, pitch);
+export function project(dir: Vec3, yaw: number, pitch: number, p: Projection, m = rotation(yaw, pitch)): [number, number] | null {
 	// camera = transpose(m) * dir
 	const x = m[0] * dir[0] + m[1] * dir[1] + m[2] * dir[2];
 	const y = m[3] * dir[0] + m[4] * dir[1] + m[5] * dir[2];

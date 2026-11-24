@@ -14,6 +14,8 @@ of willow hang through the dark. Lit by nothing (emission only).
 
 Mask pass
   R  open water (ripples)
+  G  what the wind moves: leaves wholly, reeds and flowers less
+  B  what floats: pads and flowers
 """
 
 import math
@@ -566,8 +568,11 @@ def build(preview=True):
     lilies(pal, layers)
     banks(pal, layers)
     landing(pal, layers)
-    for layer in layers.values():
-        layer.build(coll)
+    moves = {"foliage": (0, 1, 0), "reeds": (0, 0.75, 0), "flowers": (0, 0.6, 0), "pads": (0, 0, 1), "blooms": (0, 0, 1)}
+    for name, layer in layers.items():
+        obj = layer.build(coll)
+        if obj and name in moves:
+            C.set_mask(obj, moves[name])
     cam = C.pano_camera(EYE[2])
     cam.location = EYE
     C.set_resolution(1024 if preview else 8192)

@@ -1,5 +1,5 @@
 import type { Overlay } from "./overlay";
-import { fragmentShader, vertexShader } from "./shaders";
+import { fragmentShader, vertexShader, type Feature } from "./shaders";
 
 /** Effect parameters for one scene, packed the way the shader reads them. */
 type Vec4 = [number, number, number, number];
@@ -10,6 +10,11 @@ export interface FxUniforms {
 	light: Vec4;
 	mood: Vec4;
 	grade: Vec4;
+	live: Vec4;
+	air: Vec4;
+	lights: Vec4;
+	darks: Vec4;
+	mist: Vec4;
 	hover: Vec4;
 	hover2: Vec4;
 }
@@ -21,6 +26,8 @@ export interface SceneTextures {
 	depth: WebGLTexture | null;
 	/** A drawing that hangs in the scene and can move. */
 	overlay?: Overlay | null;
+	/** What it asks of the shader. */
+	features: readonly Feature[];
 	/** Distance of the scene's nearest surface (metres), the unit of its disparities. */
 	near: number;
 	width: number;
@@ -44,7 +51,9 @@ export interface FrameState {
 	/** The next scene closes in on the origin instead of spreading from it. */
 	close: boolean;
 	time: number;
-	drips: Float32Array; // 4 × vec4
+	drips: Float32Array; // 8 × vec4
+	/** What rides the water of the scene: 7 × (yaw, pitch of its waterline, half width, amplitude). */
+	rocks: Float32Array;
 	/** Pigment in the water of the gallery: 4 × (x, z, radius, strength), 4 × linear rgb, and how far it glows. */
 	stains: Float32Array;
 	stainInks: Float32Array;
@@ -53,7 +62,7 @@ export interface FrameState {
 	match: { amount: number; worldIsB: boolean; plane: Vec4; y: number; grid: Float32Array } | null;
 }
 
-const FX_FIELDS = ["water", "rain", "light", "mood", "grade", "hover", "hover2"] as const;
+const FX_FIELDS = ["water", "rain", "light", "mood", "grade", "live", "air", "lights", "darks", "mist", "hover", "hover2"] as const;
 
 export const emptyFx = (): FxUniforms => ({
 	water: [0, 1.6, 1, 1],
@@ -61,6 +70,11 @@ export const emptyFx = (): FxUniforms => ({
 	light: [0, 0, 0, 0],
 	mood: [0, 0, 0, 0],
 	grade: [0, 0, 0, 1],
+	live: [0, 0, 0, 0],
+	air: [0, 0, 0, 1],
+	lights: [1, 1, 1, 1],
+	darks: [1, 1, 1, 0],
+	mist: [0, 0, 0, 0],
 	hover: [0, 4, 1, 1],
 	hover2: [0, 0, 0, 0],
 });
@@ -70,9 +84,16 @@ const NO_EYE = new Float32Array([0, 0, 0, 1]);
 
 const nextFrame = () => new Promise<number>((r) => requestAnimationFrame(r));
 
+interface Program {
+	program: WebGLProgram;
+	loc: Record<string, WebGLUniformLocation | null>;
+	linked: boolean;
+	ready: Promise<void>;
+}
+
 /**
- * Minimal WebGL2 renderer for equirectangular panoramas: one program, one
- * fullscreen triangle and two scene slots that can be cross-faded.
+ * Minimal WebGL2 renderer for equirectangular panoramas: a program per kind of
+ * scene, one fullscreen triangle and two scene slots that can be cross-faded.
  */
 export class PanoRenderer {
 	readonly canvas: HTMLCanvasElement;
@@ -81,9 +102,8 @@ export class PanoRenderer {
 	lost = false;
 	onRestored: (() => void) | null = null;
 
-	private program!: WebGLProgram;
+	private programs = new Map<string, Program>();
 	private vao!: WebGLVertexArrayObject;
-	private loc: Record<string, WebGLUniformLocation | null> = {};
 	private black!: WebGLTexture;
 	private anisotropy: { ext: EXT_texture_filter_anisotropic; max: number } | null = null;
 	private slots: [SceneTextures | null, SceneTextures | null] = [null, null];
@@ -91,9 +111,6 @@ export class PanoRenderer {
 	art: WebGLTexture | null = null;
 	private renderScale = 1;
 	private pixelRatio = 1;
-	private linked = false;
-	/** Resolves once the shader program is linked and ready to draw. */
-	ready: Promise<void> = Promise.resolve();
 
 	constructor(canvas: HTMLCanvasElement) {
 		this.canvas = canvas;
@@ -133,10 +150,26 @@ export class PanoRenderer {
 			? { ext: aniso, max: Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT)) }
 			: null;
 
-		// Compile without blocking: with KHR_parallel_shader_compile the driver
-		// works in the background and we poll for completion each frame instead
-		// of stalling the page for the hundreds of milliseconds a big fragment
-		// shader can take (ANGLE translates it to HLSL on Windows).
+		this.programs.clear();
+		this.vao = gl.createVertexArray()!;
+
+		this.black = gl.createTexture()!;
+		gl.bindTexture(gl.TEXTURE_2D, this.black);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+	}
+
+	/**
+	 * The program for a set of features; its `ready` resolves once it is linked.
+	 * Compiled without blocking: with KHR_parallel_shader_compile the driver
+	 * works in the background and we poll for completion each frame instead of
+	 * stalling the page for the hundreds of milliseconds a big fragment shader
+	 * can take (ANGLE translates it to HLSL on Windows).
+	 */
+	prepare(features: readonly Feature[]): Program {
+		const key = features.join();
+		const known = this.programs.get(key);
+		if (known) return known;
+		const gl = this.gl;
 		const parallel = gl.getExtension("KHR_parallel_shader_compile");
 		const shader = (type: number, src: string) => {
 			const sh = gl.createShader(type)!;
@@ -145,71 +178,52 @@ export class PanoRenderer {
 			return sh;
 		};
 		const vs = shader(gl.VERTEX_SHADER, vertexShader);
-		const fs = shader(gl.FRAGMENT_SHADER, fragmentShader);
+		const fs = shader(gl.FRAGMENT_SHADER, fragmentShader(features));
 		const program = gl.createProgram()!;
 		gl.attachShader(program, vs);
 		gl.attachShader(program, fs);
 		gl.linkProgram(program);
-		this.program = program;
-		this.vao = gl.createVertexArray()!;
-		this.linked = false;
-
-		const finish = () => {
-			if (!gl.getProgramParameter(program, gl.LINK_STATUS) && !gl.isContextLost()) {
-				const log = gl.getShaderInfoLog(fs) || gl.getShaderInfoLog(vs) || gl.getProgramInfoLog(program);
-				throw new Error(log || "program link failed");
-			}
-			this.lookupUniforms();
-			this.linked = true;
-		};
-		this.ready = new Promise<void>((resolve, reject) => {
+		const made: Program = { program, loc: {}, linked: false, ready: Promise.resolve() };
+		made.ready = new Promise<void>((resolve, reject) => {
 			const poll = () => {
 				if (gl.isContextLost()) return;
 				if (parallel && !gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR)) {
 					requestAnimationFrame(poll);
 					return;
 				}
-				try {
-					finish();
-					resolve();
-				} catch (err) {
-					reject(err);
+				if (!gl.getProgramParameter(program, gl.LINK_STATUS) && !gl.isContextLost()) {
+					reject(new Error(gl.getShaderInfoLog(fs) || gl.getShaderInfoLog(vs) || gl.getProgramInfoLog(program) || "program link failed"));
+					return;
 				}
+				this.lookupUniforms(made);
+				made.linked = true;
+				resolve();
 			};
 			poll();
 		});
-		this.ready.catch(() => {});
-
-		this.black = gl.createTexture()!;
-		gl.bindTexture(gl.TEXTURE_2D, this.black);
-		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+		made.ready.catch(() => {});
+		this.programs.set(key, made);
+		return made;
 	}
 
-	private lookupUniforms() {
+	private lookupUniforms(p: Program) {
 		const gl = this.gl;
-		const program = this.program;
 		const names = [
-			"uPanoA", "uPanoB", "uMaskA", "uMaskB", "uDepthA", "uDepthB", "uRotA", "uRotB", "uEyeA", "uEyeB",
+			"uPano", "uMask", "uDepth", "uRot", "uRotOther", "uEye", "uIsB",
 			"uAspect", "uTanHalf", "uTanQuarter", "uStereo", "uTime", "uMix", "uRipple", "uCenter", "uInk", "uClose",
-			"uDrips", "uResolution",
+			"uDrips", "uRock",
 			"uMatch", "uMatchB", "uMatchPlane", "uMatchY", "uMatchGrid",
 			"uArt", "uStain", "uStainInk", "uStainGlow",
-			"uSheetA", "uSheetB", "uSheetRectA", "uSheetRectB", "uSheetOnA", "uSheetOnB",
+			"uSheet", "uSheetRect", "uSheetOn",
 		];
-		for (const n of names) this.loc[n] = gl.getUniformLocation(program, n);
-		for (const slot of ["uFxA", "uFxB"]) {
-			for (const f of FX_FIELDS) this.loc[`${slot}.${f}`] = gl.getUniformLocation(program, `${slot}.${f}`);
-		}
-		gl.useProgram(program);
-		gl.uniform1i(this.loc.uPanoA, 0);
-		gl.uniform1i(this.loc.uPanoB, 1);
-		gl.uniform1i(this.loc.uMaskA, 2);
-		gl.uniform1i(this.loc.uMaskB, 3);
-		gl.uniform1i(this.loc.uDepthA, 4);
-		gl.uniform1i(this.loc.uDepthB, 5);
-		gl.uniform1i(this.loc.uSheetA, 6);
-		gl.uniform1i(this.loc.uSheetB, 7);
-		gl.uniform1i(this.loc.uArt, 8);
+		for (const n of names) p.loc[n] = gl.getUniformLocation(p.program, n);
+		for (const f of FX_FIELDS) p.loc[`uFx.${f}`] = gl.getUniformLocation(p.program, `uFx.${f}`);
+		gl.useProgram(p.program);
+		gl.uniform1i(p.loc.uPano, 0);
+		gl.uniform1i(p.loc.uMask, 1);
+		gl.uniform1i(p.loc.uDepth, 2);
+		gl.uniform1i(p.loc.uSheet, 3);
+		gl.uniform1i(p.loc.uArt, 4);
 	}
 
 	/**
@@ -298,54 +312,61 @@ export class PanoRenderer {
 		const gl = this.gl;
 		if (this.lost || gl.isContextLost()) return;
 		const [a, b] = this.slots;
-		if (!a || !this.linked) {
-			gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+		if (!a || !this.prepare(a.features).linked) {
 			gl.clearColor(0.02, 0.025, 0.03, 1);
 			gl.clear(gl.COLOR_BUFFER_BIT);
 			return;
 		}
-		gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-		gl.useProgram(this.program);
+		// once the next scene is all there is, it is drawn alone
+		if (!b || f.mix < 1) this.pass(f, a, !!b, false);
+		if (b && f.mix > 0 && this.prepare(b.features).linked) {
+			gl.enable(gl.BLEND);
+			gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+			this.pass(f, b, true, true);
+			gl.disable(gl.BLEND);
+		}
+	}
+
+	/** Draw one scene over the whole canvas. */
+	private pass(f: FrameState, scene: SceneTextures, crossing: boolean, isB: boolean) {
+		const gl = this.gl;
+		const { program, loc: L } = this.prepare(scene.features);
+		gl.useProgram(program);
 		gl.bindVertexArray(this.vao);
 
 		const bindTex = (unit: number, tex: WebGLTexture | null) => {
 			gl.activeTexture(gl.TEXTURE0 + unit);
 			gl.bindTexture(gl.TEXTURE_2D, tex ?? this.black);
 		};
-		bindTex(0, a.pano);
-		bindTex(1, (b ?? a).pano);
-		bindTex(2, a.mask);
-		bindTex(3, (b ?? a).mask);
-		bindTex(4, a.depth);
-		bindTex(5, (b ?? a).depth);
-		const sheetA = a.overlay ?? null, sheetB = (b ?? a).overlay ?? null;
-		bindTex(6, sheetA?.texture ?? null);
-		bindTex(7, sheetB?.texture ?? null);
-		bindTex(8, this.art);
+		const sheet = scene.overlay ?? null;
+		bindTex(0, scene.pano);
+		bindTex(1, scene.mask);
+		bindTex(2, scene.depth);
+		bindTex(3, sheet?.texture ?? null);
+		bindTex(4, this.art);
 
-		const L = this.loc;
 		const half = f.fovV / 2;
-		gl.uniformMatrix3fv(L.uRotA, false, f.rotA);
-		gl.uniformMatrix3fv(L.uRotB, false, f.rotB);
-		gl.uniform4fv(L.uSheetRectA, sheetA?.rect ?? NO_SHEET);
-		gl.uniform4fv(L.uSheetRectB, sheetB?.rect ?? NO_SHEET);
-		gl.uniform2f(L.uSheetOnA, sheetA ? 1 : 0, sheetA ? a.near / sheetA.distance : 0);
-		gl.uniform2f(L.uSheetOnB, sheetB ? 1 : 0, sheetB ? (b ?? a).near / sheetB.distance : 0);
+		gl.uniformMatrix3fv(L.uRot, false, isB ? f.rotB : f.rotA);
+		gl.uniformMatrix3fv(L.uRotOther, false, isB ? f.rotA : f.rotB);
+		gl.uniform1f(L.uIsB, isB ? 1 : 0);
+		gl.uniform4fv(L.uSheetRect, sheet?.rect ?? NO_SHEET);
+		gl.uniform2f(L.uSheetOn, sheet ? 1 : 0, sheet ? scene.near / sheet.distance : 0);
 		// without a depth map there is nothing to shift
-		gl.uniform4fv(L.uEyeA, a.depth ? f.eyeA : NO_EYE);
-		gl.uniform4fv(L.uEyeB, (b ?? a).depth ? f.eyeB : NO_EYE);
+		gl.uniform4fv(L.uEye, scene.depth ? (isB ? f.eyeB : f.eyeA) : NO_EYE);
 		gl.uniform1f(L.uAspect, this.canvas.width / this.canvas.height);
 		gl.uniform1f(L.uTanHalf, Math.tan(half));
 		gl.uniform1f(L.uTanQuarter, Math.tan(half / 2));
 		gl.uniform1f(L.uStereo, f.stereo);
 		gl.uniform1f(L.uTime, f.time);
-		gl.uniform1f(L.uMix, b ? f.mix : 0);
+		gl.uniform1f(L.uMix, crossing ? f.mix : 0);
 		gl.uniform1f(L.uRipple, f.ripple ? 1 : 0);
 		gl.uniform2f(L.uCenter, f.center[0], f.center[1]);
 		gl.uniform4fv(L.uInk, f.ink);
 		gl.uniform1f(L.uClose, f.close ? 1 : 0);
 		gl.uniform4fv(L.uDrips, f.drips);
-		const m = b ? f.match : null;
+		gl.uniform4fv(L.uRock, f.rocks);
+		const m = crossing ? f.match : null;
 		gl.uniform1f(L.uMatch, m?.amount ?? 0);
 		if (m) {
 			gl.uniform1f(L.uMatchB, m.worldIsB ? 1 : 0);
@@ -356,11 +377,8 @@ export class PanoRenderer {
 		gl.uniform4fv(L.uStain, f.stains);
 		gl.uniform3fv(L.uStainInk, f.stainInks);
 		gl.uniform1f(L.uStainGlow, f.stainGlow);
-		gl.uniform2f(L.uResolution, this.canvas.width, this.canvas.height);
-		for (const f2 of FX_FIELDS) {
-			gl.uniform4fv(L[`uFxA.${f2}`], f.fxA[f2]);
-			gl.uniform4fv(L[`uFxB.${f2}`], f.fxB[f2]);
-		}
+		const fx = isB ? f.fxB : f.fxA;
+		for (const name of FX_FIELDS) gl.uniform4fv(L[`uFx.${name}`], fx[name]);
 		gl.drawArrays(gl.TRIANGLES, 0, 3);
 	}
 }

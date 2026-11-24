@@ -47,9 +47,9 @@ export const COLOURS = [
 const INK = 0, DEEP = 1, MID = 2, PALE = 3, FOAM = 4, BOAT = 5, BOAT_DARK = 6, CLOTH = 7, SKIN = 8, STRAW = 9;
 
 /** How a group of anchors moves. */
-const GREAT = 0, NEAR = 1, SWELL = 2, BOAT_LEFT = 3, BOAT_RIGHT = 4, BURST = 5, SPRAY = 6, FLECK = 7;
+const GREAT = 0, NEAR = 1, SWELL = 2, BOAT_LEFT = 3, BOAT_RIGHT = 4, BURST = 5, SPRAY = 6, FLECK = 7, JET = 8, SURGE = 9;
 /** How offsets from the anchor scale. */
-const RIGID = 0, CLAW = 1, GROWN = 2;
+const RIGID = 0, CLAW = 1, GROWN = 2, DRAWN = 3;
 
 // ─── The claw ─────────────────────────────────────────────────────────────────
 
@@ -150,9 +150,10 @@ class Mass {
 		const at = press.anchor(x, y, GROWN);
 		this.ink.push(() => press.fill(p, INK, 3, at));
 		this.paper.push(() => press.fill(p, this.colour, 0, at));
+		return at;
 	}
-	stain(p: readonly P[]) {
-		this.stains.push(() => this.press.fill(p, PALE));
+	stain(p: readonly P[], at = -1) {
+		this.stains.push(() => this.press.fill(p, PALE, 0, at));
 	}
 	print() {
 		for (const f of [...this.ink, ...this.paper, ...this.stains, ...this.detail]) f();
@@ -506,7 +507,7 @@ export function draw(): Drawing {
 	for (let i = 0; i < 640; i++) {
 		const x = -260 + rnd() * 1140, y = 300 + rnd() * 560;
 		const r = 1.2 + Math.pow(rnd(), 4) * 7.5;
-		if (inside(face, x, y)) fleck(press, x, y, r);
+		if (inside(face, x, y)) fleck(press, x, y, r, DRAWN);
 	}
 
 	// — the lower belt of foam across the face —
@@ -640,22 +641,84 @@ export function draw(): Drawing {
 	}
 
 	// — the water it throws up when it breaks: not there at the instant of the print —
+	// first the tongues that leap highest, each ending in claws like the lip it comes from
+	press.group = JET;
+	for (let i = 0; i < 17; i++) {
+		const u = (i * 7 % 17) / 16;
+		const x = 380 + u * 800 + (rnd() - 0.5) * 40;
+		const lean = (u - 0.45) * 1.1 + (rnd() - 0.5) * 0.3;
+		const tall = (190 + 250 * Math.sin(Math.PI * (0.12 + 0.76 * u))) * (0.6 + 0.5 * rnd());
+		const at = press.anchor(x, 900, GROWN);
+		const side = lean >= 0 ? 1 : -1;
+		const spine = curve([[x, 910], [x + lean * tall * 0.22, 900 - tall * 0.4], [x + lean * tall * 0.5, 900 - tall * 0.78], [x + lean * tall * 0.8 + side * tall * 0.07, 900 - tall]], 9);
+		const n = spine.length;
+		const left: P[] = [], right: P[] = [];
+		const thick = 24 + tall * 0.12;
+		for (let k = 0; k < n; k++) {
+			const [x0, y0] = spine[Math.max(0, k - 1)], [x1, y1] = spine[Math.min(n - 1, k + 1)];
+			const a = Math.atan2(y1 - y0, x1 - x0), w = (thick * (1 - 0.72 * (k / (n - 1))) * (0.9 + 0.2 * Math.sin(k * 1.9 + i))) / 2;
+			left.push([spine[k][0] + Math.sin(a) * w, spine[k][1] - Math.cos(a) * w]);
+			right.push([spine[k][0] - Math.sin(a) * w, spine[k][1] + Math.cos(a) * w]);
+		}
+		const body = [...left, ...right.slice().reverse()];
+		const claws: Claw[] = [];
+		const tip = spine[n - 1];
+		const out = Math.atan2(tip[1] - spine[n - 3][1], tip[0] - spine[n - 3][0]);
+		for (let k = 0; k < 4; k++) {
+			const length = 24 + tall * 0.1 * (0.7 + rnd() * 0.6);
+			claws.push({ x: tip[0] - Math.cos(out) * 8, y: tip[1] - Math.sin(out) * 8, heading: out + (k - 1.5) * 0.55, curl: side * (1.5 + rnd()), length, width: length * 0.42 });
+		}
+		// and down both its sides, smaller
+		for (let k = 4; k < n - 3; k += 3) {
+			const edge = k % 2 ? left : right, way = k % 2 ? -1 : 1;
+			const length = 18 + rnd() * 20;
+			claws.push({ x: edge[k][0], y: edge[k][1], heading: -Math.PI / 2 + way * (0.5 + rnd() * 0.7), curl: way * (1.4 + rnd() * 0.8), length, width: length * 0.46 });
+		}
+		press.fill(body, INK, 3, at);
+		for (const c of claws) press.fill(clawOutline(c), INK, 2.6, at);
+		press.fill(body, FOAM, 0, at);
+		for (const c of claws) press.fill(clawOutline(c), FOAM, 0, at);
+		// what runs back down inside it
+		press.stroke(spine.slice(1, -3).map(([a, b], k): P => [a + side * thick * 0.14, b + k * 0.4]), PALE, (t) => thick * 0.3 * Math.sin(Math.PI * t) * (1 - 0.5 * t), at);
+		press.stroke(spine.slice(2, -2).map(([a, b]): P => [a - side * thick * 0.1, b]), MID, (t) => thick * 0.1 * Math.sin(Math.PI * t), at);
+		for (const c of claws) hook(press, c, rnd() < 0.5, at, 0.16);
+	}
 	press.group = BURST;
 	{
 		const m = new Mass(press);
-		for (let i = 0; i < 46; i++) {
+		for (let i = 0; i < 64; i++) {
 			const u = rnd(), v = rnd();
-			const x = 330 + u * 900, y = 890 - v * v * 330 * Math.sin(Math.PI * (0.12 + 0.8 * u));
-			const r = 34 + rnd() * 58;
-			m.lump(x, y, blob(rnd, x, y, r, r * (0.7 + rnd() * 0.3), rnd() * 3));
-			for (let k = 0; k < 5; k++) {
-				const a = -Math.PI * (0.02 + 0.96 * (k / 4)) + (rnd() - 0.5) * 0.5;
+			const x = 330 + u * 900, y = 892 - v * v * 270 * Math.sin(Math.PI * (0.12 + 0.8 * u));
+			const r = 24 + rnd() * 40;
+			const at = m.lump(x, y, blob(rnd, x, y, r, r * (0.6 + rnd() * 0.3), rnd() * 3));
+			if (rnd() < 0.7) m.stain(blob(rnd, x + r * 0.1, y + r * 0.22, r * 0.62, r * 0.26, (rnd() - 0.5) * 0.8), at);
+			for (let k = 0; k < 6; k++) {
+				const a = -Math.PI * (-0.1 + 1.2 * (k / 5)) + (rnd() - 0.5) * 0.5;
 				const right = Math.cos(a) > 0 ? 1 : -1;
-				const length = r * (0.55 + rnd() * 0.45);
+				const length = r * (0.6 + rnd() * 0.6);
 				m.claw(
 					{ x: x + Math.cos(a) * r * 0.75, y: y + Math.sin(a) * r * 0.65, heading: a - 0.3 * right, curl: right * (1.5 + rnd()), length, width: length * 0.48 },
 					{ grow: GROWN, pale: rnd() < 0.6 },
 				);
+			}
+		}
+		m.print();
+	}
+
+	// — and the white water that runs out of it towards us, rank behind rank —
+	press.group = SURGE;
+	for (let rank = 0; rank < 3; rank++) {
+		const m = new Mass(press);
+		for (let i = 0; i < 30; i++) {
+			const u = (i + rnd()) / 30;
+			const x = 250 + u * 1010, y = 886 + rank * 16 + 10 * Math.sin(u * 9 + rank * 2);
+			const r = 20 + rnd() * 22;
+			const at = m.lump(x, y, blob(rnd, x, y, r * 1.5, r * 0.5, (rnd() - 0.5) * 0.3));
+			if (rnd() < 0.6) m.stain(blob(rnd, x, y + r * 0.08, r * 0.9, r * 0.2, 0), at);
+			for (let k = 0; k < 3; k++) {
+				const way = u > 0.5 ? 1 : -1;
+				const length = r * (0.7 + rnd() * 0.5);
+				m.claw({ x: x + (k - 1) * r * 0.8, y: y + r * 0.2, heading: Math.PI / 2 - way * (0.2 + rnd() * 0.8), curl: way * (1.3 + rnd() * 0.8), length, width: length * 0.46 }, { grow: GROWN, pale: rnd() < 0.4 });
 			}
 		}
 		m.print();
@@ -674,16 +737,16 @@ export function draw(): Drawing {
 /** Keys of the cycle: when, height, how far the lip has bent over, reach of the arms, travel, size of the claws, broken water. */
 const KEYS: readonly (readonly number[])[] = [
 	[0.0, 1.0, 0.0, 1.0, 0, 1.0, 0],
-	[0.09, 1.0, 0.22, 1.04, 22, 1.06, 0],
-	[0.18, 0.95, 0.62, 1.08, 62, 1.12, 0],
-	[0.26, 0.82, 1.08, 1.1, 112, 1.14, 0.12],
-	[0.33, 0.58, 1.28, 1.02, 168, 1.1, 0.8],
-	[0.41, 0.34, 1.0, 0.8, 196, 0.95, 1.0],
-	[0.52, 0.2, 0.4, 0.5, 150, 0.7, 0.85],
-	[0.63, 0.2, -0.1, 0.36, 30, 0.5, 0.35],
-	[0.74, 0.42, -0.34, 0.4, -60, 0.45, 0],
-	[0.85, 0.76, -0.3, 0.62, -62, 0.62, 0],
-	[0.94, 0.96, -0.1, 0.9, -24, 0.88, 0],
+	[0.08, 1.02, 0.12, 1.04, 14, 1.06, 0],
+	[0.17, 0.99, 0.48, 1.1, 46, 1.14, 0],
+	[0.24, 0.86, 1.04, 1.13, 100, 1.18, 0.05],
+	[0.29, 0.66, 1.36, 1.06, 150, 1.16, 0.75],
+	[0.36, 0.44, 1.12, 0.84, 196, 1.0, 1.0],
+	[0.48, 0.29, 0.45, 0.52, 168, 0.72, 0.9],
+	[0.6, 0.27, -0.1, 0.36, 20, 0.5, 0.4],
+	[0.71, 0.45, -0.36, 0.4, -130, 0.46, 0],
+	[0.83, 0.78, -0.34, 0.6, -118, 0.62, 0],
+	[0.93, 0.96, -0.13, 0.9, -38, 0.88, 0],
 ];
 
 /** Value of a track at a time, smooth and without overshoot, round and round. */
@@ -705,18 +768,21 @@ function track(column: number, t: number) {
 const TAU = Math.PI * 2;
 const BASE = 890;
 
-/** Where the wave is at time `state[0]` (0..1): positions of every vertex, in print pixels. */
-export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
-	const t = state[0] - Math.floor(state[0]);
-	const height = track(1, t), bend = track(2, t), reach = track(3, t), travel = track(4, t), claws = track(5, t), broken = track(6, t);
+/** A bump in time: 1 at `at`, gone `w` either side of it. */
+const beat = (t: number, at: number, w: number) => Math.exp(-(((t - at) / w) ** 2));
+
+/** How the water moves at a moment of the cycle: where each group of it takes a point. */
+function motion(t: number) {
+	const height = track(1, t), bend = track(2, t), reach = track(3, t), travel = track(4, t);
 	const sin = Math.sin(TAU * t), cos1 = 1 - Math.cos(TAU * t);
 	// the two swells answer the wave: up as it comes down
 	const lift = 0.08 * cos1 + 0.06 * sin;
 
 	const great = (x: number, y: number, o: Float32Array) => {
-		// the lip swings over a pivot inside the crest
+		// the lip swings over a pivot inside the crest, its fingers after its wrist
 		const w = smooth(440, 1080, x) * smooth(720, 380, y);
-		const a = bend * w, k = lerp(1, reach, w);
+		const late = smooth(820, 1080, x) * smooth(0, 0.06, t) * smooth(0.5, 0.3, t);
+		const a = (bend - 0.22 * late * (bend - track(2, Math.max(0, t - 0.05)))) * w, k = lerp(1, reach, w);
 		const dx = (x - 600) * k, dy = (y - 430) * k;
 		const ca = Math.cos(a), sa = Math.sin(a);
 		let qx = 600 + dx * ca - dy * sa, qy = 430 + dx * sa + dy * ca;
@@ -732,16 +798,64 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 	const near = (x: number, y: number, o: Float32Array) => {
 		const env = smooth(-560, -100, x) * smooth(1010, 780, x);
 		const v = Math.max(0, (900 - y) / 220);
-		o[0] = x + env * v * (26 * sin + 18 * cos1);
-		o[1] = y - env * v * 220 * (lift * 1.1 - 0.12 * sin) - env * 4.5 * (Math.sin(TAU * t * 2 + x * 0.006) - Math.sin(x * 0.006));
+		// drawn down under the lip as it comes, then thrown up by the break, and over
+		const thrown = 0.62 * beat(t, 0.37, 0.055) - 0.34 * beat(t, 0.22, 0.06) + 0.16 * beat(t, 0.56, 0.06);
+		o[0] = x + env * v * (26 * sin + 18 * cos1 + 64 * beat(t, 0.41, 0.07) - 30 * beat(t, 0.23, 0.06));
+		o[1] = y - env * v * 220 * (lift * 1.1 - 0.12 * sin + thrown) - env * 9 * (Math.sin(TAU * t * 2 + x * 0.006) - Math.sin(x * 0.006));
 	};
 	const swell = (x: number, y: number, o: Float32Array) => {
 		const env = smooth(880, 1250, x) * smooth(2690, 2300, x);
 		const ph = x * 0.0042;
-		o[0] = x + env * 10 * (Math.cos(TAU * t - ph) - Math.cos(ph));
-		o[1] = y + env * (14 * (Math.sin(TAU * t - ph) + Math.sin(ph)) - 13 * cos1 * smooth(920, 520, y));
+		// what the wave gives up runs on through it, to the right
+		const on = beat(t, 0.39 + (0.2 * (x - 900)) / 1500, 0.07) - 0.55 * beat(t, 0.27 + (0.2 * (x - 900)) / 1500, 0.07) - 0.4 * beat(t, 0.56 + (0.2 * (x - 900)) / 1500, 0.08);
+		const high = 0.35 + 0.65 * smooth(1180, 560, y);
+		o[0] = x + env * (16 * (Math.cos(TAU * t - ph) - Math.cos(ph)) + 34 * on * high);
+		o[1] = y + env * (22 * (Math.sin(TAU * t - ph) + Math.sin(ph)) - 13 * cos1 * smooth(920, 520, y) - 78 * on * high);
 	};
 	const move = (g: number, x: number, y: number, o: Float32Array) => (g === GREAT ? great : g === NEAR ? near : swell)(x, y, o);
+
+	// a boat rides its swell: it rises with it and tips with its slope
+	const a = new Float32Array(2), b = new Float32Array(2);
+	const ride = (left: boolean, x: number, y: number) => {
+		const bx = left ? 430 : x, by = left ? 838 : y + 40;
+		move(left ? NEAR : SWELL, bx - 60, by, a);
+		move(left ? NEAR : SWELL, bx + 60, by, b);
+		// the one in the hollow is set down on the level as the wave above it goes
+		const down = left ? smooth(0.2, 0.38, t) * smooth(0.84, 0.58, t) : 0;
+		const pitching = left ? 0.1 * sin - 0.22 * beat(t, 0.3, 0.05) + 0.2 * beat(t, 0.4, 0.06) : 0.07 * sin + 0.16 * beat(t, 0.41, 0.06) - 0.16 * beat(t, 0.52, 0.07);
+		const turn = Math.atan2(b[1] - a[1], b[0] - a[0]) + pitching - 0.5 * down;
+		return { x: x + (a[0] + b[0]) / 2 - bx, y: y + (a[1] + b[1]) / 2 - by + 122 * down, c: Math.cos(turn), s: Math.sin(turn) };
+	};
+	return { move, ride };
+}
+
+/** Where a point marked on the print (degrees of yaw and pitch) has gone at a moment of the cycle. */
+export function carry(id: string, yaw: number, pitch: number, t: number): [number, number] {
+	const deg = 180 / Math.PI;
+	let x = PLACE.x0 + yaw * PLACE.scale, y = PLACE.horizon - Math.asinh(Math.tan(pitch / deg)) * deg * PLACE.scale;
+	const m = motion(t - Math.floor(t));
+	if (id === "claws") {
+		const o = new Float32Array(2);
+		m.move(GREAT, x, y, o);
+		// it stays with the foam, above the water
+		[x, y] = [o[0], Math.min(o[1], BASE - 40)];
+	} else if (id === "boat") {
+		const rest = { x: 190, y: 744 };
+		const r = m.ride(true, rest.x, rest.y);
+		const dx = x - rest.x, dy = y - rest.y;
+		[x, y] = [r.x + r.c * dx - r.s * dy, r.y + r.s * dx + r.c * dy];
+	}
+	return [(x - PLACE.x0) / PLACE.scale, Math.atan(Math.sinh((PLACE.horizon - y) / PLACE.scale / deg)) * deg];
+}
+
+/** Where the wave is at time `state[0]` (0..1): positions of every vertex, in print pixels. */
+export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
+	const t = state[0] - Math.floor(state[0]);
+	const claws = track(5, t), broken = track(6, t);
+	const { move, ride } = motion(t);
+	// away from the instant of the print, where everything is as it was drawn
+	const loosened = smooth(0, 0.05, t) * smooth(1, 0.95, t);
+	const swing = (track(2, t + 0.012) - track(2, t - 0.012 + (t < 0.012 ? 1 : 0))) / 0.024;
 
 	const { x: X, y: Y, group, grow, seed } = d.anchors;
 	const n = X.length;
@@ -752,40 +866,58 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 		const x = X[i], y = Y[i], g = group[i], q = seed[i];
 		c[i] = 1;
 		if (g <= SWELL) {
-			move(g, x, y, a);
+			if (grow[i] === DRAWN) {
+				// the snow on the face is drawn up it, and slides back
+				const up = (30 + 60 * q) * (Math.sin(TAU * (t * 2 + q)) - Math.sin(TAU * q));
+				move(g, x - 0.22 * up, y - up, a);
+			} else move(g, x, y, a);
 			tx[i] = a[0];
 			ty[i] = a[1];
 			if (grow[i] === CLAW) {
-				// a claw turns with the water it stands on, and keeps its shape
+				// a claw turns with the water it stands on, and keeps its shape; it trails behind a fast
+				// turn, and none of them is ever quite still
 				move(g, x + 3, y, b);
-				const turn = Math.atan2(b[1] - a[1], b[0] - a[0]);
-				const size = g === GREAT ? claws : 1;
+				let turn = Math.atan2(b[1] - a[1], b[0] - a[0]);
+				turn += loosened * (0.13 + 0.1 * q) * Math.sin(TAU * (t * 7 + q * 5) + x * 0.012);
+				if (g === GREAT) turn -= loosened * Math.max(-0.5, Math.min(0.5, 0.055 * swing * (0.4 + q) * smooth(440, 900, x)));
+				const size = g === GREAT ? claws : 1 + loosened * 0.1 * Math.sin(TAU * (t * 3 + q));
 				c[i] = Math.cos(turn) * size;
 				s[i] = Math.sin(turn) * size;
 			}
 		} else if (g === BOAT_LEFT || g === BOAT_RIGHT) {
-			// a boat rides its swell: it rises with it and tips with its slope
-			const left = g === BOAT_LEFT;
-			const bx = left ? 430 : x, by = left ? 838 : y + 40;
-			move(left ? NEAR : SWELL, bx - 60, by, a);
-			move(left ? NEAR : SWELL, bx + 60, by, b);
-			// the one in the hollow is set down on the level as the wave above it goes
-			const down = left ? smooth(0.22, 0.42, t) * smooth(0.86, 0.6, t) : 0;
-			const turn = Math.atan2(b[1] - a[1], b[0] - a[0]) + (left ? 0.1 : 0.07) * sin - 0.5 * down;
-			const sink = 122 * down;
-			tx[i] = x + (a[0] + b[0]) / 2 - bx;
-			ty[i] = y + (a[1] + b[1]) / 2 - by + sink;
-			c[i] = Math.cos(turn);
-			s[i] = Math.sin(turn);
+			const r = ride(g === BOAT_LEFT, x, y);
+			tx[i] = r.x;
+			ty[i] = r.y;
+			c[i] = r.c;
+			s[i] = r.s;
+		} else if (g === JET) {
+			// up fast, hangs, and topples outwards
+			const late = 0.045 * q + 0.05 * Math.abs((x - 760) / 400);
+			const up = smooth(0.265 + late, 0.355 + late, t), gone = smooth(0.39 + late, 0.56 + late, t);
+			const k = up * (1 - 0.92 * gone) * (1 + 0.08 * Math.sin(Math.PI * up));
+			const fall = 0.75 * gone * gone * Math.sign(x - 740);
+			tx[i] = x + (t - 0.3) * 150 * ((x - 740) / 400);
+			ty[i] = BASE + 12 + 60 * gone;
+			const dead = t > 0.62 + late || up <= 0 ? 0 : k;
+			c[i] = dead * Math.cos(fall);
+			s[i] = dead * Math.sin(fall);
 		} else if (g === BURST) {
 			// thrown up from the line where the lip lands, each lump a little after the last
-			const late = 0.16 * ((x - 330) / 900) + 0.08 * q;
-			const k = broken * smooth(0.22 + late * 0.35, 0.36 + late * 0.35, t) * smooth(0.74, 0.46 + late, t);
+			const late = 0.1 * ((x - 330) / 900) + 0.07 * q;
+			const k = broken * smooth(0.24 + late * 0.4, 0.33 + late * 0.4, t) * smooth(0.72, 0.44 + late, t);
 			const up = k * Math.sin(Math.PI * clamp01((t - 0.2 - late * 0.3) / 0.42));
-			tx[i] = x + (t - 0.3) * 190 * ((x - 700) / 450);
-			ty[i] = lerp(BASE + 30, y, Math.max(0, up)) - 34 * up;
-			c[i] = k;
-			s[i] = 0.25 * k * Math.sin(q * 9 + t * 7);
+			tx[i] = x + (t - 0.3) * 260 * ((x - 700) / 450);
+			ty[i] = lerp(BASE + 30, y, Math.max(0, up)) - 46 * up;
+			const roll = 0.4 * Math.sin(q * 9 + t * 11);
+			c[i] = k * Math.cos(roll);
+			s[i] = k * Math.sin(roll);
+		} else if (g === SURGE) {
+			const rank = Math.round((y - 886) / 16) < 1 ? 0 : y < 908 ? 1 : 2;
+			const u = clamp01((t - 0.32 - rank * 0.045 - 0.03 * q) / 0.34);
+			const run = 1 - (1 - u) * (1 - u);
+			tx[i] = x + (x - 760) * 0.34 * run;
+			ty[i] = y + run * (46 + 62 * rank) + 8 * Math.sin(TAU * (t * 5 + q));
+			c[i] = u > 0 && u < 1 ? smooth(0, 0.22, u) * smooth(0.62 + 0.36 * q, 0.4 + 0.3 * q, u) * (0.75 + 0.3 * rank) : 0;
 		} else if (g === SPRAY) {
 			// hangs in the air at the instant of the print, then falls with the lip
 			const fall = t < 0.5 ? t : t - 1;
@@ -796,7 +928,7 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 			// drops flung by the break
 			const u = clamp01((t - 0.27 - q * 0.08) / 0.3);
 			tx[i] = x + ((x - 760) / 480) * 260 * u;
-			ty[i] = y - (380 + 520 * ((q * 7.3) % 1)) * u * (1 - u) * 1.6;
+			ty[i] = y - (380 + 520 * ((q * 7.3) % 1)) * u * (1 - u) * 1.9;
 			c[i] = u > 0 && u < 1 ? Math.sin(Math.PI * Math.min(1, u * 1.1)) : 0;
 		}
 	}

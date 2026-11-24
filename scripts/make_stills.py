@@ -23,10 +23,11 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
 RENDERS = os.path.join(ROOT, "blender", "renders")
 OG_LABEL = os.path.join(ROOT, "scripts", "og", "label.png")
 OG_SIZE = (1200, 630)
+OG_SPAN = 164  # degrees of the gallery across it
 
 # yaw, pitch, horizontal fov — keep in sync with the initial views in src/data/rooms.ts
 VIEWS = {
-    "hub": (1, -3, 104),
+    "hub": (0, -3, 112),
     "wave": (-18, 14, 92),
     "rain": (-5, -18, 80),
     "stillness": (3, -2, 92),
@@ -51,8 +52,16 @@ def share_card(pano, yaw, pitch):
     label = cv2.imread(OG_LABEL, cv2.IMREAD_COLOR)
     if label is None or label.shape[1] != w:
         raise SystemExit(f"{OG_LABEL} is missing or not {w} px wide")
-    # a little wider than the still and looking up a touch: the whole frame and its light, clear of the label
-    view = perspective(pano, yaw, pitch + 4, 106, w, h - label.shape[0])
+    # all four walls unrolled, so that the paintings at the sides are no wider than the others, and a
+    # touch lower than the middle of them: some of their reflection, clear of the label
+    vh = h - label.shape[0]
+    x, y = np.meshgrid((np.arange(w) + 0.5) / w - 0.5, (np.arange(vh) + 0.5) / vh - 0.5)
+    lon = np.radians(yaw) + x * np.radians(OG_SPAN)
+    lat = np.arctan(np.tan(np.radians(pitch)) - y * np.radians(OG_SPAN) * vh / w)
+    ph, pw = pano.shape[:2]
+    src = cv2.resize(pano, (pw // 2, ph // 2), interpolation=cv2.INTER_AREA)
+    ph, pw = src.shape[:2]
+    view = cv2.remap(src, ((lon / (2 * np.pi) + 0.5) * pw - 0.5).astype(np.float32), ((0.5 - lat / np.pi) * ph - 0.5).astype(np.float32), cv2.INTER_CUBIC)
     return np.vstack([view, label])
 
 

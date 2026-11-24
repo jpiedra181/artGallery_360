@@ -1443,15 +1443,6 @@ html:not(.immersive) .room-no .swatch {
 	pointer-events: none;
 }
 
-.immersive .room .pois {
-	transition: opacity 0.4s var(--ease);
-}
-
-.immersive .room.is-away .pois {
-	opacity: 0;
-	visibility: hidden;
-}
-
 /* what can be done from the label: a row of plain words between rules */
 .room-actions {
 	display: flex;

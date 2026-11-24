@@ -1,10 +1,13 @@
 /**
  * GLSL for the panorama renderer.
  *
- * The whole view is a single fullscreen triangle. For every pixel the
- * fragment shader builds a camera ray, rotates it into each scene, samples
+ * The whole view is a single fullscreen triangle (two during a crossing, one
+ * per scene, the second laid over the first as far as it has been revealed).
+ * For every pixel the fragment shader builds a camera ray, rotates it into the scene, samples
  * the equirectangular render and layers real-time effects on top using the
- * scene's semantic mask (R water, G sky, B light sources / painting ids).
+ * scene's semantic mask (R water, G sky, B light sources / painting ids; in
+ * Monet's garden, where there is neither sky nor fire, G is what the wind
+ * moves and B what floats).
  * A depth map lets the eye move a little around the point the panorama was
  * rendered from, so near things slide over far ones.
  *
@@ -20,7 +23,27 @@ void main() {
 }
 `;
 
-export const fragmentShader = /* glsl */ `#version 300 es
+/**
+ * What a scene can ask of the shader. Each scene gets a program of its own with
+ * only what it uses: one that does everything takes a Windows driver half a
+ * minute to compile.
+ *
+ *   GALLERY  paintings on the walls, stains in the water
+ *   SHEET    a drawing hangs in the scene
+ *   RAIN     rain falls
+ *   WIND     what the mask marks in G is moved by the wind
+ *   SKY      the sky (G) shimmers and runs
+ *   RIDE     ships ride the water
+ *   FIRES    fires (B) flicker, and share the scene with a moon
+ *   HOUR     the light goes by: gain, mist, sun through leaves, a still mirror
+ *   DRIPS    rings on the water
+ *   GLINTS   light broken on the water
+ *   SEAM     a soft back seam
+ */
+export type Feature = "GALLERY" | "SHEET" | "RAIN" | "WIND" | "SKY" | "RIDE" | "FIRES" | "HOUR" | "DRIPS" | "GLINTS" | "SEAM";
+
+export const fragmentShader = (features: readonly Feature[]) => /* glsl */ `#version 300 es
+${features.map((f) => `#define ${f}`).join("\n")}
 precision highp float;
 
 in vec2 vNdc;
@@ -33,36 +56,34 @@ struct Fx {
   vec4 grade;   // x vignette, y grain, z drips on/off, w exposure
   vec4 mood;    // x light of the fires, y light of the moon (both 0 = as painted), z/w where the moon is (yaw, pitch)
   vec4 hover;   // painting under the pointer: x wall yaw (rad), y distance, z/w half size (m)
+  vec4 live;    // x wind (rad), y how far the sky runs (rad), z what floats moves with the water, w the clock of the sky
+  vec4 air;     // x ships ride the water, y sun through moving leaves, z glints on the water, w distance of the nearest surface (m)
+  vec4 lights;  // the hour: what it does to the lights of the picture (rgb), w saturation
+  vec4 darks;   // and to its darks (rgb), w how far the drawing is broken like paint
+  vec4 mist;    // rgb, w amount
   vec4 hover2;  // x centre height relative to the eye (m), y highlight amount, z detail from the painting itself, w its mip level that matches the render
 };
 
-uniform sampler2D uPanoA;
-uniform sampler2D uPanoB;
-uniform sampler2D uMaskA;
-uniform sampler2D uMaskB;
-uniform sampler2D uDepthA;
-uniform sampler2D uDepthB;
-uniform sampler2D uSheetA;   // a drawing that hangs in the scene (premultiplied)
-uniform sampler2D uSheetB;
-uniform vec4 uSheetRectA;    // left, width (yaw), top, height (Mercator)
-uniform vec4 uSheetRectB;
-uniform vec2 uSheetOnA;      // x on/off, y its disparity
-uniform vec2 uSheetOnB;
+uniform sampler2D uPano;
+uniform sampler2D uMask;
+uniform sampler2D uDepth;
+uniform sampler2D uSheet;    // a drawing that hangs in the scene (premultiplied)
+uniform vec4 uSheetRect;     // left, width (yaw), top, height (Mercator)
+uniform vec2 uSheetOn;       // x on/off, y its disparity
+uniform float uIsB;          // this is the scene arriving
 uniform sampler2D uArt;      // the painting approached, sharper than the render holds it
 uniform float uMatch;        // 1 = the world is looked at through its painting, 0 = with the camera
-uniform float uMatchB;       // which scene is the world: 1 = B (going in), 0 = A (coming out)
+uniform float uMatchB;       // which scene is the world: 1 = the one arriving (going in), 0 = the one being left (coming out)
 uniform vec4 uMatchPlane;    // the painting on its wall: yaw (rad), distance, half size (m)
 uniform float uMatchY;       // height of its centre relative to the eye (m)
 uniform vec2 uMatchGrid[63]; // what lies at each point of it: yaw and Mercator height (rad), 9 x 7
 uniform vec4 uStain[4];      // pigment let into the water: x, z (m), radius (m), strength
 uniform vec3 uStainInk[4];
 uniform float uStainGlow;    // how far it carries light of its own
-uniform vec4 uEyeA;        // xyz eye offset in the scene, in units of its nearest surface; w depth curve
-uniform vec4 uEyeB;
-uniform mat3 uRotA;
-uniform mat3 uRotB;
-uniform Fx uFxA;
-uniform Fx uFxB;
+uniform vec4 uEye;         // xyz eye offset in the scene, in units of its nearest surface; w depth curve
+uniform mat3 uRot;
+uniform mat3 uRotOther;    // of the other scene of a crossing
+uniform Fx uFx;
 
 uniform float uAspect;     // width / height
 uniform float uTanHalf;    // tan(vertical fov / 2)
@@ -74,8 +95,8 @@ uniform float uRipple;     // 1 = pigment-in-water transition, 0 = plain crossfa
 uniform vec2 uCenter;      // transition origin in NDC
 uniform vec4 uInk;         // pigment that blooms at the front: rgb (linear), a strength
 uniform float uClose;      // 0 = the next scene spreads from the origin, 1 = it closes in on it
-uniform vec4 uDrips[4];    // x, z on the water plane (m), start time (s), amplitude
-uniform vec2 uResolution;
+uniform vec4 uDrips[8];    // x, z on the water plane (m), start time (s), amplitude
+uniform vec4 uRock[7];     // what rides the water: yaw, pitch of its waterline, half width (rad), amplitude
 
 const float PI = 3.14159265359;
 const float TAU = 6.28318530718;
@@ -191,11 +212,12 @@ vec2 swellSlope(vec2 p, float t, float footprint) {
   return g;
 }
 
+#ifdef DRIPS
 // Expanding rings from drops falling into the water.
 vec2 dripSlope(vec2 p, float t, float footprint) {
   vec2 g = vec2(0.0);
   float aa = 1.0 - smoothstep(0.3, 1.0, footprint * 22.0);
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 8; i++) {
     vec4 d = uDrips[i];
     float age = t - d.z;
     if (age < 0.0 || age > 6.0 || d.w <= 0.0) continue;
@@ -208,7 +230,9 @@ vec2 dripSlope(vec2 p, float t, float footprint) {
   }
   return g * 0.1;
 }
+#endif
 
+#ifdef RAIN
 // Raindrop impacts: a grid of cells, each spawning a short-lived ring.
 vec2 rainSlope(vec2 p, float t, float density, float footprint) {
   vec2 g = vec2(0.0);
@@ -232,6 +256,7 @@ vec2 rainSlope(vec2 p, float t, float density, float footprint) {
   }
   return g * 0.12 * aa;
 }
+#endif
 
 // Perturb the lookup direction where the mask says there is water. The
 // rendered panorama already contains the mirror image, so tilting the ray by
@@ -243,10 +268,14 @@ vec3 waterRay(vec3 d, Fx fx, float waterMask) {
   float footprint = length(fwidth(p));
   if (fx.water.x <= 0.0 || waterMask < 0.004 || d.y > -0.004) return d;
   float t = uTime * fx.water.w;
-  vec2 slope = swellSlope(p, t, footprint);
-  if (fx.grade.z > 0.5) slope += dripSlope(d.xz * dist, uTime, footprint);
-  if (fx.rain.w > 0.0) slope += rainSlope(d.xz * dist, uTime, fx.rain.x, footprint) * fx.rain.w;
-  slope *= fx.water.x * waterMask * (1.0 - 0.94 * fx.light.w);
+  vec2 slope = swellSlope(p, t, footprint) * (1.0 - 0.94 * fx.light.w);
+#ifdef DRIPS
+  if (fx.grade.z > 0.5) slope += dripSlope(d.xz * dist, uTime, footprint) * fx.grade.z;
+#endif
+#ifdef RAIN
+  slope += rainSlope(d.xz * dist, uTime, fx.rain.x, footprint) * fx.rain.w;
+#endif
+  slope *= fx.water.x * waterMask;
   // decompose the slope into "towards the viewer" (moves the reflection up or
   // down) and "sideways" (moves it left or right)
   vec2 fwd = normalize(d.xz);
@@ -258,6 +287,81 @@ vec3 waterRay(vec3 d, Fx fx, float waterMask) {
   return vec3(sin(lon) * cos(lat), sin(lat), cos(lon) * cos(lat));
 }
 
+// ─── Air ─────────────────────────────────────────────────────────────────────
+
+#ifdef WIND
+// What the wind moves. Gusts cross the garden as one sees them cross a field;
+// inside a gust every passage of strokes leans and flutters on its own.
+vec3 blown(vec3 d, float amount, float give) {
+  float t = uTime;
+  vec2 ground = d.xz / max(length(d.xz), 0.05);
+  float gust = vnoise(ground * 2.6 + vec2(t * 0.3, d.y * 1.2 - t * 0.17));
+  gust = smoothstep(0.3, 0.85, gust);
+  float lean = sin(t * 1.5 + dot(ground, vec2(7.0, 5.0)) + d.y * 4.0);
+  vec2 cell = vec2(atan(d.x, d.z) * 13.0, d.y * 6.0);
+  // the back of the panorama: cells there are of one piece with those across the seam
+  cell.x = mix(cell.x, ground.x * 13.0, smoothstep(2.4, 2.9, abs(atan(d.x, d.z))));
+  float flutter = vnoise(cell * 1.7 + vec2(t * 0.8, -t * 1.6)) - 0.5;
+  float fine = vnoise(cell * 5.1 + vec2(-t * 2.1, t * 2.9)) - 0.5;
+  float across = (0.25 + gust) * (0.45 * lean + 0.75 * gust) + (0.35 + 1.3 * gust) * (1.2 * flutter + 0.55 * fine);
+  float up = (0.2 + gust) * (0.5 * flutter + 0.3 * fine) - 0.12 * gust;
+  float lon = atan(d.x, d.z) + amount * give * across;
+  float lat = asin(clamp(d.y, -1.0, 1.0)) + amount * give * up;
+  return vec3(sin(lon) * cos(lat), sin(lat), cos(lon) * cos(lat));
+}
+#endif
+
+#ifdef SKY
+// How far the sky has run at a direction: round the moon, and slowly past.
+vec2 skyRun(vec3 d, vec2 moon) {
+  vec2 v = vec2(atan(d.x, d.z) - moon.x, asin(clamp(d.y, -1.0, 1.0)) - moon.y);
+  float r = length(v) + 1e-3;
+  vec2 round = vec2(-v.y, v.x) / r;
+  float w = smoothstep(0.07, 0.32, r) * exp(-r * 0.7);
+  float n = vnoise(d.xz * 5.0 + d.y * 4.0) - 0.5;
+  return round * w * 1.25 + (v / r) * (0.35 * w) + vec2(0.5, 0.12 * n) * smoothstep(0.12, 0.6, r);
+}
+#endif
+
+#ifdef RIDE
+// Ships and buoys ride the water: each turns a little about its waterline, and lifts.
+vec3 riding(vec3 d) {
+  float lon = atan(d.x, d.z), lat = asin(clamp(d.y, -1.0, 1.0));
+  vec2 move = vec2(0.0);
+  for (int i = 0; i < 7; i++) {
+    vec4 k = uRock[i];
+    if (k.w == 0.0) continue;
+    vec2 v = vec2(lon - k.x, lat - k.y);
+    float tall = k.z * (v.y > 0.0 ? 2.6 : 0.9);
+    float w = exp(-pow(abs(v.x) / k.z, 3.0)) * exp(-pow(abs(v.y) / tall, 3.0));
+    float ph = float(i) * 2.1;
+    float turn = k.w * (sin(uTime * (0.62 + 0.09 * float(i)) + ph) + 0.35 * sin(uTime * 1.13 + ph * 1.7));
+    move += w * vec2(turn * v.y, -turn * v.x + 0.5 * k.w * k.z * sin(uTime * 0.8 + ph));
+  }
+  lon += move.x;
+  lat += move.y;
+  return vec3(sin(lon) * cos(lat), sin(lat), cos(lon) * cos(lat));
+}
+#endif
+
+#ifdef GLINTS
+// Light broken small on the water, in level touches that come and go. The cells
+// keep their size on the canvas, as the marks of a brush do.
+float glints(vec3 d) {
+  vec2 c = vec2(atan(d.x, d.z) * 46.0, log(max(-d.y, 0.004)) * 21.0);
+  // rows broken, so that no two touches line up
+  c.x += 7.0 * hash12(vec2(floor(c.y), 3.0));
+  vec2 cell = floor(c);
+  float h = hash12(cell), k = hash12(cell + 3.7);
+  float life = fract(uTime * (0.3 + 0.5 * h) + h * 17.0);
+  vec2 f = fract(c) - 0.5 - (hash22(cell + floor(uTime * (0.3 + 0.5 * h) + h * 17.0)) - 0.5) * vec2(0.4, 0.6);
+  f.y += 0.12 * sin(f.x * 9.0 + h * 20.0);
+  float dab = (1.0 - smoothstep(0.04, 0.12 + 0.3 * k * k, abs(f.x))) * (1.0 - smoothstep(0.02, 0.1 + 0.09 * h, abs(f.y)));
+  return dab * smoothstep(0.0, 0.3, life) * (1.0 - smoothstep(0.35, 0.85, life)) * step(0.45, k);
+}
+#endif
+
+#ifdef GALLERY
 // Each room visited leaves its pigment in the water of the gallery: a cloud
 // with a ragged, slowly turning edge, where clouds meet their colours mix.
 vec3 stained(vec3 col, vec3 d, Fx fx, float water) {
@@ -288,9 +392,11 @@ vec3 stained(vec3 col, vec3 d, Fx fx, float water) {
   vec3 lit = (ink / sum) * (uStainGlow + 2.2 * tone);
   return mix(col, lit, (1.0 - clear) * 0.8 * water);
 }
+#endif
 
 // ─── Rain streaks ────────────────────────────────────────────────────────────
 
+#ifdef RAIN
 // Streaks live on a cylinder around the viewer, so they stay fixed to the
 // world as you turn. Thin, dark and slanted, like the cut lines of a print.
 const float LENGTH = 26.0; // of a cell, in columns: most of the height of the sheet
@@ -325,28 +431,35 @@ float rainStreaks(vec3 d, Fx fx) {
   r = max(r, rainLayer(d, t * 0.8, 330.0, a + 0.03, 1.0, fx.rain.x * 0.5, 41.0) * 0.8);
   return r * (1.0 - smoothstep(0.55, 0.85, abs(d.y)));
 }
+#endif
 
 // ─── A drawing in the scene ──────────────────────────────────────────────────
 
+#ifdef SHEET
 // Laid over the render, behind whatever the mask's B channel holds in front.
-vec3 layDrawing(vec3 col, sampler2D sheet, vec4 rect, vec2 on, vec3 ray, vec4 eye, float infront) {
+vec3 layDrawing(vec3 col, sampler2D sheet, vec4 rect, vec2 on, vec3 ray, vec4 eye, float infront, float brush) {
   vec3 shift = eye.xyz * pow(on.y, eye.w);
   vec3 q = normalize(ray + shift / (1.0 + length(shift) / MAX_SHIFT));
   float y = clamp(q.y, -0.999, 0.999);
   vec2 p = vec2((atan(q.x, q.z) - rect.x) / rect.y, (rect.z - 0.5 * log((1.0 + y) / (1.0 - y))) / rect.w);
   vec2 dx = dFdx(p), dy = dFdy(p);
+  // laid with a brush: edges wander, and the paint breaks where it was dragged thin
+  vec2 at = p * rect.yw * 57.3;
+  p += brush * 0.2 / (rect.yw * 57.3) * (vec2(vnoise(at * vec2(4.1, 6.3)), vnoise(at * vec2(5.3, 3.7) + 9.0)) - 0.5);
   // the jump at the back of the world lies outside the sheet
   vec2 inside = step(vec2(0.0), p) * step(p, vec2(1.0));
   vec4 ink = textureGrad(sheet, p, dx, dy) * inside.x * inside.y * on.x * (1.0 - infront);
   // the same paper as the rest of the print
   vec2 f = p * vec2(rect.y, rect.w);
   float paper = 1.0 + 0.05 * (vnoise(f * vec2(220.0, 620.0)) - 0.5) + 0.06 * (vnoise(f * 9.0) - 0.5);
-  return col * (1.0 - ink.a) + ink.rgb * paper;
+  ink *= 1.0 - brush * 0.18 * smoothstep(0.5, 0.85, vnoise(at * vec2(3.0, 9.0)));
+  return col * (1.0 - ink.a) + ink.rgb * mix(paper, 0.85 + 0.3 * vnoise(at * vec2(5.0, 3.2) + 4.0), brush);
 }
+#endif
 
 // ─── Scene shading ───────────────────────────────────────────────────────────
 
-vec3 shade(sampler2D pano, sampler2D maskTex, sampler2D depthTex, sampler2D sheet, vec4 rect, vec2 on, vec4 eye, Fx fx, vec3 ray) {
+vec3 shade(vec4 eye, Fx fx, vec3 ray) {
   // the ray on screen: rain falls around the viewer and stays with it
   vec2 uv = dirToUv(ray);
   vec2 dx = seamless(dFdx(uv));
@@ -354,39 +467,72 @@ vec3 shade(sampler2D pano, sampler2D maskTex, sampler2D depthTex, sampler2D shee
   // where that ray lands in the panorama
   vec3 d = ray;
   if (dot(eye.xyz, eye.xyz) > 0.0) {
-    d = parallax(depthTex, ray, eye, dx, dy);
+    d = parallax(uDepth, ray, eye, dx, dy);
     uv = dirToUv(d);
   }
-  vec4 mask = textureGrad(maskTex, uv, dx, dy);
+#ifdef RIDE
+  d = riding(d);
+  uv = dirToUv(d);
+#endif
+  vec4 mask = textureGrad(uMask, uv, dx, dy);
 
-  vec3 rd = waterRay(d, fx, mask.r);
+  // what floats goes up and down with the water under it
+  float wet = min(1.0, mask.r + fx.live.z * mask.b);
+  vec3 rd = waterRay(d, fx, wet);
   vec2 ruv = dirToUv(rd);
   // keep the ripple only if it still lands on water: otherwise the railing,
   // a boat or the shore would be dragged into the reflection as jagged teeth
-  float landed = textureGrad(maskTex, ruv, dx, dy).r;
-  ruv = mix(uv, ruv, smoothstep(0.45, 0.85, landed));
+  vec4 there = textureGrad(uMask, ruv, dx, dy);
+  ruv = mix(uv, ruv, smoothstep(0.45, 0.85, there.r + fx.live.z * there.b));
+#ifdef WIND
+  {
+    // only what the wind can move leans, over what it can move behind it
+    float give = textureLod(uMask, uv, 2.5).g;
+    vec2 buv = dirToUv(blown(d, fx.live.x, give));
+    float free = textureGrad(uMask, buv, dx, dy).g * mask.g;
+    ruv = mix(ruv, buv, smoothstep(0.1, 0.4, free) * step(wet, 0.5));
+  }
+#endif
   // image compression knows nothing of the far side of the seam, so the two
   // edges of a smooth sky end a shade apart: there, read a few texels wide
-  float seam = fx.light.z * (1.0 - smoothstep(0.0008, 0.0026, min(ruv.x, 1.0 - ruv.x)));
+#ifdef SEAM
+  float seam = (1.0 - smoothstep(0.0008, 0.0026, min(ruv.x, 1.0 - ruv.x)));
   vec2 wide = vec2(0.0022 * seam, 0.0);
-  vec3 col = textureGrad(pano, ruv, dx + wide, dy + wide.yx).rgb;
+#else
+  vec2 wide = vec2(0.0);
+#endif
+  vec3 col = textureGrad(uPano, ruv, dx + wide, dy + wide.yx).rgb;
+#ifdef SKY
+  {
+    // the sky runs: two takes of it, each carried along and let go before it smears, one fading as the other comes
+    float open = textureLod(uMask, uv, 4.0).g * textureLod(uMask, uv, 1.0).g;
+    vec2 run = skyRun(d, fx.mood.zw) * fx.live.y * open / vec2(TAU * max(sqrt(1.0 - d.y * d.y), 0.3), -PI);
+    float a = fract(fx.live.w), b = fract(fx.live.w + 0.5);
+    vec3 one = textureGrad(uPano, uv - run * (a - 0.5), dx + wide, dy + wide.yx).rgb;
+    vec3 two = textureGrad(uPano, uv - run * (b - 0.5), dx + wide, dy + wide.yx).rgb;
+    col = mix(col, mix(one, two, abs(a * 2.0 - 1.0)), smoothstep(0.02, 0.3, open));
+  }
+#endif
 
   // Lying still, the water is a mirror: what stands over it is in the same panorama. The ray
   // goes on from where it meets the water, up, to about where the far bank and the bridge are.
+#ifdef HOUR
   if (fx.light.w > 0.0) {
     float h = fx.water.y;
     vec3 p = d * (h / max(-d.y, 0.02));
-    vec3 r = vec3(d.x, -d.y, d.z);
+    vec3 r = vec3(rd.x, -rd.y, rd.z);
     float b = dot(p.xz, r.xz), a = max(dot(r.xz, r.xz), 1e-4);
     const float ROUND = 13.0;
     float t = (-b + sqrt(max(b * b - a * (dot(p.xz, p.xz) - ROUND * ROUND), 0.0))) / a;
     vec2 muv = dirToUv(normalize(p + r * t));
-    vec3 mirror = textureGrad(pano, muv, dx, dy).rgb * vec3(0.8, 0.82, 0.84);
+    vec3 mirror = textureGrad(uPano, muv, dx, dy).rgb * vec3(0.8, 0.82, 0.84);
     col = mix(col, mirror, fx.light.w * mask.r * 0.9 * smoothstep(0.0, 0.03, -d.y));
   }
+#endif
+#ifdef FIRES
   if (fx.mood.x != 0.0 || fx.mood.y > 0.0) {
     // the fires, and the air they light
-    float near = textureLod(maskTex, uv, 4.5).b;
+    float near = textureLod(uMask, uv, 4.5).b;
     col *= 1.0 + fx.mood.x * (0.5 * mask.b + 0.75 * near);
     // the moon, and its road on the water
     vec3 moon = vec3(sin(fx.mood.z) * cos(fx.mood.w), sin(fx.mood.w), cos(fx.mood.z) * cos(fx.mood.w));
@@ -396,19 +542,59 @@ vec3 shade(sampler2D pano, sampler2D maskTex, sampler2D depthTex, sampler2D shee
     col *= 1.0 + fx.mood.y * (0.42 * exp(-ang * ang * 5.5) * (rd.y > 0.0 ? 1.0 : 0.0) + 0.5 * road);
     col *= 1.0 - 0.16 * fx.mood.y * smoothstep(0.35, 1.2, ang);
   }
-  if (uStainGlow > 0.0 && fx.grade.z > 0.5) col = stained(col, rd, fx, mask.r);
+#endif
+#ifdef HOUR
+  // sun through leaves that move: patches of light that travel
+  if (fx.air.y > 0.0) {
+    vec2 g = d.xz / max(length(d.xz), 0.05);
+    float n = vnoise(g * 3.1 + vec2(uTime * 0.13, d.y * 5.0 - uTime * 0.09)) * 0.6 + vnoise(g * 7.3 + vec2(-uTime * 0.21, d.y * 11.0 + uTime * 0.16)) * 0.4;
+    col *= 1.0 + fx.air.y * (smoothstep(0.46, 0.72, n) - 0.22) * vec3(1.05, 1.0, 0.72);
+  }
+#endif
+#ifdef GLINTS
+  if (fx.air.z > 0.0 && d.y < -0.004 && wet > 0.05) {
+    float tone = dot(col, vec3(0.3, 0.59, 0.11));
+    // where the water is lit, and most of all on the road of the light
+    col += glints(d) * wet * fx.air.z * smoothstep(0.06, 0.5, tone) * (col * 1.5 + vec3(0.08, 0.075, 0.05)) * (1.0 - smoothstep(0.1, 0.45, -d.y));
+  }
+#endif
+#ifdef HOUR
+  // the hour
+  {
+    float tone = dot(col, vec3(0.3, 0.59, 0.11));
+    col = mix(vec3(tone), col, fx.lights.w) * mix(fx.darks.rgb, fx.lights.rgb, smoothstep(0.02, 0.3, tone));
+    if (fx.mist.w > 0.0) {
+      // lies on the water, thicker the further off, and drifts
+      float far = fx.air.w / max(mix(textureGrad(uDepth, uv, dx, dy).r, textureLod(uDepth, uv, 3.5).r, 0.6), 0.012);
+      float high = fx.water.y + d.y * far;
+      float n = vnoise(d.xz * 6.0 + vec2(uTime * 0.07, d.y * 9.0)) * 0.6 + vnoise(d.xz * 15.0 + vec2(-uTime * 0.05, d.y * 24.0 + uTime * 0.04)) * 0.4;
+      float m = smoothstep(1.5, 22.0, far) * exp(-max(high - 0.2, 0.0) * 0.2) * (0.4 + 1.1 * n);
+      col = mix(col, fx.mist.rgb * (0.82 + 0.3 * n), min(m * fx.mist.w, 0.86));
+    }
+  }
+#endif
+#ifdef GALLERY
+  if (uStainGlow > 0.0) col = stained(col, rd, fx, mask.r);
+#endif
 
+#ifdef FIRES
   // light sources breathe (fire, lanterns); B channel
   if (fx.light.x > 0.0) {
     float n = vnoise(vec2(uTime * 7.0, uv.x * 40.0)) * 0.6 + vnoise(vec2(uTime * 17.0, uv.y * 60.0)) * 0.4;
     col *= 1.0 + fx.light.x * (n - 0.5) * mask.b;
   }
+#endif
+#ifdef SKY
   // clouds drift and stars glint; G channel
   if (fx.light.y > 0.0) {
     float n = vnoise(vec2(uv.x * 24.0 + uTime * 0.03, uv.y * 12.0)) - 0.5;
     col *= 1.0 + fx.light.y * n * mask.g;
   }
-  if (on.x > 0.0) col = layDrawing(col, sheet, rect, on, ray, eye, smoothstep(0.4, 0.75, mask.b));
+#endif
+#ifdef SHEET
+  if (uSheetOn.x > 0.0) col = layDrawing(col, uSheet, uSheetRect, uSheetOn, ray, eye, smoothstep(0.4, 0.75, mask.b) * (1.0 - fx.darks.w), fx.darks.w);
+#endif
+#ifdef GALLERY
   // hovered painting (hub): exact rectangle on its wall, plus a soft halo
   // as if its spotlight had been turned up
   if (fx.hover2.y > 0.0 || fx.hover2.z > 0.0) {
@@ -430,10 +616,13 @@ vec3 shade(sampler2D pano, sampler2D maskTex, sampler2D depthTex, sampler2D shee
     col *= mix(vec3(1.0), gain, fx.hover2.z * facing * inside);
   }
 
+#endif
+#ifdef RAIN
   float rain = rainStreaks(ray, fx);
   // a dark line on the light, and a paler one where the cloud is black, as the block leaves it
   float sky = dot(col, vec3(0.3, 0.59, 0.11));
   col = mix(col, mix(vec3(0.075, 0.085, 0.1), col * 0.22, smoothstep(0.015, 0.09, sky)), rain * 0.52);
+#endif
   return col * fx.grade.w;
 }
 
@@ -476,25 +665,11 @@ void main() {
     }
   }
 
-  // branch on the uniform only, so screen derivatives stay well defined
-  vec3 ray = screenRay(ndc);
-  vec3 rayA = uRotA * ray, rayB = uRotB * ray;
+  vec3 cam = screenRay(ndc);
+  vec3 ray = uRot * cam;
   // Through the canvas, the world is first seen exactly where it is painted.
-  if (uMatch > 0.0) {
-    if (uMatchB > 0.5) rayB = normalize(mix(rayB, painted(rayA), uMatch));
-    else rayA = normalize(mix(rayA, painted(rayB), uMatch));
-  }
-  vec3 col;
-  if (uMix <= 0.0) {
-    col = shade(uPanoA, uMaskA, uDepthA, uSheetA, uSheetRectA, uSheetOnA, uEyeA, uFxA, rayA);
-  } else if (uMix >= 1.0) {
-    col = shade(uPanoB, uMaskB, uDepthB, uSheetB, uSheetRectB, uSheetOnB, uEyeB, uFxB, rayB);
-  } else {
-    col = mix(
-      shade(uPanoA, uMaskA, uDepthA, uSheetA, uSheetRectA, uSheetOnA, uEyeA, uFxA, rayA),
-      shade(uPanoB, uMaskB, uDepthB, uSheetB, uSheetRectB, uSheetOnB, uEyeB, uFxB, rayB),
-      reveal);
-  }
+  if (uMatch > 0.0 && uMatchB == uIsB) ray = normalize(mix(ray, painted(uRotOther * cam), uMatch));
+  vec3 col = shade(uEye, uFx, ray);
 
   if (pigment > 0.0) {
     // pigment takes the tone of what it lies over, so the picture shows through
@@ -504,7 +679,7 @@ void main() {
     col *= 1.0 - 0.28 * rim * uInk.a;
   }
 
-  vec4 grade = uMix < 0.5 ? uFxA.grade : uFxB.grade;
+  vec4 grade = uFx.grade;
 
   // vignette
   vec2 v = vNdc * vec2(min(uAspect, 1.6), 1.0) * 0.62;
@@ -520,6 +695,6 @@ void main() {
   col += g * grade.y * (1.0 - abs(luma * 2.0 - 1.0) * 0.7);
   col += (hash12(gl_FragCoord.xy * 1.37 + 3.1) - 0.5) / 255.0;
 
-  outColor = vec4(col, 1.0);
+  outColor = vec4(col, uIsB > 0.5 ? reveal : 1.0);
 }
 `;
