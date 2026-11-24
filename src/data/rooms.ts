@@ -87,8 +87,8 @@ export interface Room {
 	view: { yaw: number; pitch: number; zoom?: number };
 	entrance: Entrance;
 	hotspots: Hotspot[];
-	/** What the visitor can set going in the room, and the words for it. */
-	act?: { run: string; stop: string; hint: string; caught: string };
+	/** Words that come up once on a visit: on arriving, and when what moves in the room comes back to the instant of the picture. */
+	act?: { hint?: string; caught?: string };
 	effects: SceneEffects;
 	audio: "ocean" | "shower" | "garden" | "harbour";
 }
@@ -165,7 +165,7 @@ export const rooms: Room[] = [
 			"Three long boats carry crews bent low over their oars. The scene is a moment before impact, and the print never tells you whether they make it through.",
 		],
 		scene:
-			"You sit in the bow of a long, narrow fishing boat, low in a trough between the swells, with the crew rowing in pairs behind you, bent double over their oars. On your left an enormous wave rises, its back white, its hollow deep blue streaked with paler water; its lip breaks into claw-like fingers of foam that hang overhead, and another boat lies caught underneath it. In front of it a smaller wave lifts a white peak. Ahead, far away and framed beneath the curl, stands the small snow-capped cone of Mount Fuji, and a third boat climbs the swell that closes the view on your right. Nothing moves but the light on the water, until you let time run: then the lip comes down, the wave breaks in a mass of foam, sinks, and rises again to where Hokusai stopped it.",
+			"You sit in the bow of a long, narrow fishing boat, low in a trough between the swells, with the crew rowing in pairs behind you, bent double over their oars. On your left an enormous wave rises, its back white, its hollow deep blue streaked with paler water; its lip breaks into claw-like fingers of foam that hang overhead, and another boat lies caught underneath it. In front of it a smaller wave lifts a white peak. Ahead, far away and framed beneath the curl, stands the small snow-capped cone of Mount Fuji, and a third boat climbs the swell that closes the view on your right. Then time runs: the lip comes down, the wave breaks in a mass of foam, sinks, and rises again to where Hokusai stopped it, and there it stands for a moment before it falls again.",
 		// Prussian blue
 		pigment: "#1c3f73",
 		view: { yaw: -18, pitch: 14 },
@@ -195,9 +195,6 @@ export const rooms: Room[] = [
 			},
 		],
 		act: {
-			run: "Let time run",
-			stop: "Stop time",
-			hint: "Press and hold: time runs. Let go: it stops.",
 			caught: "Here. This is the instant Hokusai chose.",
 		},
 		effects: {
@@ -233,7 +230,7 @@ export const rooms: Room[] = [
 			"Vincent van Gogh owned Japanese prints and painted his own copy of this one in 1887, adding a border of Japanese characters around it.",
 		],
 		scene:
-			"You stand on the open platform of a fire watch, high over the near bank, in a sudden summer downpour. Fine dark lines of rain slant across everything, in two directions. Below you a long yellow bridge on a maze of grey piles crosses from the left up to the right, and people are caught on it in mid-stride: two women under dark umbrellas, a man holding down a round straw hat, two sharing one umbrella, one with a straw mat over his head. The river is turquoise, wiped to deep blue underneath the bridge; a raftsman poles a long raft across it. The far bank is a single dark silhouette with a few pale roofs, under a ragged band of black cloud. Behind you the roofs of the town run back in rows. Whoever you look at starts to run.",
+			"You stand on the open platform of a fire watch, high over the near bank, in a sudden summer downpour. Fine dark lines of rain slant across everything, in two directions. Below you a long yellow bridge on a maze of grey piles crosses from the left up to the right, and people are caught on it in mid-stride, and then run for shelter: two women under dark umbrellas, a man holding down a round straw hat, two sharing one umbrella, one with a straw mat over his head. The river is turquoise, wiped to deep blue underneath the bridge; a raftsman poles a long raft across it. The far bank is a single dark silhouette with a few pale roofs, under a ragged band of black cloud. Behind you the roofs of the town run back in rows.",
 		// the blue-green of the river
 		pigment: "#2c727c",
 		view: { yaw: -5, pitch: -18, zoom: 0.76 },
@@ -262,12 +259,6 @@ export const rooms: Room[] = [
 				text: "The far bank took its name from the Atake-maru, a huge government warship once moored there. In the rain it is reduced to a dark band of trees.",
 			},
 		],
-		act: {
-			run: "Let them run",
-			stop: "Stop them",
-			hint: "Look at someone and they run. Press and hold: everyone does.",
-			caught: "",
-		},
 		effects: {
 			water: { height: 22, strength: 0.16, scale: 0.4, speed: 0.6 },
 			rain: { density: 0.9, angle: 4, speed: 1.0 },
@@ -299,7 +290,7 @@ export const rooms: Room[] = [
 			"For the rest of his life the pond was his main subject. The later water lily paintings drop the bridge and the bank entirely and show nothing but water.",
 		],
 		scene:
-			"You stand on a small wooden landing at the edge of a pond. There is no sky: dark foliage, russet and green, closes overhead and all round. Just ahead a footbridge, blue-green and almost black in its own shade, arches from one side of the view to the other. Turquoise and violet pads crowd the water in front of it, with russet water between them; beyond the bridge lies a band of pale blossom. Yellow-green streamers of willow hang through the dark, a pale flowering tree leans in on the right, and reeds hook over from the bank on the left. Behind you a path of reddish earth curves between beds of flowers. Everything is made of separate strokes of paint, and the strokes move: wind crosses the leaves, the pads rise and fall, petals drop on the water, dragonflies hang over it. Let the day pass, and the light goes from afternoon to sunset, the blue hour, a night of fireflies, mist at dawn and noon, and comes round to the light of the painting.",
+			"You stand on a small wooden landing at the edge of a pond. There is no sky: dark foliage, russet and green, closes overhead and all round. Just ahead a footbridge, blue-green and almost black in its own shade, arches from one side of the view to the other. Turquoise and violet pads crowd the water in front of it, with russet water between them; beyond the bridge lies a band of pale blossom. Yellow-green streamers of willow hang through the dark, a pale flowering tree leans in on the right, and reeds hook over from the bank on the left. Behind you a path of reddish earth curves between beds of flowers. Everything is made of separate strokes of paint, and the strokes move: wind crosses the leaves, the pads rise and fall, petals drop on the water, dragonflies hang over it. The day goes by: the light passes from afternoon to sunset, the blue hour, a night of fireflies, mist at dawn and noon, and comes round to the light of the painting.",
 		// viridian, the green of the bridge
 		pigment: "#2c6b55",
 		view: { yaw: 3, pitch: -2 },
@@ -329,9 +320,7 @@ export const rooms: Room[] = [
 			},
 		],
 		act: {
-			run: "Let the day pass",
-			stop: "Stop the day",
-			hint: "Touch the water. Press and hold: the day goes by.",
+			hint: "Touch the water.",
 			caught: "Here. This is the light Monet chose.",
 		},
 		effects: {
@@ -394,12 +383,6 @@ export const rooms: Room[] = [
 				text: "Tall sailing ships wait for their cargo. Coal from the Tyne was shipped down the coast to London and far beyond.",
 			},
 		],
-		act: {
-			run: "Feed the fires",
-			stop: "Let them sink",
-			hint: "Look at the fires, then at the moon.",
-			caught: "",
-		},
 		effects: {
 			water: { height: 1.5, strength: 0.22, scale: 0.7, speed: 0.55, drips: 2, glints: 1.3 },
 			sky: { shimmer: 0.16, run: 3.2, speed: 0.06 },

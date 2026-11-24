@@ -67,6 +67,7 @@ const clientConfig = {
 		effects: r.effects,
 		audio: r.audio,
 		pigment: r.pigment,
+		act: r.act,
 	})),
 	registration: registration.rooms,
 	art: Object.fromEntries(rooms.map((r) => [r.slug, { width: 960, avif: art[r.slug].avif["960"], webp: art[r.slug].webp["960"] }])),
@@ -101,7 +102,7 @@ const clientConfig = {
 		</div>
 		<p id="look-help" hidden>
 			Drag or swipe to look around, or use the arrow keys. Use plus and minus to zoom. The “Look and zoom buttons” control
-			opens buttons that do the same one step at a time.
+			opens buttons that do the same one step at a time. The space bar pauses and plays the animation.
 			Press Tab to reach the paintings and controls.
 		</p>
 
@@ -198,10 +199,10 @@ const clientConfig = {
 			<Icon name="sound-on" class="when-on" />
 			<span class="tool-label">Sound</span>
 		</button>
-		<button class="tool" type="button" id="btn-motion" aria-pressed="true" hidden>
-			<Icon name="motion-off" class="when-off" />
-			<Icon name="motion-on" class="when-on" />
-			<span class="tool-label">Animation</span>
+		<button class="tool" type="button" id="btn-motion" data-playing="true" hidden>
+			<Icon name="play" class="when-off" />
+			<Icon name="pause" class="when-on" />
+			<span class="tool-label" id="motion-label">Pause animation</span>
 		</button>
 		<button class="tool" type="button" id="btn-gyro" aria-pressed="false" hidden>
 			<Icon name="compass" />
@@ -363,22 +364,6 @@ const clientConfig = {
 						<p class="room-by">
 							{room.artist}, {room.date}
 						</p>
-						{/* sets going what can move in the room; shown by the script. The same as holding the view or the space bar */}
-						{room.act && (
-							<button
-								class="btn room-act"
-								type="button"
-								data-tide
-								data-run={room.act.run}
-								data-stop={room.act.stop}
-								data-hint={room.act.hint}
-								data-caught={room.act.caught}
-								aria-pressed="false"
-								hidden
-							>
-								{room.act.run}
-							</button>
-						)}
 						<div class="room-actions">
 							<button class="btn" type="button" data-details={room.slug} aria-expanded="true" aria-controls={`details-${room.slug}`}>
 								<span>About<span class="btn-more"> this painting</span></span>
@@ -648,6 +633,10 @@ const clientConfig = {
 				<div>
 					<dt>Go back</dt>
 					<dd>“Gallery” on the room's label, or your browser's back button</dd>
+				</div>
+				<div>
+					<dt>Pause</dt>
+					<dd>The pause button at the top, or the space bar, stops everything that moves and starts it again</dd>
 				</div>
 				<div>
 					<dt>Controls</dt>

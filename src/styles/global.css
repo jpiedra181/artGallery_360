@@ -922,8 +922,8 @@ html.immersive body {
 	box-shadow: inset 0 -2px 0 var(--fg), 0 0 0 5px #0b0d10;
 }
 
-.tool[aria-pressed="true"] .when-off,
-.tool[aria-pressed="false"] .when-on {
+.tool:is([aria-pressed="true"], [data-playing="true"]) .when-off,
+.tool:is([aria-pressed="false"], [data-playing="false"]) .when-on {
 	display: none;
 }
 
@@ -1258,10 +1258,10 @@ html.immersive body {
 	place-items: center;
 	min-width: 2.5rem;
 	padding-inline: 0.65rem;
-	border-right: 1px solid var(--rule);
+	background: var(--fg);
+	color: var(--bg);
 	font-size: var(--step--1);
 	font-weight: 600;
-	transition: background-color 0.3s var(--ease), color 0.3s var(--ease);
 }
 
 .spot-text {
@@ -1414,33 +1414,6 @@ html:not(.immersive) .room-no .swatch {
 .immersive .room-by {
 	color: var(--fg-2);
 	font-size: var(--step--1);
-}
-
-/* what the visitor can set going: the one control on the label printed in ink */
-.immersive .room-act {
-	width: 100%;
-	margin-top: var(--space-4);
-	min-height: 2.875rem;
-	border-radius: var(--radius);
-	border-color: var(--fg);
-	background: var(--fg);
-	color: var(--bg);
-}
-
-.immersive .room-act[aria-pressed="true"] {
-	background: transparent;
-	color: var(--fg);
-}
-
-.immersive .room-act + .room-actions {
-	margin-top: var(--space-3);
-}
-
-/* while the view is held nothing is in front of it; while time is away from the
-   instant of the print, the points marked on it wait */
-.immersive.is-held :is(.bar, .room-card, .look-pad) {
-	opacity: 0;
-	pointer-events: none;
 }
 
 /* what can be done from the label: a row of plain words between rules */
@@ -1920,97 +1893,6 @@ html:not(.immersive) .poi-card {
 	bottom: calc(var(--safe-b) + var(--gutter));
 }
 
-/* ─── Ring round the pointer ──────────────────────────────────────────────── */
-
-.ring {
-	position: absolute;
-	z-index: 3;
-	top: 0;
-	left: 0;
-	width: 0;
-	height: 0;
-	pointer-events: none;
-	opacity: 0;
-	transition: opacity 0.35s var(--ease);
-}
-
-.ring[data-on="true"] {
-	opacity: 1;
-}
-
-.ring svg {
-	position: absolute;
-	max-width: none;
-	width: 4rem;
-	height: 4rem;
-	left: -2rem;
-	top: -2rem;
-	overflow: visible;
-	fill: none;
-	stroke: #fff;
-	stroke-width: 1.25;
-	transform: scale(0.72);
-	transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.ring circle:first-child {
-	stroke: #0f1417;
-	stroke-width: 4;
-	opacity: 0.62;
-}
-
-.ring circle:nth-child(2) {
-	opacity: 0.9;
-}
-
-.ring .ring-fill {
-	stroke-width: 3;
-	stroke-dasharray: 1;
-	stroke-dashoffset: 1;
-	transform: rotate(-90deg);
-	transform-origin: center;
-}
-
-.ring[data-pressing="true"] svg,
-.ring[data-held="true"] svg {
-	transform: scale(1);
-}
-
-/* the time a press takes to become a hold (HOLD_MS in app.ts) */
-.ring[data-pressing="true"] .ring-fill {
-	stroke-dashoffset: 0;
-	transition: stroke-dashoffset 0.26s linear;
-}
-
-.ring[data-held="true"] .ring-fill {
-	stroke-dasharray: 0.2 0.8;
-	stroke-dashoffset: 0;
-	animation: ring-turn 2.2s linear infinite;
-}
-
-@keyframes ring-turn {
-	to {
-		transform: rotate(270deg);
-	}
-}
-
-.ring-word {
-	position: absolute;
-	left: 1.9rem;
-	top: -0.55rem;
-	font-size: var(--step--1);
-	font-weight: 600;
-	line-height: 1.1;
-	color: #fff;
-	text-shadow: 0 0 6px rgb(0 0 0 / 0.75), 0 0 2px rgb(0 0 0 / 0.75);
-}
-
-@media (hover: none) {
-	.ring-word {
-		display: none;
-	}
-}
-
 /* ─── Labels arriving ─────────────────────────────────────────────────────── */
 
 /* a room's label is put up like a card on a wall: the sheet first, then what is printed on it */
@@ -2191,24 +2073,12 @@ html:not(.immersive) .poi-card {
 	.immersive .spot-numeral {
 		display: none;
 	}
-
-	/* the number no longer tells which rooms have been visited: a bar of ink does */
-	.immersive .spot[data-visited="true"] {
-		box-shadow: inset 5px 0 0 var(--fg), var(--lift);
-	}
 }
 
 /* the labels and the look buttons would stand on the words */
 .immersive.is-closing :is(.spots, .look-pad) {
 	opacity: 0;
 	visibility: hidden;
-}
-
-/* a painting whose room has been visited: its number is printed in reverse */
-.spot[data-visited="true"] .spot-numeral {
-	background: var(--fg);
-	border-color: var(--fg);
-	color: var(--bg);
 }
 
 /* ─── Hint ────────────────────────────────────────────────────────────────── */
@@ -2760,7 +2630,7 @@ html:not(.immersive) .poi-card {
 		forced-color-adjust: none;
 	}
 
-	.spot[data-visited="true"] .spot-numeral,
+	.spot-numeral,
 	.tool[aria-pressed="true"],
 	.room-actions .btn[aria-expanded="true"],
 	.poi-dot[aria-expanded="true"] .poi-ring {
