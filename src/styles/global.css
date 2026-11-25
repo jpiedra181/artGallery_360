@@ -54,7 +54,7 @@
 
 /* On paper: the document, and every label, note and sheet over the view. */
 :root,
-.immersive :is(.room-card, .poi-card, .details, .tool-label),
+.immersive :is(.poi-card, .details, .tool-label),
 .guide {
 	--bg: var(--stock);
 	--fg: #121418;
@@ -217,6 +217,12 @@ cite {
 	outline-offset: 1px;
 	box-shadow: 0 0 0 5px #0b0d10;
 	border-radius: var(--radius);
+}
+
+/* words that take focus only to be read out: a ring round half the screen would look like a fault */
+.immersive .finale:focus-visible {
+	outline: none;
+	box-shadow: none;
 }
 
 .skip-link {
@@ -1138,6 +1144,37 @@ html.immersive body {
 	}
 }
 
+/* a tall screen has the lamps of the gallery behind the links at the top: more shade there */
+@media (max-aspect-ratio: 17/20) {
+	.immersive .intro {
+		background: linear-gradient(
+			to top,
+			rgb(5 7 9 / 0.95) 0%,
+			rgb(5 7 9 / 0.86) 28%,
+			rgb(5 7 9 / 0.45) 52%,
+			rgb(5 7 9 / 0.08) 66%,
+			rgb(5 7 9 / 0.08) 76%,
+			rgb(5 7 9 / 0.88) 91%,
+			rgb(5 7 9 / 0.92) 100%
+		);
+	}
+}
+
+/* on the smallest phones the words come up over the paintings */
+@media (max-aspect-ratio: 17/20) and (max-height: 46em) {
+	.immersive .intro {
+		background: linear-gradient(
+			to top,
+			rgb(5 7 9 / 0.95) 0%,
+			rgb(5 7 9 / 0.9) 45%,
+			rgb(5 7 9 / 0.76) 62%,
+			rgb(5 7 9 / 0.55) 78%,
+			rgb(5 7 9 / 0.88) 91%,
+			rgb(5 7 9 / 0.92) 100%
+		);
+	}
+}
+
 /* room for the bill beside the way in */
 @media (min-width: 44em) {
 	.immersive .intro-cols {
@@ -1149,6 +1186,58 @@ html.immersive body {
 @media (min-width: 68em) {
 	.immersive .intro-about {
 		grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+	}
+}
+
+/* on a phone, three of the header's buttons, in words */
+.guide-settings {
+	display: none;
+	border-bottom: 1px solid var(--rule-strong);
+}
+
+.setting {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: 3.25rem;
+	padding: 0.5rem 0;
+	border: 0;
+	background: transparent;
+	color: var(--fg);
+	font-weight: 500;
+	text-align: left;
+}
+
+.setting[hidden] {
+	display: none;
+}
+
+.setting + .setting {
+	border-top: 1px solid var(--rule);
+}
+
+/* on: said with a word, not with a colour */
+.setting[aria-pressed="true"]::after {
+	content: "On";
+	margin-left: auto;
+	padding: 0.1rem 0.5rem;
+	background: var(--fg);
+	color: var(--bg);
+	font-size: var(--step--2);
+}
+
+@media (max-width: 40em), (max-height: 30em) and (orientation: landscape) {
+	.immersive .guide-settings:not([hidden]) {
+		display: grid;
+	}
+
+	.immersive :is(#btn-gyro, #btn-fullscreen) {
+		display: none;
+	}
+
+	/* the corner is for whoever has asked for the buttons */
+	.immersive #btn-look[aria-expanded="false"] {
+		display: none;
 	}
 }
 
@@ -1225,6 +1314,23 @@ html.immersive body {
 	text-align: right;
 }
 
+/* in two rows the words stand in the narrow band between one frame and the next */
+.spots[data-hang="tall"] .spot {
+	padding: 0.1em 0.36em 0.3em;
+	line-height: 1;
+}
+
+.spots[data-hang="tall"] .spot-artist {
+	display: none;
+}
+
+/* with no pointer to light them up, they are underlined as any words one can press */
+@media (hover: none) {
+	.spot {
+		--spot-rule: rgb(207 205 198 / 0.5);
+	}
+}
+
 .spot[data-visible="false"] {
 	opacity: 0;
 	pointer-events: none;
@@ -1247,7 +1353,7 @@ html.immersive body {
 
 .spot-theme {
 	word-spacing: -0.06em;
-	text-decoration: underline transparent;
+	text-decoration: underline var(--spot-rule, transparent);
 	text-decoration-thickness: 0.045em;
 	text-underline-offset: 0.16em;
 	transition: text-decoration-color 0.25s var(--ease);
@@ -1342,10 +1448,36 @@ html.immersive body {
 	visibility: hidden;
 }
 
-/* The label that would hang beside the painting: room, title, painter and date on paper, and under
-   a rule what can be done from here. A caption, not a panel: the world is the thing to look at. */
+/* The foot of the picture, set like the foot of the title screen: room, title, painter and date straight on
+   the dark that gathers at the bottom of the view, and under a rule what can be done from here. */
+.immersive .room::before {
+	content: "";
+	position: absolute;
+	inset: auto 0 0;
+	/* as high as the words and their fade (--foot comes from app.ts) */
+	--fade: 7rem;
+	height: calc(var(--foot, 16rem) + var(--fade));
+	background: linear-gradient(to top, rgb(7 9 11 / 0.88), rgb(7 9 11 / 0.74) calc(100% - var(--fade)), rgb(7 9 11 / 0.34) calc(100% - var(--fade) * 0.49), transparent);
+	/* it gathers under the words, and leaves the far side of the picture alone */
+	mask-image: linear-gradient(to right, #000 min(27rem, 70%), rgb(0 0 0 / 0.25) min(54rem, 130%), transparent 90rem);
+	transition: opacity 0.6s var(--ease);
+}
+
+/* with the list open there is more to read over whatever is there */
+.immersive .room:has([data-pois][aria-expanded="true"])::before {
+	background: linear-gradient(to top, rgb(7 9 11 / 0.93), rgb(7 9 11 / 0.84) calc(100% - var(--fade)), rgb(7 9 11 / 0.4) calc(100% - var(--fade) * 0.49), transparent);
+}
+
+.immersive:is(.is-moving, .is-arriving, .is-idle, .is-intro) .room::before {
+	opacity: 0;
+}
+
+.immersive.is-idle .room::before {
+	transition-duration: 1.2s;
+}
+
 .immersive .room-card {
-	--pad: var(--space-4);
+	--pad: 0px;
 	--card-b: calc(var(--safe-b) + var(--gutter));
 	position: absolute;
 	left: calc(var(--safe-l) + var(--gutter));
@@ -1357,11 +1489,7 @@ html.immersive body {
 	overscroll-behavior: contain;
 	scrollbar-width: thin;
 	scrollbar-color: var(--rule-strong) transparent;
-	padding: var(--pad) var(--pad) 0;
-	border-radius: var(--radius);
-	background: var(--bg);
 	color: var(--fg);
-	box-shadow: var(--lift);
 	display: grid;
 	/* one column, as wide as the label and never wider: the row of actions must not stretch it */
 	grid-template-columns: minmax(0, 1fr);
@@ -1373,9 +1501,10 @@ html.immersive body {
 
 .room-no {
 	display: flex;
+	flex-direction: row-reverse;
 	align-items: center;
-	justify-content: space-between;
-	gap: var(--space-3);
+	justify-content: flex-end;
+	gap: 0.6rem;
 	font-size: var(--step--1);
 	font-weight: 600;
 }
@@ -1387,9 +1516,11 @@ html:not(.immersive) .room-no .swatch {
 .immersive .room-title {
 	font-family: var(--font-display), Georgia, serif;
 	font-weight: 500;
-	font-size: clamp(1.45rem, 1.3rem + 0.6vw, 1.8rem);
-	line-height: 1.08;
-	margin-top: var(--space-2);
+	font-size: clamp(1.6rem, 1.3rem + 1.1vw, 2.35rem);
+	line-height: 1.04;
+	word-spacing: -0.06em;
+	text-wrap: balance;
+	margin-top: var(--space-1);
 }
 
 .immersive .room-by {
@@ -1405,16 +1536,15 @@ html:not(.immersive) .room-no .swatch {
 }
 
 .room-actions .btn {
-	flex: 1 1 auto;
+	flex: none;
 	min-height: 2.875rem;
-	padding: 0.5rem 0.75rem;
+	padding: 0.5rem 0;
+	margin-right: 1.6rem;
 	border: 0;
+	background: transparent;
+	color: var(--fg);
 	border-radius: 0;
 	gap: 0.4rem;
-}
-
-.room-actions .btn + .btn {
-	border-left: 1px solid var(--rule);
 }
 
 .room-actions .btn:active {
@@ -1445,11 +1575,10 @@ html:not(.immersive) .room-no .swatch {
 	text-transform: uppercase;
 }
 
-/* open: a bar of ink over the word, like the tab of a folder */
+/* open: a heavier rule over the word */
 .room-actions [data-pois][aria-expanded="true"],
 .room-actions [data-details][aria-expanded="true"] {
-	background: var(--tint);
-	box-shadow: inset 0 3px 0 var(--fg);
+	box-shadow: inset 0 2px 0 var(--fg);
 }
 
 .room-pois[hidden] {
@@ -1467,7 +1596,7 @@ html:not(.immersive) .room-no .swatch {
 
 .room-pois-label {
 	font-size: var(--step--2);
-	color: var(--fg-3);
+	color: var(--fg-2);
 }
 
 .room-pois-list {
@@ -1654,26 +1783,56 @@ html:not(.immersive) .poi-card {
 	opacity: 1;
 }
 
-/* A numbered marker, as on an annotated plate in a catalogue: a disc of paper with the number of its
-   note. It reads as something added to the picture, not as a light in it. */
+/* A pinhead in the picture, until it is come near: then it opens into a numbered marker, as on an
+   annotated plate in a catalogue, with the number it has in the list. */
 .poi-ring {
 	display: grid;
 	place-items: center;
 	width: 1.7rem;
 	height: 1.7rem;
+	overflow: hidden;
+	clip-path: circle(0.36rem);
 	border-radius: 50%;
 	background: var(--stock);
 	color: #121418;
-	box-shadow: 0 0 0 1px rgb(11 13 16 / 0.75), 0 2px 10px rgb(0 0 0 / 0.5);
 	font-size: var(--step--2);
 	font-weight: 600;
 	line-height: 1;
 	font-variant-numeric: lining-nums tabular-nums;
-	transition: transform 0.2s var(--ease), background-color 0.2s var(--ease), color 0.2s var(--ease);
+	transition: clip-path 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s var(--ease), color 0.2s var(--ease);
+}
+
+/* a ring of ink round the pinhead keeps it on any colour */
+.poi-dot::before {
+	content: "";
+	position: absolute;
+	width: 1rem;
+	height: 1rem;
+	border-radius: 50%;
+	background: rgb(11 13 16 / 0.62);
+	transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.poi-ring {
+	position: relative;
+}
+
+:is(.poi-dot:focus-visible, .poi-dot[aria-expanded="true"], .poi-dot:active) .poi-ring {
+	clip-path: circle(0.85rem);
+}
+
+:is(.poi-dot:focus-visible, .poi-dot[aria-expanded="true"], .poi-dot:active) .poi-ring::after {
+	opacity: 1;
+}
+
+:is(.poi-dot:focus-visible, .poi-dot[aria-expanded="true"], .poi-dot:active)::before {
+	transform: scale(1.82);
 }
 
 .poi-ring::after {
 	content: counter(poi);
+	opacity: 0;
+	transition: opacity 0.2s var(--ease);
 }
 
 /* open, or about to be: printed in reverse */
@@ -1681,12 +1840,19 @@ html:not(.immersive) .poi-card {
 .poi-dot[aria-expanded="true"] .poi-ring {
 	background: #121418;
 	color: var(--stock);
-	box-shadow: 0 0 0 1px var(--stock), 0 2px 10px rgb(0 0 0 / 0.5);
 }
 
 @media (hover: hover) {
 	.poi-dot:hover .poi-ring {
-		transform: scale(1.12);
+		clip-path: circle(0.85rem);
+	}
+
+	.poi-dot:hover .poi-ring::after {
+		opacity: 1;
+	}
+
+	.poi-dot:hover::before {
+		transform: scale(1.82);
 	}
 }
 
@@ -2282,6 +2448,10 @@ html:not(.immersive) .poi-card {
 	.immersive .room:has(.details[data-open="true"]) .room-card {
 		visibility: hidden;
 	}
+
+	.immersive .room:has(.details[data-open="true"])::before {
+		opacity: 0;
+	}
 }
 
 /* Phones (and short landscape screens) have no room for a note and the label together: while a note is
@@ -2289,6 +2459,14 @@ html:not(.immersive) .poi-card {
    Closing the note (a tap on the view, the marker again, or Escape) brings the label back. The view has
    already turned the point clear of the label by then (clearArea in app.ts), so nothing jumps. */
 @media (max-width: 40em), (max-height: 30em) and (orientation: landscape) {
+	.immersive .room:has(.poi-card:not(.is-collapsed))::before {
+		opacity: 0;
+	}
+
+	.immersive .poi-card {
+		width: min(26rem, calc(100vw - 1.5rem));
+	}
+
 	.immersive .room:has(.poi-card:not(.is-collapsed)) .room-card {
 		opacity: 0;
 		transform: translateY(0.75rem);
@@ -2329,7 +2507,7 @@ html:not(.immersive) .poi-card {
 	}
 
 	.immersive .wordmark-name {
-		font-size: 1.05rem;
+		font-size: 1.15rem;
 		line-height: 1.05;
 	}
 
@@ -2344,15 +2522,23 @@ html:not(.immersive) .poi-card {
 	}
 
 	.immersive .room-card {
-		--card-b: calc(var(--safe-b) + var(--space-3) + var(--tool-size) + var(--space-2));
-		left: calc(var(--safe-l) + var(--space-3));
-		right: calc(var(--safe-r) + var(--space-3));
+		--card-b: calc(var(--safe-b) + var(--space-3));
+		left: calc(var(--safe-l) + var(--space-4));
+		right: calc(var(--safe-r) + var(--space-4));
 		width: auto;
-		padding-top: var(--space-3);
+	}
+
+	.immersive:has(#btn-look[aria-expanded="true"]) .room-card {
+		--card-b: calc(var(--safe-b) + var(--space-3) + var(--tool-size) + var(--space-2));
 	}
 
 	.room-actions {
 		margin-top: var(--space-3);
+	}
+
+	/* the way back stands apart, under the thumb */
+	.room-actions a.btn {
+		margin: 0 0 0 auto;
 	}
 
 	.room-actions .btn {
@@ -2442,6 +2628,11 @@ html:not(.immersive) .poi-card {
 		padding-block: calc(var(--safe-t) + var(--space-2)) calc(var(--safe-b) + var(--space-3));
 	}
 
+	/* on one line, over as little of the paintings as they can */
+	.immersive .intro-top {
+		display: flex;
+	}
+
 	.immersive .intro-title {
 		font-size: clamp(2.2rem, 9vh + 1rem, 3.6rem);
 	}
@@ -2478,7 +2669,6 @@ html:not(.immersive) .poi-card {
 
 	.immersive .room-card {
 		--card-b: calc(var(--safe-b) + var(--gutter));
-		padding-top: var(--space-3);
 		width: min(24rem, 100% - 3 * var(--gutter) - 4 * var(--tool-size) - 3px - var(--safe-l) - var(--safe-r));
 	}
 
@@ -2500,10 +2690,72 @@ html:not(.immersive) .poi-card {
 		margin-top: 0;
 	}
 
-	/* under the header, not behind it */
+	.immersive .room::before {
+		--fade: 4rem;
+	}
+
+	/* the list in one row, so that the picture is still there to look at */
+	.immersive .room-card:has([data-pois][aria-expanded="true"]) {
+		width: calc(100% - 2 * var(--gutter) - var(--safe-l) - var(--safe-r));
+	}
+
+	.immersive:has(#btn-look[aria-expanded="true"]) .room-card:has([data-pois][aria-expanded="true"]) {
+		width: calc(100% - 3 * var(--gutter) - 4 * var(--tool-size) - 3px - var(--safe-l) - var(--safe-r));
+	}
+
+	.room-pois {
+		padding: 0;
+	}
+
+	.immersive .room-pois-label {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.room-pois-list {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 var(--space-6);
+		margin: 0;
+	}
+
+	.room-pois-list li + li {
+		border-top: 0;
+	}
+
+	.poi-link {
+		min-height: 2.75rem;
+	}
+
+	.immersive .poi-card {
+		width: 19rem;
+	}
+
+	/* a page beside the picture, the whole height of it: the buttons it covers are its own way out */
 	.immersive .details {
-		top: calc(var(--bar-h) + var(--space-6));
-		bottom: calc(var(--safe-b) + var(--space-3));
+		top: 0;
+		left: auto;
+		right: 0;
+		bottom: 0;
+		width: min(26rem, 55%);
+		max-height: none;
+		border-radius: 0;
+		animation-name: panel-in;
+	}
+
+	.room-actions a.btn {
+		margin: 0;
+	}
+
+	.immersive .details-scroll {
+		padding-right: calc(var(--safe-r) + var(--space-5));
+	}
+
+	.immersive:has(.details[data-open="true"]) .tools {
+		visibility: hidden;
 	}
 }
 
@@ -2527,9 +2779,8 @@ html:not(.immersive) .poi-card {
 		width: min(24rem, 100% - 3 * var(--gutter) - 3 * var(--tool-size) - 2px - var(--safe-l) - var(--safe-r));
 	}
 
-	/* no labels under the header buttons here, so the sheet can start closer */
 	.immersive .details {
-		top: calc(var(--bar-h) + var(--space-3));
+		width: min(26rem, 70%);
 	}
 
 	/* the open pad folds beside its button here, not above it: the label stays where it is */
@@ -2537,7 +2788,14 @@ html:not(.immersive) .poi-card {
 		--card-b: calc(var(--safe-b) + var(--gutter));
 	}
 
-	/* the label is too narrow for its actions in a row: they become a list */
+	/* too narrow for two columns on the title screen */
+	.immersive .intro-cols {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+/* The label is too narrow for its actions in a row (a 400 % zoom): they become a list */
+@media (max-height: 30em) and (orientation: landscape) and (max-width: 30em) {
 	.room-actions {
 		flex-direction: column;
 	}
@@ -2550,10 +2808,31 @@ html:not(.immersive) .poi-card {
 		border-left: 0;
 		border-top: 1px solid var(--rule);
 	}
+}
 
-	/* too narrow for two columns on the title screen */
-	.immersive .intro-cols {
-		grid-template-columns: minmax(0, 1fr);
+/* A label that steps aside for a note or a description keeps its title for screen readers: the headings
+   inside those come under it */
+@media (max-width: 62.5em) {
+	.immersive .room:has(.details[data-open="true"]) .room-title {
+		visibility: visible;
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+}
+
+@media (max-width: 40em), (max-height: 30em) and (orientation: landscape) {
+	.immersive .room:has(.poi-card:not(.is-collapsed)) .room-title {
+		visibility: visible;
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
 	}
 }
 

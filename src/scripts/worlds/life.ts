@@ -38,6 +38,8 @@ export interface LifeNow {
 	fire: number;
 	/** What the hour does to the colour of things (linear rgb). */
 	lights: ArrayLike<number>;
+	/** A hand in the foam: the way to it, how hard, and which way it goes (to the right, -1..1). */
+	hand: { dir: readonly [number, number, number]; force: number; way: number } | null;
 	/** Something has touched the water here. */
 	drop(x: number, z: number, strength: number): void;
 }
@@ -192,11 +194,33 @@ export function river(): Life {
 export function spray(): Life {
 	const rnd = random(1831);
 	const drops = Array.from({ length: 130 }, () => [rnd(), rnd(), rnd(), rnd()]);
+	const shaken: ({ x: number; y: number; z: number; vx: number; vy: number; age: number; size: number; q: number } | undefined)[] = new Array(80).fill(undefined);
+	let next = 0, owed = 0;
 	const FOAM = hex("#f4eddb"), INK = hex("#1f2f52"), PALE = hex("#b4d2d5");
 	return (out, n) => {
 		const b = new Brush(out);
 		const t = n.clock;
-		if (t < 0.25 || t > 0.66) return 0;
+		// shaken off by a hand passing over the foam
+		if (n.hand && n.hand.force > 0.06) {
+			owed += n.dt * 90 * n.hand.force;
+			while (owed > 1) {
+				owed -= 1;
+				const [x, y, z] = n.hand.dir;
+				const o = () => Math.random() - 0.5;
+				shaken[next++ % shaken.length] = { x: x * 24 + 3.4 * o(), y: y * 24 + 2.6 * o(), z: z * 24, vx: n.hand.way * (2 + 4 * Math.random()) + 2 * o(), vy: 1.5 + 4 * Math.random(), age: 0, size: 0.035 + 0.1 * Math.random() ** 3, q: Math.random() };
+			}
+		}
+		for (const d of shaken) {
+			if (!d || d.age > 1.5) continue;
+			d.age += n.dt;
+			d.vy -= 8.5 * n.dt;
+			d.x += d.vx * n.dt;
+			d.y += d.vy * n.dt;
+			const a = n.presence * smooth(0, 0.08, d.age) * (1 - smooth(1.1, 1.5, d.age));
+			b.put(d.x, d.y, d.z + 0.02, d.size * 1.3, d.size * 1.1, d.q * 6, INK, a, 0, d.q);
+			b.put(d.x, d.y, d.z, d.size, d.size * 0.8, d.q * 6, d.q > 0.8 ? PALE : FOAM, a, 0, d.q);
+		}
+		if (t < 0.25 || t > 0.66) return b.count;
 		for (const [q, w, e, k] of drops) {
 			const u = (t - 0.27 - 0.07 * q) / (0.15 + 0.13 * w);
 			if (u <= 0 || u >= 1) continue;

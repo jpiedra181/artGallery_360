@@ -19,10 +19,13 @@ interface Running {
 	stop: () => void;
 }
 
-/** One setting of the volume has to do for every room: measured, they come within some 8 dB of each other. */
-const LEVEL: Record<SoundId, number> = { hub: 2.4, ocean: 0.8, shower: 0.9, garden: 3, harbour: 2.6 };
+/** One setting of the volume has to do for every room: measured (integrated loudness, as heard), the rooms come within 1.5 dB of -24 LUFS and the gallery stands a little quieter. */
+const LEVEL: Record<SoundId, number> = { hub: 2.6, ocean: 0.75, shower: 1.05, garden: 8, harbour: 3 };
 
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
+
+/** On a phone a burst a few milliseconds long is placed well enough without a head-shaped filter, which costs a convolution each. */
+const lightPanning = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 export class Soundscape {
 	private ctx: AudioContext | null = null;
@@ -37,6 +40,9 @@ export class Soundscape {
 
 	/** Must be called from a user gesture the first time (autoplay policy). */
 	async enable() {
+		// an iPhone with its ring switch on silent mutes the page unless it says it plays like a player
+		const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+		if (session) session.type = "playback";
 		if (!this.ctx) this.create();
 		const ctx = this.ctx!;
 		if (ctx.state !== "running") await ctx.resume();
@@ -66,6 +72,11 @@ export class Soundscape {
 		if (!this.ctx || !this.enabled) return;
 		if (visible) this.ctx.resume();
 		else this.ctx.suspend();
+	}
+
+	/** Nothing is scheduled while the context stands still: it would all sound at once when it runs again. */
+	private get live() {
+		return !!this.ctx && this.enabled && this.ctx.state === "running";
 	}
 
 	setScene(id: SoundId) {
@@ -100,7 +111,7 @@ export class Soundscape {
 
 	/** A single drop falling into water at a world position (hub). */
 	drip(x: number, y: number, z: number, loudness = 1) {
-		if (!this.ctx || !this.enabled || this.running?.id !== "hub") return;
+		if (!this.live || this.running?.id !== "hub") return;
 		this.plip(this.running.bus, x, y, z, rand(1100, 1700), 0.3 * loudness, 0.65);
 	}
 
@@ -214,7 +225,7 @@ export class Soundscape {
 	/** A step of wooden geta on the boards of the bridge (bearing and height in radians, metres away). */
 	step(yaw: number, pitch: number, dist: number) {
 		const ctx = this.ctx;
-		if (!ctx || !this.enabled || this.running?.id !== "shower") return;
+		if (!ctx || !this.live || this.running?.id !== "shower") return;
 		const d = Math.min(dist, 14);
 		const pos: [number, number, number] = [Math.sin(yaw) * Math.cos(pitch) * d, Math.sin(pitch) * d, Math.cos(yaw) * Math.cos(pitch) * d];
 		const t = ctx.currentTime + 0.01;
@@ -227,7 +238,7 @@ export class Soundscape {
 	/** A shovel biting into coal, and the coal landing (bearing in degrees). */
 	shovel(yawDeg: number) {
 		const ctx = this.ctx;
-		if (!ctx || !this.enabled || this.running?.id !== "harbour") return;
+		if (!ctx || !this.live || this.running?.id !== "harbour") return;
 		const t = ctx.currentTime + 0.02;
 		const pos = this.polar(yawDeg, rand(8, 11), 0.5);
 		for (let i = 0; i < 9; i++) this.tick(this.running.bus, t + i * 0.018 + rand(0, 0.012), pos, rand(1400, 3400), rand(0.8, 1.6), 0.09, rand(0.02, 0.05));
@@ -326,6 +337,12 @@ export class Soundscape {
 		};
 		this.reverb.buffer = this.impulse(3.2, 2.6);
 		ctx.listener.positionX?.setValueAtTime(0, 0);
+		// a phone call or another app takes the sound away; the next touch brings it back
+		const wake = () => {
+			if (this.enabled && !document.hidden && ctx.state !== "running") ctx.resume().catch(() => {});
+		};
+		window.addEventListener("pointerdown", wake, { capture: true, passive: true });
+		window.addEventListener("keydown", wake, { capture: true });
 	}
 
 	private noise(kind: "white" | "pink" | "brown") {
@@ -388,9 +405,9 @@ export class Soundscape {
 		return s;
 	}
 
-	private panner(x: number, y: number, z: number, ref = 2) {
+	private panner(x: number, y: number, z: number, ref = 2, brief = false) {
 		const p = this.ctx!.createPanner();
-		p.panningModel = "HRTF";
+		p.panningModel = brief && lightPanning ? "equalpower" : "HRTF";
 		p.distanceModel = "inverse";
 		p.refDistance = ref;
 		p.rolloffFactor = 0.8;
@@ -432,7 +449,7 @@ export class Soundscape {
 	private bed(
 		bus: AudioNode,
 		kind: "white" | "pink" | "brown",
-		filters: BiquadFilterNode[],
+		filters: AudioNode[],
 		level: number,
 		pos?: [number, number, number],
 	) {
@@ -489,7 +506,7 @@ export class Soundscape {
 		env.gain.setValueAtTime(0, when);
 		env.gain.linearRampToValueAtTime(level, when + 0.001);
 		env.gain.exponentialRampToValueAtTime(0.0001, when + length);
-		n.connect(bp).connect(env).connect(this.panner(...pos, 1.5)).connect(bus);
+		n.connect(bp).connect(env).connect(this.panner(...pos, 1.5, true)).connect(bus);
 		n.start(when, rand(0, 5));
 		n.stop(when + length + 0.02);
 	}
@@ -550,7 +567,7 @@ export class Soundscape {
 		const timers: number[] = [];
 		const every = (fn: () => void, min: number, max: number) => {
 			const loop = () => {
-				fn();
+				if (this.live) fn();
 				timers.push(window.setTimeout(loop, rand(min, max) * 1000));
 			};
 			timers.push(window.setTimeout(loop, rand(min, max) * 1000));
@@ -580,13 +597,18 @@ export class Soundscape {
 
 		if (id === "shower") {
 			sends.gain.value = 0.12;
-			sources.push(this.bed(bus, "white", [this.filter("highpass", 900), this.filter("peaking", 4800, 0.6)], 0.11).src);
-			sources.push(this.bed(bus, "pink", [this.filter("lowpass", 900)], 0.12).src);
+			// the sheet of rain: no higher than rain on wood and water goes, and it comes in gusts
+			const sheet = this.filter("lowpass", 7000, 0.5);
+			const s = this.bed(bus, "white", [this.filter("highpass", 900), sheet], 0.1);
+			sources.push(s.src, this.lfo(s.gain.gain, 0.1, 0.035, 0.043), this.lfo(sheet.frequency, 6400, 1600, 0.067));
+			const body = this.bed(bus, "pink", [this.filter("lowpass", 900)], 0.14);
+			sources.push(body.src, this.lfo(body.gain.gain, 0.14, 0.04, 0.031));
 			const river = this.filter("lowpass", 380, 0.6);
 			const r = this.bed(bus, "brown", [river], 0.16, [0, -6, 4]);
 			sources.push(r.src, this.lfo(r.gain.gain, 0.16, 0.04, 0.11));
 			// patter of drops on the bridge, hats and the river
 			const patter = window.setInterval(() => {
+				if (!this.live) return;
 				const now = ctx.currentTime;
 				for (let i = 0; i < 9; i++) {
 					const near = Math.random() < 0.55;
@@ -602,15 +624,17 @@ export class Soundscape {
 			sends.gain.value = 0.1;
 			for (const yaw of [-70, 80]) {
 				const bp = this.filter("bandpass", 2600, 0.45);
-				const leaves = this.bed(bus, "pink", [bp], 0.06, this.polar(yaw, 6, 3));
-				sources.push(leaves.src, this.lfo(leaves.gain.gain, 0.05, 0.04, rand(0.05, 0.09)), this.lfo(bp.frequency, 2600, 900, 0.031));
+				const leaves = this.bed(bus, "pink", [bp], 0.09, this.polar(yaw, 6, 3));
+				sources.push(leaves.src, this.lfo(leaves.gain.gain, 0.08, 0.05, rand(0.05, 0.09)), this.lfo(bp.frequency, 2600, 900, 0.031));
 			}
+			// water against the bank, never twice alike: two slow swells that drift in and out of step
 			const lap = this.filter("bandpass", 420, 0.9);
-			const l = this.bed(bus, "brown", [lap], 0.08, [0, -1.4, 1.5]);
-			sources.push(l.src, this.lfo(l.gain.gain, 0.07, 0.05, 0.6));
+			const swing = this.gain(0.5);
+			const l = this.bed(bus, "brown", [lap, swing], 0.06, [0, -1.4, 1.5]);
+			sources.push(l.src, this.lfo(l.gain.gain, 0.05, 0.025, 0.23), this.lfo(swing.gain, 0.5, 0.3, 0.37), this.lfo(lap.frequency, 420, 90, 0.13));
 			every(() => {
 				const [x, , z] = this.polar(rand(-80, 80), rand(2, 7));
-				this.plip(bus, x, -1.4, z, rand(420, 700), 0.18, 0.15);
+				this.plip(bus, x, -1.4, z, rand(420, 700), 0.07, 0.15);
 			}, 3.5, 9);
 		}
 
@@ -632,6 +656,7 @@ export class Soundscape {
 			const w = this.bed(bus, "pink", [wind], 0.03);
 			sources.push(w.src, this.lfo(w.gain.gain, 0.03, 0.02, 0.029));
 			const crackle = window.setInterval(() => {
+				if (!this.live) return;
 				const now = ctx.currentTime;
 				const n = Math.random() < 0.3 ? 4 : 2;
 				for (let i = 0; i < n; i++) {

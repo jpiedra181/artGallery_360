@@ -59,7 +59,8 @@ const pages = [
 				{pages.map((p) => <li><a href={p.href}>{p.label}</a></li>)}
 			</ul>
 			<p class="doc-foot-by">
-				Concept, 3D, sound and code by <a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>
+				Concept, 3D, sound and code by <a href={site.authorUrl} rel="noopener">{site.author}</a>.
+				<a href={`${base}about/#author`}>Make one with me</a>
 			</p>
 		</footer>
 	</div>

@@ -14,7 +14,7 @@
  * scripts/draw-sheet.mjs draws it once for the stills.
  */
 
-import { Press, clamp01, curve, inside, lerp, smooth, type Drawing, type P, type Place } from "./press.ts";
+import { Press, clamp01, curve, inside, lerp, smooth, type Drawing, type P, type Place, anchorsOf, pack } from "./press.ts";
 
 // ─── Where it hangs ───────────────────────────────────────────────────────────
 
@@ -778,11 +778,12 @@ function motion(t: number) {
 	// the two swells answer the wave: up as it comes down
 	const lift = 0.08 * cos1 + 0.06 * sin;
 
+	const lateNow = smooth(0, 0.06, t) * smooth(0.5, 0.3, t), bendBefore = track(2, Math.max(0, t - 0.05));
 	const great = (x: number, y: number, o: Float32Array) => {
 		// the lip swings over a pivot inside the crest, its fingers after its wrist
 		const w = smooth(440, 1080, x) * smooth(720, 380, y);
-		const late = smooth(820, 1080, x) * smooth(0, 0.06, t) * smooth(0.5, 0.3, t);
-		const a = (bend - 0.22 * late * (bend - track(2, Math.max(0, t - 0.05)))) * w, k = lerp(1, reach, w);
+		const late = smooth(820, 1080, x) * lateNow;
+		const a = (bend - 0.22 * late * (bend - bendBefore)) * w, k = lerp(1, reach, w);
 		const dx = (x - 600) * k, dy = (y - 430) * k;
 		const ca = Math.cos(a), sa = Math.sin(a);
 		let qx = 600 + dx * ca - dy * sa, qy = 430 + dx * sa + dy * ca;
@@ -795,12 +796,13 @@ function motion(t: number) {
 		o[0] = qx;
 		o[1] = qy;
 	};
+	const thrown = 0.62 * beat(t, 0.37, 0.055) - 0.34 * beat(t, 0.22, 0.06) + 0.16 * beat(t, 0.56, 0.06);
+	const pushed = 64 * beat(t, 0.41, 0.07) - 30 * beat(t, 0.23, 0.06);
 	const near = (x: number, y: number, o: Float32Array) => {
 		const env = smooth(-560, -100, x) * smooth(1010, 780, x);
 		const v = Math.max(0, (900 - y) / 220);
 		// drawn down under the lip as it comes, then thrown up by the break, and over
-		const thrown = 0.62 * beat(t, 0.37, 0.055) - 0.34 * beat(t, 0.22, 0.06) + 0.16 * beat(t, 0.56, 0.06);
-		o[0] = x + env * v * (26 * sin + 18 * cos1 + 64 * beat(t, 0.41, 0.07) - 30 * beat(t, 0.23, 0.06));
+		o[0] = x + env * v * (26 * sin + 18 * cos1 + pushed);
 		o[1] = y - env * v * 220 * (lift * 1.1 - 0.12 * sin + thrown) - env * 9 * (Math.sin(TAU * t * 2 + x * 0.006) - Math.sin(x * 0.006));
 	};
 	const swell = (x: number, y: number, o: Float32Array) => {
@@ -848,8 +850,14 @@ export function carry(id: string, yaw: number, pitch: number, t: number): [numbe
 	return [(x - PLACE.x0) / PLACE.scale, Math.atan(Math.sinh((PLACE.horizon - y) / PLACE.scale / deg)) * deg];
 }
 
-/** Where the wave is at time `state[0]` (0..1): positions of every vertex, in print pixels. */
-export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
+/** How much foam the hand was over, the last time the drawing was posed (0..1). */
+export let touched = 0;
+
+/**
+ * Where the wave is at time `state[0]` (0..1): where every anchor hangs, in print pixels.
+ * `state[1..3]` is a hand passing over it: where it is (print pixels), and how fast it goes to the right (-1..1).
+ */
+export function hang(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
 	const t = state[0] - Math.floor(state[0]);
 	const claws = track(5, t), broken = track(6, t);
 	const { move, ride } = motion(t);
@@ -859,14 +867,23 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 
 	const { x: X, y: Y, group, grow, seed } = d.anchors;
 	const n = X.length;
-	const tx = new Float32Array(n), ty = new Float32Array(n), c = new Float32Array(n), s = new Float32Array(n);
+	// all that an anchor does: where it is, and how what hangs from it is turned and sized
+	const { tx, ty, c, s } = anchorsOf(d);
+	s.fill(0);
+	c.fill(0);
 	const a = new Float32Array(2), b = new Float32Array(2);
+	const handX = state[1] ?? 0, handY = state[2] ?? 0, hand = state[3] ?? 0;
+	let under = 0;
 
 	for (let i = 0; i < n; i++) {
 		const x = X[i], y = Y[i], g = group[i], q = seed[i];
 		c[i] = 1;
 		if (g <= SWELL) {
-			if (grow[i] === DRAWN) {
+			if (hand && grow[i] === DRAWN) {
+				const f = Math.exp(-((x - handX) ** 2 + (y - handY) ** 2) / 16900);
+				const up = (30 + 60 * q) * (Math.sin(TAU * (t * 2 + q)) - Math.sin(TAU * q));
+				move(g, x - 0.22 * up + f * hand * (30 + 60 * q), y - up - f * Math.abs(hand) * 46 * q, a);
+			} else if (grow[i] === DRAWN) {
 				// the snow on the face is drawn up it, and slides back
 				const up = (30 + 60 * q) * (Math.sin(TAU * (t * 2 + q)) - Math.sin(TAU * q));
 				move(g, x - 0.22 * up, y - up, a);
@@ -880,7 +897,19 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 				let turn = Math.atan2(b[1] - a[1], b[0] - a[0]);
 				turn += loosened * (0.13 + 0.1 * q) * Math.sin(TAU * (t * 7 + q * 5) + x * 0.012);
 				if (g === GREAT) turn -= loosened * Math.max(-0.5, Math.min(0.5, 0.055 * swing * (0.4 + q) * smooth(440, 900, x)));
-				const size = g === GREAT ? claws : 1 + loosened * 0.1 * Math.sin(TAU * (t * 3 + q));
+				let size = g === GREAT ? claws : 1 + loosened * 0.1 * Math.sin(TAU * (t * 3 + q));
+				if (hand) {
+					// combed by the hand, each finger a little after its neighbour
+					const near2 = ((tx[i] - handX) ** 2 + (ty[i] - handY) ** 2) / 16900;
+					if (near2 < 6) {
+						const f = Math.exp(-near2);
+						under += f;
+						turn += f * hand * (0.75 + 0.5 * q);
+						size *= 1 + 0.3 * f * Math.abs(hand);
+						tx[i] += f * hand * (10 + 14 * q);
+						ty[i] -= f * Math.abs(hand) * 8 * q;
+					}
+				}
 				c[i] = Math.cos(turn) * size;
 				s[i] = Math.sin(turn) * size;
 			}
@@ -933,12 +962,7 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 		}
 	}
 
-	const { vertexAnchor, offset } = d;
-	for (let v = 0, k = 0; v < vertexAnchor.length; v++, k += 2) {
-		const i = vertexAnchor[v];
-		const ox = offset[k], oy = offset[k + 1];
-		out[k] = tx[i] + c[i] * ox - s[i] * oy;
-		out[k + 1] = ty[i] + s[i] * ox + c[i] * oy;
-	}
-	return out;
+	touched = Math.min(1, under / 12);
+
+	return pack(d, out);
 }

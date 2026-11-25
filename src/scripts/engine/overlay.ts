@@ -2,7 +2,8 @@
  * A drawing that hangs in a scene and can move (see worlds/).
  *
  * Its triangles are printed into a texture of their own, in the drawing's
- * Mercator angles, only when they have moved; the panorama shader then lays
+ * Mercator angles, only when they have moved (each hangs from an anchor, and
+ * only the anchors are sent); the panorama shader then lays
  * that texture over the render. Parallax, rocking, transitions and grain
  * apply to it as to everything else.
  */
@@ -11,15 +12,20 @@ import type { Drawing, Sheet } from "../worlds/press";
 import { DEG } from "./math";
 
 const vertexSource = (colours: number) => /* glsl */ `#version 300 es
-in vec2 aPos;
+in vec2 aOffset;
+in uint aAnchor;
 in float aColour;
+uniform highp sampler2D uAnchors; // x, y, and cosine and sine times size
 uniform vec4 uSheet; // left, top, 1 / width, 1 / height
 uniform vec3 uInks[${colours}];
 flat out vec3 vColour;
 void main() {
   vColour = uInks[int(aColour + 0.5)];
+  int i = int(aAnchor);
+  vec4 a = texelFetch(uAnchors, ivec2(i & 255, i >> 8), 0);
+  vec2 at = a.xy + vec2(a.z * aOffset.x - a.w * aOffset.y, a.w * aOffset.x + a.z * aOffset.y);
   // the top of the sheet is the first row of the texture, as in an image
-  gl_Position = vec4((aPos - uSheet.xy) * uSheet.zw * 2.0 - 1.0, 0.0, 1.0);
+  gl_Position = vec4((at - uSheet.xy) * uSheet.zw * 2.0 - 1.0, 0.0, 1.0);
 }
 `;
 
@@ -46,11 +52,12 @@ export class Overlay {
 	private width: number;
 	private height: number;
 	private drawing: Drawing;
-	private positions: Float32Array;
+	private hung: Float32Array;
+	private rows: number;
 	private program!: WebGLProgram;
 	private vao!: WebGLVertexArrayObject;
 	private buffers: WebGLBuffer[] = [];
-	private positionBuffer!: WebGLBuffer;
+	private anchorTexture!: WebGLTexture;
 	private target!: WebGLFramebuffer;
 	private resolved!: WebGLFramebuffer;
 	private samplesBuffer!: WebGLRenderbuffer;
@@ -70,7 +77,8 @@ export class Overlay {
 		this.width = width;
 		this.height = Math.round((width * (PLACE.bottom - PLACE.top)) / (PLACE.right - PLACE.left));
 		this.drawing = sheet.draw();
-		this.positions = new Float32Array(this.drawing.offset.length);
+		this.rows = Math.ceil(this.drawing.anchors.x.length / 256);
+		this.hung = new Float32Array(this.rows * 256 * 4);
 	}
 
 	/** Prepared over a few frames, so the first scene to use it does not stutter. */
@@ -103,18 +111,20 @@ export class Overlay {
 
 		this.vao = gl.createVertexArray()!;
 		gl.bindVertexArray(this.vao);
-		const buffer = (target: number, data: ArrayBufferView | number, usage: number) => {
+		const buffer = (target: number, data: ArrayBufferView, usage: number) => {
 			const b = gl.createBuffer()!;
 			gl.bindBuffer(target, b);
-			if (typeof data === "number") gl.bufferData(target, data, usage);
-			else gl.bufferData(target, data, usage);
+			gl.bufferData(target, data, usage);
 			this.buffers.push(b);
-			return b;
 		};
-		const aPos = gl.getAttribLocation(program, "aPos"), aColour = gl.getAttribLocation(program, "aColour");
-		this.positionBuffer = buffer(gl.ARRAY_BUFFER, this.positions.byteLength, gl.DYNAMIC_DRAW);
-		gl.enableVertexAttribArray(aPos);
-		gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+		const at = (name: string) => gl.getAttribLocation(program, name);
+		const aOffset = at("aOffset"), aAnchor = at("aAnchor"), aColour = at("aColour");
+		buffer(gl.ARRAY_BUFFER, drawing.offset, gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(aOffset);
+		gl.vertexAttribPointer(aOffset, 2, gl.FLOAT, false, 0, 0);
+		buffer(gl.ARRAY_BUFFER, drawing.vertexAnchor, gl.STATIC_DRAW);
+		gl.enableVertexAttribArray(aAnchor);
+		gl.vertexAttribIPointer(aAnchor, 1, gl.UNSIGNED_INT, 0, 0);
 		buffer(gl.ARRAY_BUFFER, drawing.colour, gl.STATIC_DRAW);
 		gl.enableVertexAttribArray(aColour);
 		gl.vertexAttribPointer(aColour, 1, gl.UNSIGNED_BYTE, false, 0, 0);
@@ -127,6 +137,14 @@ export class Overlay {
 			gl.getUniformLocation(program, "uInks"),
 			COLOURS.flatMap((hex) => [1, 3, 5].map((i) => linear(parseInt(hex.slice(i, i + 2), 16) / 255))),
 		);
+
+		this.anchorTexture = gl.createTexture()!;
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, this.anchorTexture);
+		gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 256, this.rows);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+		gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+		gl.uniform1i(gl.getUniformLocation(program, "uAnchors"), 0);
 
 		const { width, height } = this;
 		const levels = Math.floor(Math.log2(Math.max(width, height))) + 1;
@@ -161,9 +179,12 @@ export class Overlay {
 		for (let i = 0; same && i < state.length; i++) same = printed[i] === state[i];
 		if (same) return;
 		this.printed = Array.from(state);
-		this.sheet.pose(this.drawing, state, this.positions);
-		gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-		gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.positions);
+		this.sheet.hang(this.drawing, state, this.hung);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, this.anchorTexture);
+		gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+		gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+		gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, this.rows, gl.RGBA, gl.FLOAT, this.hung);
 
 		gl.bindFramebuffer(gl.FRAMEBUFFER, this.target);
 		gl.viewport(0, 0, this.width, this.height);
@@ -187,6 +208,7 @@ export class Overlay {
 		const { gl } = this;
 		if (gl.isContextLost()) return;
 		gl.deleteTexture(this.texture);
+		gl.deleteTexture(this.anchorTexture);
 		gl.deleteRenderbuffer(this.samplesBuffer);
 		gl.deleteFramebuffer(this.target);
 		gl.deleteFramebuffer(this.resolved);

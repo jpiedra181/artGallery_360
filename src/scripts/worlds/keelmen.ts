@@ -9,7 +9,7 @@
  * has been alive.
  */
 
-import { Press, curve, smooth, type Drawing, type P, type Place } from "./press.ts";
+import { Press, curve, smooth, type Drawing, type P, type Place, anchorsOf, pack } from "./press.ts";
 
 /** Sheet pixels: 40 to the degree, from the near ship on the left to the colliers on the right. */
 export const PLACE: Place = { scale: 40, x0: -760, horizon: 640, left: -2140, right: 1460, top: 280, bottom: 900, distance: 24 };
@@ -154,11 +154,14 @@ function heave(t: number) {
 
 const BEAT = 2.6; // seconds from one heave to the next
 
-export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
+export function hang(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
 	const now = state[0] ?? 0, life = state[1] ?? 0;
 	const { x: X, y: Y, group, grow, seed } = d.anchors;
 	const n = X.length;
-	const tx = new Float32Array(n), ty = new Float32Array(n), c = new Float32Array(n), s = new Float32Array(n);
+	// all that an anchor does: where it is, and how what hangs from it is turned and sized
+	const { tx, ty, c, s } = anchorsOf(d);
+	s.fill(0);
+	c.fill(0);
 	for (let i = 0; i < n; i++) {
 		const g = group[i];
 		if (g >= KEEL_GROUP) {
@@ -219,12 +222,5 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 			c[i] = alive ? k * Math.min(1, 6 * (1 - u)) : 0;
 		}
 	}
-	const { vertexAnchor, offset } = d;
-	for (let v = 0, k = 0; v < vertexAnchor.length; v++, k += 2) {
-		const i = vertexAnchor[v];
-		const ox = offset[k], oy = offset[k + 1];
-		out[k] = tx[i] + c[i] * ox - s[i] * oy;
-		out[k + 1] = ty[i] + s[i] * ox + c[i] * oy;
-	}
-	return out;
+	return pack(d, out);
 }

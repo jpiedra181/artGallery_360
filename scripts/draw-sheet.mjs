@@ -18,7 +18,8 @@ import sharp from "sharp";
 const SHEETS = { wave: "great-wave", rain: "sudden-shower" };
 const [scene, ...times] = process.argv.slice(2);
 if (!SHEETS[scene]) throw new Error(`usage: draw-sheet.mjs ${Object.keys(SHEETS).join("|")} [t ...]`);
-const { COLOURS, PLACE, draw, pose } = await import(`../src/scripts/worlds/${SHEETS[scene]}.ts`);
+const { vertices } = await import("../src/scripts/worlds/press.ts");
+const { COLOURS, PLACE, draw, hang } = await import(`../src/scripts/worlds/${SHEETS[scene]}.ts`);
 
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "blender", "renders", scene);
 const SCALE = 2; // pixels per sheet pixel in the finished picture
@@ -26,10 +27,12 @@ const FINE = 2; // and how much finer it is drawn, without antialiasing, to keep
 
 const drawing = draw();
 const points = new Float32Array(drawing.offset.length);
+const hung = new Float32Array(drawing.anchors.x.length * 4);
 const w = PLACE.right - PLACE.left, h = PLACE.bottom - PLACE.top;
 
 for (const t of times.length ? times.map(Number) : [0]) {
-	pose(drawing, new Array(32).fill(t), points);
+	// (no hand in the foam: only the first number is the time)
+	vertices(drawing, hang(drawing, scene === "wave" ? [t] : new Array(32).fill(t), hung), points);
 	const { index, colour } = drawing;
 	const paths = [];
 	let d = "", ink = -1;

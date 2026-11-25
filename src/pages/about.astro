@@ -139,8 +139,8 @@ const contact = "javierpiedraiglesias@gmail.com";
 					of interest, and the view turns to show whatever has focus. Escape closes what is open.
 				</li>
 				<li>
-					<strong>Without dragging.</strong> A button in the corner of the view opens look and zoom buttons that move one
-					step per click or tap. “Look for” on each room's label lists its points of interest, numbered as they are in the view.
+					<strong>Without dragging.</strong> A button in the corner of the view (on a phone, in the menu) opens look and zoom
+					buttons that move one step per click or tap. “Look closer” on each room's label lists its points of interest, numbered as they are in the view.
 				</li>
 				<li>
 					<strong>With less motion.</strong> Animation can be paused at any time from the top of the screen, and starts paused
@@ -174,7 +174,7 @@ const contact = "javierpiedraiglesias@gmail.com";
 				<div>
 					<dt>Concept, 3D, sound and code</dt>
 					<dd>
-						<a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>
+						<a href={site.authorUrl} rel="noopener">{site.author}</a>
 					</dd>
 				</div>
 				<div>
@@ -228,12 +228,22 @@ const contact = "javierpiedraiglesias@gmail.com";
 		</div>
 		<div class="chapter-body">
 			<p>
-				{site.name} is a personal project by <a href="https://jpiedra.com/en/" rel="noopener">{site.author}</a>, a front-end
-				developer who works on 3D for the web and on interfaces that everyone can use. This is the first volume. The same
-				approach suits museums, galleries, foundations and anyone with a collection worth standing in.
+				{site.name} is a personal project by <a href={site.authorUrl} rel="noopener">{site.author}</a>, a front-end
+				developer who works on 3D for the web and on interfaces that everyone can use: the idea, the worlds, the sound and
+				the code are by one person. This is the first volume.
+			</p>
+			<h3>Make one with me</h3>
+			<p>
+				A painting, a building, an archive, a wine, a new product: whatever has something to be stood inside of can become a
+				place like these, in any browser and without an app. I work with museums, foundations, studios and brands, from
+				the first drawing to the launch, or on the part of it that you are missing.
 			</p>
 			<p>
-				To talk about one: <a href={`mailto:${contact}`}>{contact}</a>.
+				<a class="btn btn-primary" href={`mailto:${contact}?subject=${encodeURIComponent("Inside the Frame")}`}>Write to me</a>
+				<a class="btn" href={site.authorUrl} rel="noopener">See my other work</a>
+			</p>
+			<p>
+				Or copy the address: <a href={`mailto:${contact}`}>{contact}</a>.
 			</p>
 		</div>
 	</section>

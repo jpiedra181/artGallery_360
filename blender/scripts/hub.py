@@ -11,6 +11,8 @@ mask pass (R channel), and stains it with the pigments of the rooms visited.
 Mask pass
   R  water surface
 (Painting hover/hit-testing is analytic in the viewer, from hub-geometry.json.)
+
+hub_tall.py hangs the same room for tall screens.
 """
 
 import math
@@ -29,14 +31,20 @@ FLOOR_Z = -0.07
 DAIS_TOP = 0.06
 EYE = DAIS_TOP + 1.6
 HANG = 2.0         # height of the painting centres
+NAMES = 0.62       # top of the line the names are lettered on
+GEOMETRY = "hub-geometry.json"
 
-# id, texture, yaw (deg), image height (m), kind
+# id, texture, yaw (deg), image height (m), kind, height of the centre (m), top of its name (m)
 PAINTINGS = [
-    ("wave", "wave.jpg", -60, 1.7, "print"),
-    ("rain", "rain.jpg", -20, 2.0, "print"),
-    ("stillness", "stillness.jpg", 20, 2.0, "oil"),
-    ("moonlight", "moonlight.jpg", 60, 1.85, "oil"),
+    ("wave", "wave.jpg", -60, 1.7, "print", HANG, NAMES),
+    ("rain", "rain.jpg", -20, 2.0, "print", HANG, NAMES),
+    ("stillness", "stillness.jpg", 20, 2.0, "oil", HANG, NAMES),
+    ("moonlight", "moonlight.jpg", 60, 1.85, "oil", HANG, NAMES),
 ]
+SPOT_ASIDE = 0.0   # where a wall has two paintings, their spots stand this far to either side (m)
+SPOT_POWER = 640
+SPOT_BLEND = 0.55
+SPOT_REACH = 0.0   # 1: a spot further from its painting burns brighter
 
 # the walls: the four with paintings, and those closing the hall behind
 WALLS = [-60, -20, 20, 60, 100, 140, 180, 220, 260]
@@ -48,6 +56,8 @@ LETTERING = [
     (260, [("Inside", 0.5), ("the Frame", 0.5), ("", 0.16), ("Volume I: Water", 0.21)]),
     (100, [("Four painters", 0.34), ("stopped the water.", 0.34), ("", 0.16), ("Step inside,", 0.34), ("and it moves again.", 0.34)]),
 ]
+
+LETTERING_AT = HANG  # height of the middle of the lettering
 
 WALL_TINT = (0.13, 0.17, 0.19)
 REFLECT_MIN = 0.42  # mirror strength looking straight down (physical water ≈ 0.02)
@@ -274,23 +284,23 @@ def build(preview=True):
     lens_mat = C.emission_material("fixture_lens", LIGHT_COLOR, 6.0)
 
     geometry = []
-    for pid, texture, yaw, h, kind in PAINTINGS:
+    for pid, texture, yaw, h, kind, hang, names in PAINTINGS:
         img = bpy.data.images.load(os.path.join(C.SOURCES_DIR, "tex", texture), check_existing=True)
         aspect = img.size[0] / img.size[1]
         w = h * aspect
 
         canvas = quad(f"canvas_{pid}", w, h, art)
-        place_on_wall(canvas, yaw, 0.075 if kind == "oil" else 0.05, HANG)
+        place_on_wall(canvas, yaw, 0.075 if kind == "oil" else 0.05, hang)
         C.assign(canvas, painting_material(pid, texture, kind))
 
         if kind == "print":
             margin = 0.26
             mw, mh = w + margin * 2, h + margin * 2
             board = quad(f"mat_{pid}", mw, mh, art, uv=False)
-            place_on_wall(board, yaw, 0.045, HANG)
+            place_on_wall(board, yaw, 0.045, hang)
             C.assign(board, mat_board)
             fr = frame_mesh(f"frame_{pid}", mw + 0.09, mh + 0.09, mw, mh, 0.055, art)
-            place_on_wall(fr, yaw, 0.0, HANG)
+            place_on_wall(fr, yaw, 0.0, hang)
             # frame front sits at the wall minus its depth
             fr.location -= yaw_dir(yaw) * 0.055
             C.assign(fr, frame_mat)
@@ -298,7 +308,7 @@ def build(preview=True):
         else:
             fw = 0.11
             fr = frame_mesh(f"frame_{pid}", w + fw * 2, h + fw * 2, w, h, 0.09, art)
-            place_on_wall(fr, yaw, 0.0, HANG)
+            place_on_wall(fr, yaw, 0.0, hang)
             fr.location -= yaw_dir(yaw) * 0.09
             C.assign(fr, gilt_mat)
             outer_h = h + fw * 2
@@ -308,29 +318,32 @@ def build(preview=True):
         geometry.append({
             "id": pid,
             "yaw": yaw,
-            "pitch": round(deg(math.atan2(HANG - EYE, dist)), 3),
+            "pitch": round(deg(math.atan2(hang - EYE, dist)), 3),
             "halfWidth": round(deg(math.atan2(w / 2, dist)), 3),
-            "top": round(deg(math.atan2(HANG + h / 2 - EYE, dist)), 3),
-            "bottom": round(deg(math.atan2(HANG - h / 2 - EYE, dist)), 3),
-            "frameBottom": round(deg(math.atan2(HANG - outer_h / 2 - EYE, ROOM)), 3),
+            "top": round(deg(math.atan2(hang + h / 2 - EYE, dist)), 3),
+            "bottom": round(deg(math.atan2(hang - h / 2 - EYE, dist)), 3),
+            "frameBottom": round(deg(math.atan2(hang - outer_h / 2 - EYE, ROOM)), 3),
             # metric description of the canvas plane for exact hit-testing
             "distance": round(dist, 4),
             "width": round(w, 4),
             "height": round(h, 4),
-            "centerY": round(HANG - EYE, 4),
+            "centerY": round(hang - EYE, 4),
+            # top of the line its name is lettered on, over the water
+            "nameTop": round(names, 3),
         })
 
         # Ceiling spot aimed at the canvas centre
         d = yaw_dir(yaw)
         spot_pos = d * (ROOM - 2.1) + Vector((0, 0, CEILING - 0.35))
-        target = d * (ROOM - 0.08) + Vector((0, 0, HANG))
+        spot_pos += Vector((d.y, -d.x, 0)) * SPOT_ASIDE * (1 if hang > HANG else -1)
+        target = d * (ROOM - 0.08) + Vector((0, 0, hang))
         ld = bpy.data.lights.new(f"spot_{pid}", "SPOT")
-        ld.energy = 640
         ld.color = LIGHT_COLOR
         dist = (target - spot_pos).length
+        ld.energy = SPOT_POWER * (1 + SPOT_REACH * ((dist / 3.575) ** 2 - 1))
         half = max(w, outer_h) / 2 + 0.6
         ld.spot_size = 2 * math.atan(half / dist) + math.radians(6)
-        ld.spot_blend = 0.55
+        ld.spot_blend = SPOT_BLEND
         ld.shadow_soft_size = 0.06
         lo = bpy.data.objects.new(f"spot_{pid}", ld)
         lo.location = spot_pos
@@ -367,7 +380,7 @@ def build(preview=True):
     nt.links.new(em.outputs[0], out.inputs["Surface"])
     font = bpy.data.fonts.load(os.path.join(C.BLENDER_DIR, "fonts", "ibarra-real-nova-500.ttf"), check_existing=True)
     for yaw, lines in LETTERING:
-        z = HANG + sum(h for _, h in lines) * 1.18 / 2
+        z = LETTERING_AT + sum(h for _, h in lines) * 1.18 / 2
         a = math.radians(yaw)
         objs = []
         for text, h in lines:
@@ -432,7 +445,7 @@ def build(preview=True):
 
     # Hand the exact painting geometry to the web viewer (hotspots, zoom-in).
     import json
-    out = os.path.join(C.ROOT, "src", "data", "hub-geometry.json")
+    out = os.path.join(C.ROOT, "src", "data", GEOMETRY)
     with open(out, "w", encoding="utf-8") as f:
         json.dump({"eye": EYE, "water": EYE - WATER_Z, "room": ROOM, "paintings": geometry}, f, indent=2)
 

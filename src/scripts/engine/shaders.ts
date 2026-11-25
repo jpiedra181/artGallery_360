@@ -96,6 +96,7 @@ uniform vec2 uCenter;      // transition origin in NDC
 uniform vec4 uInk;         // pigment that blooms at the front: rgb (linear), a strength
 uniform float uClose;      // 0 = the next scene spreads from the origin, 1 = it closes in on it
 uniform vec4 uDrips[8];    // x, z on the water plane (m), start time (s), amplitude
+uniform vec4 uShelter;     // where the pointer keeps the rain off: yaw, height over the horizon (tan), how much
 uniform vec4 uRock[7];     // what rides the water: yaw, pitch of its waterline, half width (rad), amplitude
 
 const float PI = 3.14159265359;
@@ -423,12 +424,30 @@ float rainLayer(vec3 d, float t, float columns, float tilt, float speed, float d
 }
 
 float rainStreaks(vec3 d, Fx fx) {
-  if (fx.rain.x <= 0.0) return 0.0;
   float t = uTime * fx.rain.z;
   float a = fx.rain.y;
-  float r = rainLayer(d, t * 0.62, 620.0, a, 1.0, fx.rain.x * 0.55, 0.0);
-  r = max(r, rainLayer(d, t * 0.5, 500.0, a + 0.115, 1.0, fx.rain.x * 0.5, 17.0) * 0.9);
-  r = max(r, rainLayer(d, t * 0.8, 330.0, a + 0.03, 1.0, fx.rain.x * 0.5, 41.0) * 0.8);
+  // it comes in sheets, one after another across the river
+  float lon = atan(d.x, d.z);
+  float h = d.y / max(length(d.xz), 1e-3);
+  float veil = vnoise(vec2(d.x * 2.3 + d.z * 1.1 + uTime * 0.34, d.z * 1.7 - uTime * 0.21));
+  float thick = fx.rain.x * (0.5 + 0.8 * smoothstep(0.25, 0.75, veil));
+  float r = rainLayer(d, t * 0.62, 620.0, a, 1.0, thick * 0.55, 0.0);
+  r = max(r, rainLayer(d, t * 0.5, 500.0, a + 0.115, 1.0, thick * 0.5, 17.0) * 0.9);
+  r = max(r, rainLayer(d, t * 0.8, 330.0, a + 0.03, 1.0, thick * 0.5, 41.0) * 0.8);
+  if (uShelter.z > 0.0) {
+    // an umbrella nobody sees: dry under it, and the rain that met it runs off its rim
+    float below = uShelter.y - h;
+    float off = mod(lon - uShelter.x + PI, TAU) - PI + below * tan(a + 0.03);
+    const float HALF = 0.1;
+    float u = off / HALF;
+    float dome = below - 0.045 * u * u;
+    float under = smoothstep(0.0, 0.012, dome) * (1.0 - smoothstep(0.92, 1.0, abs(u)));
+    r *= 1.0 - under * uShelter.z;
+    float burst = vnoise(vec2(off * 260.0, uTime * 11.0));
+    float top = (1.0 - smoothstep(0.001, 0.0045, abs(dome + 0.006 * burst))) * smoothstep(0.3, 0.5, burst) * (1.0 - smoothstep(0.9, 1.0, abs(u)));
+    float rim = (1.0 - smoothstep(0.0, 0.07, abs(abs(u) - 1.0))) * smoothstep(0.02, 0.05, below);
+    r = max(r, max(top, rim * rainLayer(d, t * 1.25, 1500.0, a, 1.0, 0.85, 91.0)) * uShelter.z);
+  }
   return r * (1.0 - smoothstep(0.55, 0.85, abs(d.y)));
 }
 #endif
@@ -445,15 +464,22 @@ vec3 layDrawing(vec3 col, sampler2D sheet, vec4 rect, vec2 on, vec3 ray, vec4 ey
   vec2 dx = dFdx(p), dy = dFdy(p);
   // laid with a brush: edges wander, and the paint breaks where it was dragged thin
   vec2 at = p * rect.yw * 57.3;
-  p += brush * 0.2 / (rect.yw * 57.3) * (vec2(vnoise(at * vec2(4.1, 6.3)), vnoise(at * vec2(5.3, 3.7) + 9.0)) - 0.5);
+  p += brush * 0.2 / (rect.yw * 57.3) * (vec2(vnoise(at * vec2(2.6, 2.9)), vnoise(at * vec2(2.9, 2.2) + 9.0)) - 0.5);
   // the jump at the back of the world lies outside the sheet
   vec2 inside = step(vec2(0.0), p) * step(p, vec2(1.0));
   vec4 ink = textureGrad(sheet, p, dx, dy) * inside.x * inside.y * on.x * (1.0 - infront);
   // the same paper as the rest of the print
   vec2 f = p * vec2(rect.y, rect.w);
   float paper = 1.0 + 0.05 * (vnoise(f * vec2(220.0, 620.0)) - 0.5) + 0.06 * (vnoise(f * 9.0) - 0.5);
-  ink *= 1.0 - brush * 0.18 * smoothstep(0.5, 0.85, vnoise(at * vec2(3.0, 9.0)));
-  return col * (1.0 - ink.a) + ink.rgb * mix(paper, 0.85 + 0.3 * vnoise(at * vec2(5.0, 3.2) + 4.0), brush);
+  // a brush carries less paint towards the end of a touch, and lets what it goes over show
+  ink *= 1.0 - brush * (0.08 + 0.34 * smoothstep(0.45, 0.8, vnoise(vec2(at.x * 1.7 + at.y * 0.9, at.y * 2.1 - at.x * 0.6) + 2.0)));
+  // and takes the ridges of the strokes already there
+  if (brush > 0.0) {
+    vec2 suv = dirToUv(ray);
+    float fine = dot(textureLod(uPano, suv, 0.5).rgb, vec3(0.3, 0.59, 0.11)), soft = dot(textureLod(uPano, suv, 3.5).rgb, vec3(0.3, 0.59, 0.11));
+    ink.rgb *= mix(1.0, clamp((fine + 0.02) / (soft + 0.02), 0.6, 1.7), brush);
+  }
+  return col * (1.0 - ink.a) + ink.rgb * mix(paper, 0.78 + 0.5 * vnoise(at * vec2(1.5, 1.9) + 4.0), brush);
 }
 #endif
 

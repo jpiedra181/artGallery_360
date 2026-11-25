@@ -1,7 +1,8 @@
 /**
  * What the drawn worlds are made with: smooth curves, filled outlines and
  * lines of ink, kept as flat triangles in painter's order. Every vertex hangs
- * from an anchor, and moving the anchors moves the drawing.
+ * from an anchor, and moving the anchors moves the drawing: that is all that is
+ * worked out here, and the graphics card moves the vertices after them.
  * No DOM or WebGL here (see engine/overlay.ts, scripts/draw-sheet.mjs).
  */
 
@@ -22,12 +23,12 @@ export interface Place {
 	distance: number;
 }
 
-/** A drawn world: `pose` writes every vertex, in sheet pixels, for a state of the drawing. */
+/** A drawn world: `hang` writes every anchor (x, y, and cosine and sine times size), in sheet pixels, for a state of the drawing. */
 export interface Sheet {
 	PLACE: Place;
 	COLOURS: readonly string[];
 	draw(): Drawing;
-	pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array;
+	hang(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array;
 }
 
 // ─── Small maths ──────────────────────────────────────────────────────────────
@@ -143,6 +144,43 @@ export interface Drawing {
 	offset: Float32Array;
 	colour: Uint8Array;
 	index: Uint32Array;
+}
+
+/** Room to work in for the anchors of a drawing, made once. */
+interface Work {
+	tx: Float32Array;
+	ty: Float32Array;
+	c: Float32Array;
+	s: Float32Array;
+}
+const works = new WeakMap<Drawing, Work>();
+export function anchorsOf(d: Drawing): Work {
+	let w = works.get(d);
+	if (!w) {
+		const n = d.anchors.x.length;
+		works.set(d, (w = { tx: new Float32Array(n), ty: new Float32Array(n), c: new Float32Array(n), s: new Float32Array(n) }));
+	}
+	return w;
+}
+/** Four numbers an anchor, as the graphics card reads them. */
+export function pack(d: Drawing, out: Float32Array): Float32Array {
+	const { tx, ty, c, s } = anchorsOf(d);
+	for (let i = 0, k = 0; i < tx.length; i++, k += 4) {
+		out[k] = tx[i];
+		out[k + 1] = ty[i];
+		out[k + 2] = c[i];
+		out[k + 3] = s[i];
+	}
+	return out;
+}
+/** Every vertex, for whoever has no graphics card to do it (scripts/draw-sheet.mjs). */
+export function vertices(d: Drawing, hung: ArrayLike<number>, out: Float32Array): Float32Array {
+	for (let v = 0, k = 0; v < d.vertexAnchor.length; v++, k += 2) {
+		const i = d.vertexAnchor[v] * 4, ox = d.offset[k], oy = d.offset[k + 1];
+		out[k] = hung[i] + hung[i + 2] * ox - hung[i + 3] * oy;
+		out[k + 1] = hung[i + 1] + hung[i + 3] * ox + hung[i + 2] * oy;
+	}
+	return out;
 }
 
 export class Press {

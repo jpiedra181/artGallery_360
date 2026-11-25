@@ -20,8 +20,10 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const RENDERS = path.join(ROOT, "blender", "renders");
 const PUBLIC = path.join(ROOT, "public");
 const MANIFEST = path.join(ROOT, "src", "data", "assets.json");
-const SCENES = ["hub", "wave", "rain", "stillness", "moonlight"];
-const ROOMS = SCENES.slice(1);
+const SCENES = ["hub", "hub_tall", "wave", "rain", "stillness", "moonlight"];
+const ROOMS = SCENES.slice(2);
+/** Stills are as wide as the widest screens, except the one only tall screens see. */
+const STILL_WIDTHS = { hub_tall: [720, 1200] };
 const DEPTH_ONLY = process.argv.includes("--depth-only");
 const MASK_ONLY = process.argv.includes("--mask-only");
 
@@ -228,7 +230,7 @@ async function buildScene(scene, manifest) {
 
 	const stillSrc = path.join(dir, "still.png");
 	if (existsSync(stillSrc)) {
-		entry.still = { widths: [960, 1920], avif: {}, webp: {} };
+		entry.still = { widths: STILL_WIDTHS[scene] ?? [960, 1920], avif: {}, webp: {} };
 		for (const w of entry.still.widths) {
 			for (const f of ["avif", "webp"]) {
 				const r = await encode(stillSrc, path.join(out, `still-${w}.${f}`), f, { width: w });

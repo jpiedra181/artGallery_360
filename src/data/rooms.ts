@@ -87,6 +87,8 @@ export interface Room {
 	/** The pigment that blooms through the canvas on the way into this room; its swatch is printed on the room's label. */
 	pigment: string;
 	view: { yaw: number; pitch: number; zoom?: number };
+	/** The same for a screen held upright, which is a third as wide and twice as high. */
+	tall?: { yaw: number; pitch: number; zoom?: number };
 	entrance: Entrance;
 	hotspots: Hotspot[];
 	/** Words that come up once on a visit: on arriving, and when what moves in the room comes back to the instant of the picture. */
@@ -102,6 +104,7 @@ export const site = {
 	description:
 		"An interactive exhibition: step inside four public-domain masterpieces about water — Hokusai, Hiroshige, Monet and Turner — rebuilt as 360° worlds.",
 	author: "Javier Piedra",
+	authorUrl: "https://jpiedra.com/en/",
 };
 
 /** Shown once, over the dark water, before the gallery comes into view. */
@@ -132,6 +135,8 @@ export const hub = {
 	} satisfies SceneEffects,
 	/** Two paintings whole, and the others coming into view at the sides. */
 	view: { yaw: 0, pitch: -3, zoom: 1.24 },
+	/** Tall screens have a hang of their own, in two rows (blender/scripts/hub_tall.py): it opens just wide enough for all four. */
+	tall: { view: { yaw: 0, pitch: 5, zoom: 1 }, openingPitch: -36 },
 	/** First steps into the gallery: up from the reflection in the water to the painting. */
 	entrance: { yaw: 0, pitch: -17, dolly: 0.7, seconds: 5 } satisfies Entrance,
 	/** The same after the prologue, which is read looking down at the water. */
@@ -232,10 +237,10 @@ export const rooms: Room[] = [
 			"Vincent van Gogh owned Japanese prints and painted his own copy of this one in 1887, adding a border of Japanese characters around it.",
 		],
 		scene:
-			"You stand on the open platform of a fire watch, high over the near bank, in a sudden summer downpour. Fine dark lines of rain slant across everything, in two directions. Below you a long yellow bridge on a maze of grey piles crosses from the left up to the right, and people are caught on it in mid-stride, and then run for shelter: two women under dark umbrellas, a man holding down a round straw hat, two sharing one umbrella, one with a straw mat over his head. The river is turquoise, wiped to deep blue underneath the bridge; a raftsman poles a long raft across it. The far bank is a single dark silhouette with a few pale roofs, under a ragged band of black cloud. Behind you the roofs of the town run back in rows.",
+			"You stand on the open platform of a fire watch, high over the near bank, in a sudden summer downpour. Fine dark lines of rain slant across everything, in two directions. Below you a long yellow bridge on a maze of grey piles crosses from the left up to the right, and people are caught on it in mid-stride, and then run for shelter: two women under dark umbrellas, a man holding down a round straw hat, two sharing one umbrella, one with a straw mat over his head. The river is turquoise, wiped to deep blue underneath the bridge; a raftsman poles a long raft across it. The far bank is a single dark silhouette with a few pale roofs, under a ragged band of black cloud. The raft drifts on the stream, sheets of rain cross the water, and the pointer keeps the rain off whoever is under it. Behind you the roofs of the town run back in rows.",
 		// the blue-green of the river
 		pigment: "#2c727c",
-		view: { yaw: -5, pitch: -18, zoom: 0.76 },
+		view: { yaw: -6, pitch: -19, zoom: 0.7 },
 		// down out of the cloud, to the bridge
 		entrance: { yaw: -8, pitch: 24, dolly: 0.8, seconds: 6 },
 		hotspots: [
@@ -262,7 +267,8 @@ export const rooms: Room[] = [
 			},
 		],
 		effects: {
-			water: { height: 22, strength: 0.16, scale: 0.4, speed: 0.6 },
+			sky: { shimmer: 0.05, run: 2, speed: 0.05 },
+			water: { height: 22, strength: 0.2, scale: 0.4, speed: 0.8 },
 			rain: { density: 0.9, angle: 4, speed: 1.0 },
 			grade: { vignette: 0.3, grain: 0.04 },
 			depth: { amount: 0.16, curve: 1 },
@@ -322,7 +328,6 @@ export const rooms: Room[] = [
 			},
 		],
 		act: {
-			hint: "Touch the water.",
 			caught: "Here. This is the light Monet chose.",
 		},
 		effects: {
@@ -361,6 +366,8 @@ export const rooms: Room[] = [
 		// the white gold around the moon
 		pigment: "#f2d596",
 		view: { yaw: 0, pitch: 4 },
+		// between the moon and the fires, so that a narrow screen has both
+		tall: { yaw: 13, pitch: 8 },
 		// from the firelight on the water, round to the moon
 		entrance: { yaw: 14, pitch: -10, dolly: 0.8, seconds: 6 },
 		hotspots: [

@@ -21,6 +21,7 @@ import {
 	project,
 	rotation,
 	screenRay,
+	stereoFor,
 	radiansPerPixel,
 	toWorld,
 	type Projection,
@@ -66,11 +67,12 @@ interface RoomConfig {
 	title: string;
 	artist: string;
 	view: { yaw: number; pitch: number; zoom?: number };
+	tall?: { yaw: number; pitch: number; zoom?: number };
 	entrance?: Entrance;
 	effects: Effects;
 	audio: SoundId;
 	pigment: string;
-	act?: { hint?: string; caught?: string };
+	act?: { caught?: string };
 }
 
 interface PaintingGeometry {
@@ -85,12 +87,22 @@ interface PaintingGeometry {
 	width: number;
 	height: number;
 	centerY: number;
+	/** Top of the line its name is lettered on, over the water (m). */
+	nameTop: number;
+}
+
+/** One way of hanging the gallery: its render, what is where in it, and where one looks on coming in. */
+interface Hall {
+	scene: string;
+	view: { yaw: number; pitch: number; zoom: number };
+	openingPitch?: number;
+	geometry: { water: number; room: number; paintings: PaintingGeometry[] };
 }
 
 interface Config {
 	base: string;
 	route: SceneId;
-	hub: { title: string; effects: Effects; entrance?: Entrance; opening?: Entrance; returning?: Entrance; pigment: string; view: { yaw: number; pitch: number; zoom: number }; geometry: { water: number; room: number; paintings: PaintingGeometry[] } };
+	hub: { title: string; effects: Effects; entrance?: Entrance; opening?: Entrance; returning?: Entrance; pigment: string; halls: { wide: Hall; tall: Hall } };
 	rooms: RoomConfig[];
 	scenes: Record<string, SceneAssets>;
 	registration: Partial<Record<RoomSlug, number[]>>;
@@ -103,7 +115,16 @@ const $$ = <T extends HTMLElement = HTMLElement>(sel: string) => [...document.qu
 const config: Config = JSON.parse($("#config").textContent || "{}");
 const root = document.documentElement;
 const roomBySlug = Object.fromEntries(config.rooms.map((r) => [r.slug, r])) as Record<RoomSlug, RoomConfig>;
-const paintingBySlug = Object.fromEntries(config.hub.geometry.paintings.map((p) => [p.id, p])) as Record<RoomSlug, PaintingGeometry>;
+
+/** Narrower than this (width / height) a screen is tall: the gallery hangs in two rows, and the rooms open on views of their own. */
+const TALL = 0.85;
+const isTall = () => window.innerWidth / Math.max(window.innerHeight, 1) < TALL;
+let hall = isTall() ? config.hub.halls.tall : config.hub.halls.wide;
+const byRoom = (h: Hall) => Object.fromEntries(h.geometry.paintings.map((p) => [p.id, p])) as Record<RoomSlug, PaintingGeometry>;
+let paintingBySlug = byRoom(hall);
+const coarse = matchMedia("(pointer: coarse)");
+/** The layout of a phone, as in global.css: a narrow screen, or a low one. */
+const phone = matchMedia("(max-width: 40em), (max-height: 30em) and (orientation: landscape)");
 
 const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
 const store = {
@@ -186,7 +207,7 @@ function fallback(reason: unknown) {
 let renderer: PanoRenderer;
 
 /** First scene, downloaded and decoded during the title screen (no GPU yet). */
-const predecoded = new Map<SceneId, Promise<{ bitmap: ImageBitmap; mask: ImageBitmap | null; depth: ImageBitmap | null }>>();
+const predecoded = new Map<SceneAssets, Promise<{ bitmap: ImageBitmap; mask: ImageBitmap | null; depth: ImageBitmap | null }>>();
 const firstProgress = { value: 0, listeners: new Set<() => void>() };
 
 const SETTLE_IDLE_TIMEOUT_MS = 1500;
@@ -246,10 +267,10 @@ function prepare() {
 	root.classList.add("immersive", "is-intro");
 	(window as Window & { __itfBooted?: boolean }).__itfBooted = true;
 	const id = config.route;
-	const assets = config.scenes[id] ?? config.scenes.hub;
+	const assets = config.scenes[id === "hub" ? hall.scene : id] ?? config.scenes.hub;
 	const tier = chooseTier(8192) === "2k" ? "2k" : "4k";
 	predecoded.set(
-		id,
+		assets,
 		(async () => {
 			await titleScreenSettled();
 			const url = config.base + resolveUrl(assets, tier, await supportsAvif());
@@ -272,7 +293,7 @@ function prepare() {
 			return { bitmap, mask, depth };
 		})(),
 	);
-	predecoded.get(id)!.catch(() => {});
+	predecoded.get(assets)!.catch(() => {});
 
 	const bar = $("#intro-progress .progress");
 	const show = () => {
@@ -281,7 +302,7 @@ function prepare() {
 		bar.setAttribute("aria-valuenow", String(pct));
 	};
 	firstProgress.listeners.add(show);
-	predecoded.get(id)!.then(() => {
+	predecoded.get(assets)!.then(() => {
 		firstProgress.value = 1;
 		show();
 	}, () => {});
@@ -345,6 +366,9 @@ function start(withSound: boolean) {
 	const btnLook = $<HTMLButtonElement>("#btn-look");
 	const hubSection = $("#hub");
 	const roomSections = $$("article.room");
+	function setting(name: string) {
+		return document.querySelector<HTMLButtonElement>(`[data-setting="${name}"]`);
+	}
 
 	// The look-around surface is an interactive widget only in this mode.
 	look.tabIndex = 0;
@@ -402,8 +426,6 @@ function start(withSound: boolean) {
 	let dripIndex = 0;
 	let boatAmount = 0;
 	let nextDrip = 2;
-	/** The prologue holds the camera on the water. */
-	let holding = false;
 	/** The closing note is up and the visitor has not moved yet. */
 	let turning = false;
 	/** Until this time (scene seconds) drops fall thick and fast. */
@@ -412,7 +434,38 @@ function start(withSound: boolean) {
 
 	const reduced = () => reducedMotionQuery.matches;
 	/** How close a scene opens (1 is the widest comfortable view). */
-	const zoomFor = (id: SceneId) => (id === "hub" ? config.hub.view.zoom : (roomBySlug[id].view.zoom ?? 1));
+	const zoomFor = (id: SceneId) => (id === "hub" ? hallZoom() : (viewFor(id).zoom ?? 1));
+	/** Where one looks on coming into a scene. */
+	const viewFor = (id: SceneId) => (id === "hub" ? hall.view : (isTall() && roomBySlug[id].tall) || roomBySlug[id].view);
+	/** In two rows the gallery opens just wide enough for every frame, whatever the shape of the screen. */
+	const fitted = { aspect: 0, zoom: 1 };
+	function hallZoom() {
+		if (hall !== config.hub.halls.tall) return hall.view.zoom;
+		const a = aspect();
+		if (Math.abs(fitted.aspect - a) > 0.002) {
+			const edges: Vec3[] = hall.geometry.paintings.flatMap((g) => {
+				const half = frameHalf(g) * Math.sign(g.yaw), at = g.yaw * DEG;
+				return [-g.height / 2, g.height / 2].map((up): Vec3 => {
+					const x = Math.sin(at) * g.distance + Math.cos(at) * half, y = g.centerY + up, z = Math.cos(at) * g.distance - Math.sin(at) * half;
+					const far = Math.hypot(x, y, z);
+					return [x / far, y / far, z / far];
+				});
+			});
+			const fits = (zoom: number) => {
+				const base = { aspect: a, fovV: clamp(ViewController.baseFov(a) * zoom, 18 * DEG, 125 * DEG) };
+				const proj = { ...base, stereo: Math.max(stereoFor(base.fovV), HALL_SOFTEN) };
+				return edges.every((d) => Math.abs(project(d, hall.view.yaw * DEG, hall.view.pitch * DEG, proj)?.[0] ?? 2) < 0.935);
+			};
+			let lo = 0.7, hi = 1.24;
+			for (let i = 0; i < 12; i++) {
+				const mid = (lo + hi) / 2;
+				if (fits(mid)) hi = mid;
+				else lo = mid;
+			}
+			Object.assign(fitted, { aspect: a, zoom: hi });
+		}
+		return fitted.zoom;
+	}
 	const href = (id: SceneId) => (id === "hub" ? config.base : `${config.base}${id}/`);
 	const sceneTitle = (id: SceneId) => (id === "hub" ? config.hub.title : `Room ${roomBySlug[id].numeral} — ${roomBySlug[id].theme}`);
 
@@ -452,7 +505,7 @@ function start(withSound: boolean) {
 	const FEATURES: Record<SceneId, readonly Feature[]> = {
 		hub: ["GALLERY", "DRIPS"],
 		wave: ["SHEET", "SKY"],
-		rain: ["SHEET", "RAIN"],
+		rain: ["SHEET", "RAIN", "SKY"],
 		stillness: ["WIND", "HOUR", "DRIPS", "GLINTS"],
 		moonlight: ["SHEET", "SKY", "RIDE", "FIRES", "DRIPS", "GLINTS", "SEAM"],
 	};
@@ -466,7 +519,7 @@ function start(withSound: boolean) {
 
 	function sceneAssets(id: SceneId): SceneAssets {
 		// During development a room may not be rendered yet: show the hub.
-		return config.scenes[id] ?? config.scenes.hub;
+		return config.scenes[id === "hub" ? hall.scene : id] ?? config.scenes.hub;
 	}
 
 	function load(id: SceneId): Promise<SceneTextures> {
@@ -475,17 +528,26 @@ function start(withSound: boolean) {
 		const pending = loading.get(id);
 		if (pending) return pending;
 		const p = (async () => {
+			const textures = await bring(id, sceneAssets(id));
+			loaded.set(id, textures);
+			return textures;
+		})();
+		loading.set(id, p);
+		p.catch(() => {}).finally(() => loading.delete(id));
+		return p;
+	}
+
+	async function bring(id: SceneId, assets: SceneAssets): Promise<SceneTextures> {
 			// the driver can start on its program while the pictures come
 			renderer.prepare(FEATURES[id]);
-			const ready = await predecoded.get(id)?.catch(() => null);
-			predecoded.delete(id);
+			const ready = await predecoded.get(assets)?.catch(() => null);
+			predecoded.delete(assets);
 			let bitmap: ImageBitmap;
 			let maskBitmap: ImageBitmap | null;
 			let depthBitmap: ImageBitmap | null;
 			if (ready && ready.bitmap.width <= renderer.maxTextureSize) {
 				({ bitmap, mask: maskBitmap, depth: depthBitmap } = ready);
 			} else {
-				const assets = sceneAssets(id);
 				const url = config.base + resolveUrl(assets, tier, await avif);
 				const maskUrl = assets.mask ? config.base + assets.mask : null;
 				const depthUrl = assets.depth ? config.base + assets.depth.url : null;
@@ -511,16 +573,11 @@ function start(withSound: boolean) {
 			const overlay = await makeOverlay(id);
 			const features = FEATURES[id];
 			await renderer.prepare(features).ready;
-			const textures: SceneTextures = { pano, mask, depth, overlay, features, near: sceneAssets(id).depth?.near ?? 1, width: bitmap.width };
+			const textures: SceneTextures = { pano, mask, depth, overlay, features, near: assets.depth?.near ?? 1, width: bitmap.width };
 			bitmap.close();
 			maskBitmap?.close();
 			depthBitmap?.close();
-			loaded.set(id, textures);
 			return textures;
-		})();
-		loading.set(id, p);
-		p.catch(() => {}).finally(() => loading.delete(id));
-		return p;
 	}
 
 	/** Swap the scene on screen for its 8k version, quietly, when idle. */
@@ -600,7 +657,88 @@ function start(withSound: boolean) {
 	/** Seconds the keelmen have worked, how fast they go, and the two lights of their river. */
 	const river = { seconds: 0, pace: 0, fire: 0, moon: 0 };
 	let drawnRoom: SceneId | null = null;
-	const sheetState = () => (crowd ? clocks : drawnRoom === "moonlight" ? [river.seconds, aliveFor] : [tide.t]);
+	let rainState = new Float32Array(0);
+	const sheetState = () => (crowd ? rainState : drawnRoom === "moonlight" ? [river.seconds, aliveFor] : [tide.t, hand.x, hand.y, hand.way]);
+
+	// ─── The hand ───────────────────────────────────────────────────────────
+	// What the visitor does with the pointer over a picture: the foam of the wave is combed by it, and it
+	// keeps the rain off whoever is under it. Water answers it with rings (touchWater).
+	/** On the wave: where it is on the print, and how fast it goes to the right (-1..1). */
+	const hand = { x: 0, y: 0, way: 0, goal: 0, dir: [0, 0, 1] as Vec3, at: 0, lastX: 0 };
+	/** Over the river: yaw, height over the horizon (tan), how much of the rain it keeps off (0..1). */
+	const shelter = new Float32Array(4);
+	const shelterGoal = { yaw: 0, height: 0, on: 0, until: 0, over: -1 };
+
+	function passHand(clientX: number, clientY: number) {
+		if ((current !== "wave" && current !== "rain") || busy || trans || !entered || !motion) return;
+		const rect = look.getBoundingClientRect();
+		const d = toWorld(rotA, screenRay(((clientX - rect.left) / rect.width) * 2 - 1, 1 - ((clientY - rect.top) / rect.height) * 2, currentProjection()));
+		const now = performance.now();
+		if (current === "rain") {
+			const fresh = shelter[2] < 0.02;
+			Object.assign(shelterGoal, { yaw: Math.atan2(d[0], d[2]), height: d[1] / Math.max(Math.hypot(d[0], d[2]), 0.05), on: 1, until: now + 6000, over: -1 });
+			if (fresh) shelter.set([shelterGoal.yaw, shelterGoal.height]);
+			return;
+		}
+		if (!wave) return;
+		const { x0, scale, horizon } = wave.PLACE;
+		const x = x0 + (Math.atan2(d[0], d[2]) / DEG) * scale, y = horizon - (Math.asinh(d[1] / Math.max(Math.hypot(d[0], d[2]), 0.05)) / DEG) * scale;
+		const dt = Math.max(8, now - hand.at);
+		if (dt < 120) hand.goal = clamp((x - hand.lastX) / dt / 1.1, -1, 1);
+		Object.assign(hand, { x, y, dir: d, at: now, lastX: x });
+	}
+	// A finger that moves turns the head, and the world under it goes with it: it passes over nothing. So on a
+	// touch screen a drag only looks, and a tap is the hand (tapWorld).
+	const onWorld = (e: PointerEvent) => e.pointerType !== "touch" && passHand(e.clientX, e.clientY);
+	look.addEventListener("pointermove", onWorld);
+	look.addEventListener("pointerdown", onWorld);
+	look.addEventListener("pointerleave", (e) => {
+		if (e.pointerType !== "touch") shelterGoal.until = 0;
+	});
+
+	/** How far round someone in the rain a tap still finds them (rad), and how long they are kept dry (ms). */
+	const REACH = 0.085;
+	const KEPT_DRY = 9000;
+	let gust = 0;
+
+	function tapWorld(clientX: number, clientY: number) {
+		if (current === "hub" || busy || trans || !entered || !motion) return;
+		touchWater(clientX, clientY, true);
+		passHand(clientX, clientY);
+		if (current === "rain" && crowd) {
+			// whoever is nearest is kept dry, and the umbrella goes along with them
+			let near = REACH;
+			for (let i = 0; i < clocks.length; i++) {
+				const [yaw, pitch] = crowd.bearing(i, clocks[i]);
+				const off = Math.hypot(angleDelta(shelterGoal.yaw, yaw) * Math.cos(pitch), Math.atan(shelterGoal.height) - pitch);
+				if (off < near) [near, shelterGoal.over] = [off, i];
+			}
+			shelterGoal.until = performance.now() + KEPT_DRY;
+		}
+		// struck, the foam is thrown to the side it was struck from
+		if (current === "wave") hand.way = clientX < look.clientWidth / 2 ? -1.4 : 1.4;
+		if (current === "stillness") gust = 1;
+	}
+
+	function updateHand(dt: number): boolean {
+		const now = performance.now();
+		if (now - hand.at > 60) hand.goal = 0;
+		// springs back, and a little past
+		hand.way += (hand.goal - hand.way) * Math.min(1, dt * (Math.abs(hand.goal) > Math.abs(hand.way) ? 12 : 2.6));
+		if (Math.abs(hand.way) < 0.004 || current !== "wave") hand.way = 0;
+		const on = current === "rain" && !trans && !busy && motion && now < shelterGoal.until ? 1 : 0;
+		gust = gust > 0.004 ? gust * Math.exp(-dt * 0.8) : 0;
+		if (on && shelterGoal.over >= 0 && crowd) {
+			const [yaw, pitch] = crowd.bearing(shelterGoal.over, clocks[shelterGoal.over]);
+			Object.assign(shelterGoal, { yaw, height: Math.tan(pitch) + 0.1 });
+		}
+		const ease = Math.min(1, dt * 9);
+		shelter[0] += angleDelta(shelter[0], shelterGoal.yaw) * ease;
+		shelter[1] += (shelterGoal.height - shelter[1]) * ease;
+		shelter[2] += (on - shelter[2]) * Math.min(1, dt * 4);
+		if (shelter[2] < 0.004) shelter[2] = 0;
+		return hand.way !== 0 || shelter[2] > 0;
+	}
 
 	// ─── What is loose in the air ───────────────────────────────────────────
 	// Leaves, smoke, spray: strokes drawn over the panorama (engine/loose.ts).
@@ -639,6 +777,7 @@ function start(withSound: boolean) {
 			clock: tide.t,
 			fire: river.fire,
 			lights: fxA.lights,
+			hand: hand.way && wave ? { dir: hand.dir, force: Math.abs(hand.way) * wave.touched, way: hand.way } : null,
 			drop: (x, z, strength) => dropAt(x, z, strength),
 		});
 		const tex = renderer.getSlot(0);
@@ -653,7 +792,7 @@ function start(withSound: boolean) {
 		fx.lights = [...h.lights, h.saturation];
 		fx.darks = [...h.darks, 0];
 		fx.mist = [...h.mist, h.fog];
-		fx.live[0] = still.live[0] * h.wind;
+		fx.live[0] = still.live[0] * h.wind * (1 + 1.1 * gust * gust);
 		fx.air[1] = h.sun;
 		fx.air[2] = h.glints;
 		fx.light[3] = h.calm;
@@ -668,7 +807,7 @@ function start(withSound: boolean) {
 			import("./engine/overlay"),
 			id === "wave" ? import("./worlds/great-wave") : id === "rain" ? import("./worlds/sudden-shower") : import("./worlds/keelmen"),
 		]);
-		const wanted = bestTier === "8k" ? 4096 : bestTier === "2k" ? 2048 : matchMedia("(pointer: coarse)").matches ? 2560 : 3072;
+		const wanted = bestTier === "8k" ? 4096 : bestTier === "2k" ? 2048 : coarse.matches ? 2560 : 3072;
 		const before = crowd, beforeRoom = drawnRoom;
 		crowd = "PARTIES" in sheet ? sheet : null;
 		if (id === "wave") wave = sheet as typeof import("./worlds/great-wave");
@@ -676,10 +815,11 @@ function start(withSound: boolean) {
 		Object.assign(river, { seconds: 0, pace: 0, fire: 0, moon: 0 });
 		clocks = new Float32Array(crowd?.PARTIES.length ?? 0);
 		paces = new Float32Array(clocks.length);
+		rainState = new Float32Array(clocks.length + 1);
 		resetTide();
 		try {
 			// the men on the river are touches of paint: no sharper than the paint round them
-			const width = id === "moonlight" ? Math.min(wanted, 2500) : wanted;
+			const width = id === "moonlight" ? Math.min(wanted, coarse.matches ? 1800 : 2500) : id === "rain" && coarse.matches ? Math.min(wanted, 2200) : wanted;
 			const made = await Overlay.create(renderer.gl, Math.min(width, renderer.maxTextureSize), sheet, sheetState());
 			overlayNow = made;
 			return made;
@@ -716,7 +856,7 @@ function start(withSound: boolean) {
 			tide.t += ((tide.rate * dt) / tideSeconds()) * clamp((1 - tide.t) / TIDE_CATCH, 0.14, 1);
 			if (tide.t >= 1) {
 				Object.assign(tide, { t: 0, rate: 0, rest: current === "stillness" ? REST.stillness : REST.wave });
-				sayOnce("caught");
+				sayCaught();
 			}
 		}
 		if (tide.t >= 1) tide.t -= 1;
@@ -758,6 +898,7 @@ function start(withSound: boolean) {
 	}
 
 	function updateCrowd(dt: number): boolean {
+		if (motion && current === "rain" && entered) rainState[clocks.length] += dt;
 		// paused, they are caught again in mid-stride
 		if (!motion) return false;
 		let moved = false;
@@ -765,7 +906,12 @@ function start(withSound: boolean) {
 		if (here && tide.rest > -9) tide.rest -= dt;
 		for (let i = 0; i < clocks.length; i++) {
 			// not all of them at once
-			const goal = here && tide.rest <= -0.22 * ((i * 5) % 9) ? 1 : 0;
+			let goal = here && tide.rest <= -0.22 * ((i * 5) % 9) ? 1 : 0;
+			if (goal && shelter[2] > 0.2) {
+				// out of the rain, they walk
+				const [yaw, pitch] = crowd!.bearing(i, clocks[i]);
+				if (Math.abs(angleDelta(shelter[0], yaw)) < 0.11 && Math.tan(pitch) < shelter[1] + 0.01 && Math.tan(pitch) > shelter[1] - 0.5) goal = 0.22;
+			}
 			paces[i] += (goal - paces[i]) * Math.min(1, dt * 3.2);
 			if (paces[i] < 0.004) paces[i] = 0;
 			if (paces[i] > 0) {
@@ -781,16 +927,17 @@ function start(withSound: boolean) {
 				}
 			}
 		}
+		rainState.set(clocks);
 		return moved;
 	}
 
-	/** The room's words for this, the first time on a visit. */
-	function sayOnce(which: "hint" | "caught") {
-		const text = current === "hub" ? undefined : roomBySlug[current].act?.[which];
-		const key = `${which}:${current}`;
+	/** The room's words for the instant it comes back to, the first time on a visit. */
+	function sayCaught() {
+		const text = current === "hub" ? undefined : roomBySlug[current].act?.caught;
+		const key = `caught:${current}`;
 		if (!text || visit.get(key) === "yes") return;
 		visit.set(key, "yes");
-		say(text, which === "hint" ? 5000 : 4200);
+		say(text, 4200);
 		live.textContent = text;
 	}
 
@@ -886,13 +1033,11 @@ function start(withSound: boolean) {
 			}
 		}
 
-		// slow drift while the title screen is up
-		if (!entered && motion && !busy && !holding) view.yaw += dt * 0.022;
 		// the closing note: the gallery turns slowly until the visitor takes over
 		if (turning && motion && !busy) view.yaw += dt * 0.045;
 
 		// in the gallery the paintings at the sides keep their shape; eased in and out around a crossing
-		view.soften += ((current === "hub" && !busy ? 0.62 : 0) - view.soften) * Math.min(1, dt * 3);
+		view.soften += ((current === "hub" && !busy ? HALL_SOFTEN : 0) - view.soften) * Math.min(1, dt * 3);
 		if (view.soften < 0.001) view.soften = 0;
 		const moved = view.update(dt);
 		// ease the rocking in after arriving, and out while transitions run
@@ -906,9 +1051,10 @@ function start(withSound: boolean) {
 		const k = Math.min(1, dt * 2.6);
 		sway.x += (sway.goalX - sway.x) * k;
 		sway.y += (sway.goalY - sway.y) * k;
-		const hoverTarget = hovered && current === "hub" && !trans ? 1 : 0;
+		updateInvitation(now);
+		const hoverTarget = current !== "hub" || trans ? 0 : hovered ? 1 : invited ? invitedLight : 0;
 		const hoverChanging = Math.abs(hoverAmount - hoverTarget) > 0.001;
-		hoverAmount += (hoverTarget - hoverAmount) * Math.min(1, dt * 8);
+		hoverAmount += (hoverTarget - hoverAmount) * Math.min(1, dt * (hovered ? 8 : 3));
 
 		if (current === "hub" && motion) updateDrips();
 		updateStains(dt);
@@ -917,7 +1063,9 @@ function start(withSound: boolean) {
 			audio.setChord(chordOn ? stainNow.map((v, i) => v * (0.55 + 0.75 * spreadNow[i])) : [0, 0, 0, 0]);
 		}
 		updateArt(dt);
+		const handMoved = updateHand(dt);
 		const tideMoved = updateTide(dt);
+		hangNextHall();
 
 		if (motion) aliveFor += dt;
 		const sky = current === "hub" ? undefined : roomBySlug[current].effects.sky;
@@ -925,7 +1073,7 @@ function start(withSound: boolean) {
 		if (sky?.speed && !trans) skyClock += dt * sky.speed * (current === "wave" ? tide.rate : motion ? 1 : 0);
 
 		const airComing = lives.has(current) && entered && !trans && !busy && presence < 0.99;
-		const animating = motion || airComing || tideMoved || artChanging || tweens.size > 0 || hoverChanging || parallaxChanging || swaying || !entered;
+		const animating = motion || airComing || handMoved || tideMoved || artChanging || tweens.size > 0 || hoverChanging || parallaxChanging || swaying || !entered;
 		if (moved || animating || needsRender) {
 			draw(dt);
 			needsRender = false;
@@ -998,6 +1146,7 @@ function start(withSound: boolean) {
 			time,
 			drips,
 			rocks,
+			shelter,
 			stains,
 			stainInks,
 			stainGlow,
@@ -1109,7 +1258,76 @@ function start(withSound: boolean) {
 	new ResizeObserver(() => {
 		needsRender = true;
 		measureSpots();
+		rehang();
 	}).observe(look);
+
+	// ─── The gallery when the screen is turned ───────────────────────────────
+	// It hangs in a row on wide screens and in two rows on tall ones. The other hang is brought first, and
+	// takes the place of this one between two frames, once nothing is under way.
+	let nextHall: { hall: Hall; textures: SceneTextures | null; coming: boolean } | null = null;
+
+	async function rehang() {
+		const wanted = isTall() ? config.hub.halls.tall : config.hub.halls.wide;
+		if (wanted === hall) {
+			dropNextHall();
+			return;
+		}
+		if (nextHall?.hall === wanted) return;
+		dropNextHall();
+		const next: typeof nextHall = (nextHall = { hall: wanted, textures: null, coming: false });
+		// while the gallery is out of sight it is enough to bring it on the way back
+		if (current !== "hub" || busy) return;
+		next.coming = true;
+		const textures = await bring("hub", config.scenes[wanted.scene]).catch(() => null);
+		if (nextHall !== next) {
+			if (textures) freeScene(textures);
+		} else if (textures) Object.assign(next, { textures, coming: false });
+		// it could not be brought: stay in the one there is, and ask again the next time the screen is turned
+		else nextHall = null;
+	}
+
+	function dropNextHall() {
+		if (nextHall?.textures) freeScene(nextHall.textures);
+		nextHall = null;
+	}
+
+	function freeScene(t: SceneTextures) {
+		renderer.deleteTexture(t.pano);
+		renderer.deleteTexture(t.mask);
+		renderer.deleteTexture(t.depth);
+		t.overlay?.dispose();
+	}
+
+	function hangNextHall() {
+		if (!nextHall || nextHall.coming || busy || trans || loading.has("hub")) return;
+		const inHub = current === "hub";
+		if (inHub && !nextHall.textures) {
+			// asked for while something else was under way
+			nextHall = null;
+			rehang();
+			return;
+		}
+		const old = loaded.get("hub");
+		const { hall: wanted, textures } = nextHall;
+		nextHall = null;
+		hall = wanted;
+		paintingBySlug = byRoom(hall);
+		placeStains();
+		hangNames();
+		upgraded.delete("hub");
+		artSlug = artWanted = null;
+		setHovered(null);
+		loaded.delete("hub");
+		if (textures) {
+			loaded.set("hub", textures);
+			renderer.setSlot(0, textures);
+			cancelTurn();
+			view.locked = false;
+			view.set({ yaw: hall.view.yaw * DEG, pitch: hall.view.pitch * DEG, zoom: zoomFor("hub") });
+			needsRender = true;
+		}
+		if (old) freeScene(old);
+	}
 
 	// ─── Drops falling into the flooded hub ─────────────────────────────────
 	function updateDrips() {
@@ -1122,7 +1340,7 @@ function start(withSound: boolean) {
 			// not on the dais, nor on the walk to the door
 		} while (Math.hypot(x, z) > 5 || (Math.abs(x) < 1.1 && Math.abs(z) < 1.1) || (Math.abs(x) < 0.7 && z < 0));
 		dropAt(x, z, 0.6 + Math.random() * 0.6);
-		audio.drip(x, -config.hub.geometry.water, z);
+		audio.drip(x, -hall.geometry.water, z);
 	}
 
 	/** Rings spread from here on the water of the scene. */
@@ -1150,8 +1368,8 @@ function start(withSound: boolean) {
 		}
 		Object.assign(lastTouch, { x, z, at: now });
 	}
-	look.addEventListener("pointermove", (e) => touchWater(e.clientX, e.clientY, false));
-	look.addEventListener("pointerdown", (e) => touchWater(e.clientX, e.clientY, true));
+	look.addEventListener("pointermove", (e) => e.pointerType !== "touch" && touchWater(e.clientX, e.clientY, false));
+	look.addEventListener("pointerdown", (e) => e.pointerType !== "touch" && touchWater(e.clientX, e.clientY, true));
 
 	// ─── The painting approached ────────────────────────────────────────────
 	// The panorama gives a painting a few hundred pixels. The one pointed at,
@@ -1196,7 +1414,7 @@ function start(withSound: boolean) {
 
 	function lightPainting(fx: FxUniforms | null, light: number) {
 		if (!fx) return;
-		const slug = hovered ?? artSlug ?? hoveredLast;
+		const slug = hovered ?? (hoverAmount > 0.01 ? hoveredLast : null) ?? artSlug ?? hoveredLast;
 		if (!slug) return;
 		const g = paintingBySlug[slug];
 		fx.hover = [g.yaw * DEG, g.distance, g.width / 2, g.height / 2];
@@ -1218,11 +1436,17 @@ function start(withSound: boolean) {
 	const stainNow = new Float32Array(4);
 	const spreadGoal = new Float32Array(4);
 	const spreadNow = new Float32Array(4);
+	function placeStains() {
+		config.rooms.forEach((r, i) => {
+			const g = paintingBySlug[r.slug];
+			// under the painting, a little short of the wall; one hung higher is mirrored, and stains, nearer
+			const out = 1.35 + (g.distance * hall.geometry.water) / (2 * hall.geometry.water + g.centerY);
+			stains[i * 4] = Math.sin(g.yaw * DEG) * out;
+			stains[i * 4 + 1] = Math.cos(g.yaw * DEG) * out;
+		});
+	}
+	placeStains();
 	config.rooms.forEach((r, i) => {
-		const g = paintingBySlug[r.slug];
-		const out = g.distance - 1.75;
-		stains[i * 4] = Math.sin(g.yaw * DEG) * out;
-		stains[i * 4 + 1] = Math.cos(g.yaw * DEG) * out;
 		// let into black water, dark pigments need the light the pale one has of itself
 		const ink = linearRgb(r.pigment);
 		const light = 0.2126 * ink[0] + 0.7152 * ink[1] + 0.0722 * ink[2];
@@ -1251,20 +1475,27 @@ function start(withSound: boolean) {
 
 	// ─── Hub hotspots ───────────────────────────────────────────────────────
 	// The names are lettered on the walls: each hangs in the plane of its wall, under the corner of the
-	// frame that is nearer the middle of the room, all on one line round the hall.
-	/** Height of the letters (m), the smallest they may look on screen (px), and the top of the line over the water (m). */
+	// frame that is nearer the middle of the room, each row on one line round the hall.
+	/** Height of the letters (m), and the smallest they may look on screen (px). */
 	const LETTERS = 0.25;
 	const LETTERS_MIN = 20;
-	const LETTERS_TOP = 0.62;
+	const LETTERS_MIN_TALL = 18;
+	/** In the gallery the paintings at the sides keep their shape (see ViewController.soften). */
+	const HALL_SOFTEN = 0.62;
+	function hangNames() {
+		for (const s of spots) s.dataset.side = paintingBySlug[s.dataset.room as RoomSlug].yaw < 0 ? "right" : "left";
+		spotsNav.dataset.hang = hall === config.hub.halls.tall ? "tall" : "wide";
+		measureSpots();
+	}
 	const spotSize = new Map<HTMLElement, { w: number; h: number; font: number }>();
 	function measureSpots() {
 		for (const s of spots) spotSize.set(s, { w: s.offsetWidth, h: s.offsetHeight, font: parseFloat(getComputedStyle(s).fontSize) });
 	}
 	document.fonts?.ready.then(measureSpots);
+	hangNames();
 
-	const hubNear = config.scenes.hub?.depth?.near ?? 0;
 	/** Half the width of the frame of a painting (m). */
-	const frameHalf = (g: PaintingGeometry) => g.width / 2 + (g.centerY - Math.tan(g.frameBottom * DEG) * config.hub.geometry.room - g.height / 2);
+	const frameHalf = (g: PaintingGeometry) => g.width / 2 + (g.centerY - Math.tan(g.frameBottom * DEG) * hall.geometry.room - g.height / 2);
 
 	/** Where 3D transforms are drawn without their perspective (WebKit with no compositing), they come out askew. */
 	const hasPerspective = (() => {
@@ -1299,10 +1530,12 @@ function start(withSound: boolean) {
 		const proj = currentProjection();
 		const w = look.clientWidth;
 		const h = look.clientHeight;
-		const { room, water } = config.hub.geometry;
+		const { room, water } = hall.geometry;
+		const hubNear = sceneAssets("hub").depth?.near ?? 0;
+		const smallest = hall === config.hub.halls.tall ? LETTERS_MIN_TALL : LETTERS_MIN;
 		const pxPerMetre = 1 / radiansPerPixel(proj, h) / room;
 		// the size is of the wall, not of the moment: zooming brings the letters nearer like everything else
-		const metres = Math.max(LETTERS, LETTERS_MIN / (pxPerMetre * (view.zoom / zoomFor("hub"))));
+		const metres = Math.max(LETTERS, smallest / (pxPerMetre * (view.zoom / zoomFor("hub"))));
 		const font = metres * pxPerMetre * 1.2;
 		for (const s of spots) {
 			const g = paintingBySlug[s.dataset.room as RoomSlug];
@@ -1316,7 +1549,7 @@ function start(withSound: boolean) {
 			const k = metres / size.font; // metres to a pixel of the box
 			const edge = frameHalf(g) + 0.36 * metres;
 			const u0 = s.dataset.side === "right" ? edge - size.w * k : -edge;
-			const top = LETTERS_TOP - water;
+			const top = g.nameTop - water;
 			const a = g.yaw * DEG;
 			const corner = (u: number, y: number): [number, number] | null => {
 				const x = Math.sin(a) * room + Math.cos(a) * u, z = Math.cos(a) * room - Math.sin(a) * u;
@@ -1330,7 +1563,7 @@ function start(withSound: boolean) {
 			const cx = whole ? (q[0]![0] + q[2]![0]) / 2 : -1, cy = whole ? (q[0]![1] + q[2]![1]) / 2 : -1;
 			s.dataset.visible = String(whole && cx > -0.1 * w && cx < 1.1 * w && cy > -40 && cy < h + 40);
 			if (whole) s.style.transform = toQuad(size.w, size.h, q as [number, number][]);
-			s.classList.toggle("is-hot", hovered === s.dataset.room);
+			s.classList.toggle("is-hot", (hovered ?? invited) === s.dataset.room);
 		}
 	}
 
@@ -1340,7 +1573,7 @@ function start(withSound: boolean) {
 		const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
 		const ny = 1 - ((clientY - rect.top) / rect.height) * 2;
 		const d = toWorld(rotation(view.yaw, view.pitch), screenRay(nx, ny, currentProjection()));
-		for (const g of config.hub.geometry.paintings) {
+		for (const g of hall.geometry.paintings) {
 			const a = g.yaw * DEG;
 			const dn = d[0] * Math.sin(a) + d[2] * Math.cos(a);
 			if (dn < 0.05) continue;
@@ -1362,12 +1595,34 @@ function start(withSound: boolean) {
 		wantArt(slug);
 	}
 
+	// ─── The paintings ask to be entered ────────────────────────────────────
+	// Nobody reads instructions on a wall. Left alone, the gallery lights its paintings one after another,
+	// those not yet entered, as it does under the pointer; the first sign of the visitor stops it.
+	let invited: RoomSlug | null = null;
+	let invitedLight = 0;
+	let quietSince = performance.now();
+	const INVITE_AFTER = 2600;
+	const INVITE_EACH = 2300;
+	function updateInvitation(now: number) {
+		if (current !== "hub" || busy || trans || !entered || !motion || hovered || down || !finale.hidden || endCoda) quietSince = now;
+		const t = now - quietSince - INVITE_AFTER;
+		const left = t < 0 ? [] : config.rooms.filter((r) => !visited.has(r.slug));
+		if (!left.length) {
+			invited = null;
+			return;
+		}
+		const turn = (t / INVITE_EACH) % 1;
+		invited = turn < 0.6 ? left[Math.floor(t / INVITE_EACH) % left.length].slug : null;
+		invitedLight = 0.8;
+		if (invited) hoveredLast = invited;
+	}
+
 	let down: { x: number; y: number; t: number; id: number } | null = null;
 	/** Where on a painting the visitor clicked or tapped, as a direction in the gallery: the dive starts there. */
 	let touch: { slug: RoomSlug; dir: Vec3 } | null = null;
 	look.addEventListener("pointerdown", (e) => {
-		down = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
-		interacted();
+		// a second finger makes it a pinch: nothing was tapped
+		down = down && e.pointerType === "touch" ? null : { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
 	});
 	look.addEventListener("pointermove", (e) => {
 		if (current !== "hub" || busy || !entered) return setHovered(null);
@@ -1378,11 +1633,23 @@ function start(withSound: boolean) {
 	look.addEventListener("pointerup", (e) => {
 		const d = down;
 		down = null;
-		if (!d || d.id !== e.pointerId || busy || !entered || current !== "hub") return;
-		const tap = Math.hypot(e.clientX - d.x, e.clientY - d.y) < 8 && performance.now() - d.t < 600;
+		if (!d || d.id !== e.pointerId || busy || !entered) return;
+		const tap = Math.hypot(e.clientX - d.x, e.clientY - d.y) < (e.pointerType === "touch" ? 12 : 8) && performance.now() - d.t < 600;
 		if (!tap) return;
+		if (e.pointerType === "touch") {
+			// a tap beside an open note puts it away, and does nothing else
+			if (openPoi) {
+				deafUntil = performance.now() + 500;
+				return setPoi(null);
+			}
+			if (current !== "hub") return tapWorld(e.clientX, e.clientY);
+		}
+		if (current !== "hub") return;
 		const slug = pickPainting(e.clientX, e.clientY);
-		if (!slug) return;
+		if (!slug) {
+			if (e.pointerType === "touch") touchWater(e.clientX, e.clientY, true);
+			return;
+		}
 		const rect = look.getBoundingClientRect();
 		const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
 		const ny = 1 - ((e.clientY - rect.top) / rect.height) * 2;
@@ -1490,6 +1757,17 @@ function start(withSound: boolean) {
 	// the header grows when the wordmark wraps (narrow screens, larger text): what sits under it follows
 	new ResizeObserver(() => root.style.setProperty("--bar-h", `${barBottom()}px`)).observe(bar);
 
+	// the dark at the foot of a room is as high as the words on it
+	const feet = new ResizeObserver(() => {
+		for (const card of $$(".room-card")) {
+			if (!card.offsetHeight) continue;
+			const room = card.closest<HTMLElement>(".room")!;
+			room.style.setProperty("--foot", `${room.clientHeight - card.offsetTop}px`);
+		}
+	});
+	for (const card of $$(".room-card")) feet.observe(card);
+	feet.observe(look);
+
 	/** The part of the view nothing covers: under the header, clear of the room card and of a description beside it. */
 	function clearArea() {
 		const area = { left: 0, top: barBottom(), right: look.clientWidth, bottom: look.clientHeight };
@@ -1542,7 +1820,6 @@ function start(withSound: boolean) {
 	/** One click of the look or zoom buttons: what dragging and pinching do, with a single pointer and no drag. */
 	function stepView(dYaw: number, dPitch: number, zoomFactor = 1) {
 		if (busy || !entered) return;
-		interacted();
 		// a click during a step carries on from where that step is heading
 		const base = turnGoal ?? { yaw: view.yaw, pitch: view.pitch, zoom: view.zoom };
 		turnTo({ yaw: base.yaw + dYaw, pitch: base.pitch + dPitch, zoom: base.zoom * zoomFactor }, LOOK_STEP_SECONDS);
@@ -1551,6 +1828,7 @@ function start(withSound: boolean) {
 	function setLookPad(open: boolean, save = true) {
 		lookControls.hidden = !open;
 		btnLook.setAttribute("aria-expanded", String(open));
+		setting("look")?.setAttribute("aria-pressed", String(open));
 		if (save) store.set("lookpad", open ? "on" : "off");
 	}
 	lookPad.hidden = false;
@@ -1581,10 +1859,14 @@ function start(withSound: boolean) {
 	}
 	for (const p of pois) {
 		const btn = p.querySelector<HTMLButtonElement>(".poi-dot")!;
+		// at the foot of a phone the note is where a thumb comes down: a tap on it puts it away too
+		p.querySelector(".poi-card")!.addEventListener("click", () => phone.matches && setPoi(null));
 		btn.addEventListener("click", () => setPoi(openPoi === p ? null : p));
 		btn.addEventListener("focus", () => bringIntoView(Number(p.dataset.yaw) * DEG, Number(p.dataset.pitch) * DEG));
 	}
-	look.addEventListener("pointerdown", () => setPoi(null));
+	look.addEventListener("pointercancel", () => (down = null));
+	// on a touch screen a note stays while one looks round, and goes with a tap
+	look.addEventListener("pointerdown", (e) => e.pointerType !== "touch" && setPoi(null));
 	document.addEventListener("keydown", (e) => {
 		if (e.key === "Escape" && openPoi) {
 			const btn = openPoi.querySelector<HTMLButtonElement>(".poi-dot")!;
@@ -1610,9 +1892,10 @@ function start(withSound: boolean) {
 			btn.setAttribute("aria-expanded", String(open));
 			document.getElementById(btn.getAttribute("aria-controls")!)!.hidden = !open;
 		}
-		if (save) store.set("pois", open ? "on" : "off");
+		if (save && !phone.matches) store.set("pois", open ? "on" : "off");
 	}
-	setPoiList(store.get("pois") === "on", false);
+	// where it takes half of the screen it is never open on arriving
+	setPoiList(!phone.matches && store.get("pois") === "on", false);
 	for (const btn of poiToggles) {
 		btn.addEventListener("click", () => setPoiList(btn.getAttribute("aria-expanded") !== "true"));
 	}
@@ -1627,20 +1910,27 @@ function start(withSound: boolean) {
 		const proj = currentProjection();
 		const w = look.clientWidth;
 		const h = look.clientHeight;
+		const card = document.querySelector<HTMLElement>(`#room-${current} .room-card`);
+		const words = card && !openPoi && !root.classList.contains("is-idle") ? card.getBoundingClientRect() : null;
 		for (const p of pois) {
 			if ((p.closest("article") as HTMLElement).hidden) continue;
 			let yaw = Number(p.dataset.yaw), pitch = Number(p.dataset.pitch);
 			// on the wave they go where the water and the boat take them
-			if (current === "wave" && wave && tide.t) [yaw, pitch] = wave.carry(p.querySelector(".poi-card")!.id.replace("poi-wave-", ""), yaw, pitch, tide.t);
+			const id = p.querySelector(".poi-card")!.id.split("-").pop()!;
+			if (current === "wave" && wave && tide.t) [yaw, pitch] = wave.carry(id, yaw, pitch, tide.t);
+			if (current === "rain" && crowd) [yaw, pitch] = crowd.carry(id, yaw, pitch, rainState[clocks.length]);
 			const dir = seenFrom(dirFromAngles(yaw * DEG, pitch * DEG), poiDisparity.get(p) ?? 0);
 			const ndc = project(dir, view.yaw, view.pitch, proj, rotA);
-			const visible = !!ndc && Math.abs(ndc[0]) < 0.97 && Math.abs(ndc[1]) < 0.95;
+			const inView = !!ndc && Math.abs(ndc[0]) < 0.97 && Math.abs(ndc[1]) < 0.95;
+			const x = ndc ? (ndc[0] * 0.5 + 0.5) * w : 0;
+			const y = ndc ? (0.5 - ndc[1] * 0.5) * h : 0;
+			// none shows through the words of the room
+			const under = words && openPoi !== p && x > words.left - 10 && x < words.right + 10 && y > words.top - 6;
+			const visible = inView && !under;
 			p.dataset.visible = String(visible);
 			if (!ndc) continue;
-			const x = (ndc[0] * 0.5 + 0.5) * w;
-			const y = (0.5 - ndc[1] * 0.5) * h;
 			p.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
-			if (!visible && openPoi === p) setPoi(null);
+			if (!inView && openPoi === p) setPoi(null);
 			else if (openPoi === p) placeNote(p, x, y, w, h);
 			else p.dataset.below = String(y < h * 0.4);
 		}
@@ -1658,6 +1948,24 @@ function start(withSound: boolean) {
 		const gap = NOTE_GAP_REM * parseFloat(getComputedStyle(root).fontSize);
 		const top = barBottom() + NOTE_MARGIN;
 		const bottom = h - NOTE_MARGIN;
+		if (phone.matches) {
+			// there is no room beside the point without covering what it is about: the note takes the place of the
+			// label at the foot, on whichever side (or at the top) is clear of the point
+			const cw = card.offsetWidth, height = Math.min(card.scrollHeight, bottom - top);
+			const beside = w > h;
+			let left = beside ? NOTE_MARGIN * 2 : (w - cw) / 2;
+			let cardTop = h - NOTE_MARGIN * 2 - height;
+			if (y > cardTop - gap) {
+				if (!beside) cardTop = Math.max(top, y > cardTop + height / 2 || y - gap > top + height ? top : cardTop);
+				else if (x < left + cw + gap) left = w - cw - NOTE_MARGIN * 2;
+			}
+			card.style.maxHeight = card.scrollHeight > height ? `${Math.floor(height)}px` : "";
+			card.style.setProperty("--poi-dx", `${(left - x).toFixed(1)}px`);
+			card.style.setProperty("--poi-dy", `${(cardTop - y).toFixed(1)}px`);
+			if (card.scrollHeight > card.clientHeight + 1) card.tabIndex = 0;
+			else card.removeAttribute("tabindex");
+			return;
+		}
 		const natural = card.scrollHeight;
 		const cw = card.offsetWidth;
 		const above = y - gap - top;
@@ -1742,7 +2050,6 @@ function start(withSound: boolean) {
 
 	async function navigate(target: SceneId, push = true) {
 		endCoda?.();
-		interacted();
 		if (busy) {
 			queued = { target, push };
 			return;
@@ -1757,6 +2064,7 @@ function start(withSound: boolean) {
 		setHovered(null);
 		closeAllDetails();
 		setPoi(null);
+		if (phone.matches) setPoiList(false);
 		tide.home = clocked();
 		if (push) history.pushState({ scene: target }, "", href(target));
 		const from = current;
@@ -1814,9 +2122,9 @@ function start(withSound: boolean) {
 				? `${config.hub.title}. Four paintings hang on the walls in front of you; press Tab to reach their labels and step inside.`
 				: `${sceneTitle(arrived)}: ${roomBySlug[arrived as RoomSlug].title}, by ${roomBySlug[arrived as RoomSlug].artist}.`;
 		if (ok && from !== "hub") release(from);
-		if (arrived === "hub") showHint();
-		showActHint(2400);
 		if (ok) markVisited(arrived);
+		// the words of a room are given time to be read from when they come up
+		wake(true);
 		window.setTimeout(() => {
 			if (current === arrived && !busy) upgrade(arrived);
 		}, 2500);
@@ -1936,7 +2244,8 @@ function start(withSound: boolean) {
 		fxB = fxFor(slug);
 		const fromRot = rotation(g.yaw * DEG, g.pitch * DEG);
 		const origin = (touched && project(touched, g.yaw * DEG, g.pitch * DEG, currentProjection())) || undefined;
-		await blend(slug, fromRot, { yaw: room.view.yaw * DEG, pitch: room.view.pitch * DEG }, room.entrance, 2.3, fit, zoomFor(slug), {
+		const mark = viewFor(slug);
+		await blend(slug, fromRot, { yaw: mark.yaw * DEG, pitch: mark.pitch * DEG }, room.entrance, 2.3, fit, zoomFor(slug), {
 			push: 0.86,
 			through: slug,
 			origin: origin && [clamp(origin[0], -0.7, 0.7), clamp(origin[1], -0.7, 0.7)],
@@ -1948,21 +2257,25 @@ function start(withSound: boolean) {
 	/** Room → hub: the world shrinks back into its frame on the wall. */
 	async function surface(from: RoomSlug) {
 		const g = paintingBySlug[from];
-		const room = roomBySlug[from];
 		wantArt(from);
 		view.locked = true;
 		view.stop();
 		const fit = zoomToFit(g);
 		const tex = load("hub");
-		await fly(room.view.yaw * DEG, room.view.pitch * DEG, fit);
+		const mark = viewFor(from);
+		await fly(mark.yaw * DEG, mark.pitch * DEG, fit);
 		renderer.setSlot(1, await tex);
 		fxB = fxFor("hub");
-		const fromRot = rotation(room.view.yaw * DEG, room.view.pitch * DEG);
+		const fromRot = rotation(mark.yaw * DEG, mark.pitch * DEG);
 		// back in the gallery, the camera steps away from the painting it came out of
 		await blend("hub", fromRot, { yaw: g.yaw * DEG, pitch: g.pitch * DEG }, config.hub.returning, 2.1, fit, zoomFor("hub"), { close: true, through: from });
 		view.set({ zoom: zoomFor("hub") });
 		view.locked = false;
+		// in two rows, facing one painting is facing away from the rest: step back to where all four are seen
+		if (hall === config.hub.halls.tall) turnTo({ ...hallView(), zoom: zoomFor("hub") }, 1.8);
 	}
+
+	const hallView = () => ({ yaw: hall.view.yaw * DEG, pitch: hall.view.pitch * DEG });
 
 	/** Room → room (from the guide or pager): a ripple crossfade. */
 	async function crossfade(to: SceneId) {
@@ -1971,7 +2284,7 @@ function start(withSound: boolean) {
 		const tex = await load(to);
 		renderer.setSlot(1, tex);
 		fxB = fxFor(to);
-		const v = to === "hub" ? config.hub.view : roomBySlug[to].view;
+		const v = viewFor(to);
 		const fromRot = rotation(view.yaw, view.pitch);
 		const z = view.zoom;
 		await blend(to, fromRot, { yaw: v.yaw * DEG, pitch: v.pitch * DEG }, to === "hub" ? config.hub.entrance : roomBySlug[to].entrance, 1.5, z, zoomFor(to));
@@ -2080,6 +2393,22 @@ function start(withSound: boolean) {
 	}
 
 	// ─── Settings ───────────────────────────────────────────────────────────
+	// On a phone three of the buttons are in the menu instead, in words.
+	$("#guide-settings").hidden = false;
+	setting("look")!.addEventListener("click", () => {
+		setLookPad(btnLook.getAttribute("aria-expanded") !== "true");
+		guide.close();
+	});
+	setting("gyro")!.hidden = !ViewController.gyroSupported();
+	setting("gyro")!.addEventListener("click", () => {
+		btnGyro.click();
+		guide.close();
+	});
+	setting("fullscreen")!.hidden = !document.fullscreenEnabled;
+	setting("fullscreen")!.addEventListener("click", () => {
+		btnFullscreen.click();
+		guide.close();
+	});
 	function setMotion(on: boolean, save = true) {
 		motion = on;
 		// CSS animations (the pulse around the points of interest) pause with the panorama
@@ -2129,10 +2458,8 @@ function start(withSound: boolean) {
 		btnGyro.addEventListener("click", async () => {
 			if (view.gyroActive) {
 				view.disableGyro();
-				btnGyro.setAttribute("aria-pressed", "false");
-			} else if (await view.enableGyro()) {
-				btnGyro.setAttribute("aria-pressed", "true");
-			}
+			} else await view.enableGyro();
+			for (const b of [btnGyro, setting("gyro")!]) b.setAttribute("aria-pressed", String(view.gyroActive));
 		});
 	}
 
@@ -2140,7 +2467,7 @@ function start(withSound: boolean) {
 		btnFullscreen.hidden = false;
 		const sync = () => {
 			const on = !!document.fullscreenElement;
-			btnFullscreen.setAttribute("aria-pressed", String(on));
+			for (const b of [btnFullscreen, setting("fullscreen")!]) b.setAttribute("aria-pressed", String(on));
 			btnFullscreen.setAttribute("aria-label", on ? "Exit full screen" : "Full screen");
 		};
 		sync();
@@ -2163,8 +2490,28 @@ function start(withSound: boolean) {
 	// the pointer over one, or with animation paused (nothing then changes on
 	// its own). Faded, they are still in the tab order and read out as before.
 	const IDLE_MS = 4500;
+	/** A finger rests on nothing, so there is no telling that someone is reading: they are given longer. */
+	const IDLE_TOUCH_MS = 8000;
 	let idleTimer = 0;
 	let lastWake = 0;
+	// a tap that brings the controls back, or puts a note away, must not press what comes up under the finger
+	let deafUntil = 0;
+	window.addEventListener(
+		"pointerdown",
+		(e) => {
+			deafUntil = e.pointerType === "touch" && root.classList.contains("is-idle") ? performance.now() + 900 : 0;
+		},
+		true,
+	);
+	window.addEventListener(
+		"click",
+		(e) => {
+			if (e.detail === 0 || performance.now() > deafUntil || !chrome.some((el) => el.contains(e.target as Node))) return;
+			e.preventDefault();
+			e.stopPropagation();
+		},
+		true,
+	);
 	const chrome = [bar, lookPad, ...$$(".room-card")];
 
 	function controlsInUse() {
@@ -2175,10 +2522,11 @@ function start(withSound: boolean) {
 		return chrome.some((el) => el.matches(":hover"));
 	}
 
-	function wake() {
+	function wake(arriving = false) {
 		const now = performance.now();
+		quietSince = now;
 		const idle = root.classList.contains("is-idle");
-		if (!idle && now - lastWake < 250) return;
+		if (!idle && !arriving && now - lastWake < 250) return;
 		lastWake = now;
 		if (idle) root.classList.remove("is-idle");
 		window.clearTimeout(idleTimer);
@@ -2186,10 +2534,10 @@ function start(withSound: boolean) {
 			lastWake = 0;
 			if (controlsInUse()) wake();
 			else root.classList.add("is-idle");
-		}, IDLE_MS);
+		}, coarse.matches ? IDLE_TOUCH_MS : IDLE_MS);
 	}
 	for (const type of ["pointermove", "pointerdown", "keydown", "wheel", "focusin"]) {
-		window.addEventListener(type, wake, { capture: true, passive: true });
+		window.addEventListener(type, () => wake(), { capture: true, passive: true });
 	}
 
 	// ─── Visited rooms and the closing note ─────────────────────────────────
@@ -2233,7 +2581,7 @@ function start(withSound: boolean) {
 		hint.hidden = true;
 		if (motion && !reduced()) playCoda();
 		else {
-			view.set({ yaw: config.hub.view.yaw * DEG, pitch: config.hub.view.pitch * DEG, zoom: zoomFor("hub") });
+			view.set({ yaw: hall.view.yaw * DEG, pitch: hall.view.pitch * DEG, zoom: zoomFor("hub") });
 			showClosing();
 		}
 	}
@@ -2271,7 +2619,7 @@ function start(withSound: boolean) {
 				view.zoom = lerp(z0, zoomFor("hub"), t);
 			});
 		};
-		move(config.hub.view.yaw, -30, 4.6);
+		move(hall.view.yaw, -30, 4.6);
 		const timers: number[] = [];
 		const finish = () => {
 			if (endCoda !== finish) return;
@@ -2284,7 +2632,7 @@ function start(withSound: boolean) {
 			window.setTimeout(() => (coda.hidden = true), 950);
 			busy = false;
 			if (current !== "hub") return;
-			move(config.hub.view.yaw, config.hub.view.pitch, 5).then(() => {
+			move(hall.view.yaw, hall.view.pitch, 5).then(() => {
 				if (token === turnToken) view.locked = false;
 			});
 			window.setTimeout(() => {
@@ -2308,7 +2656,7 @@ function start(withSound: boolean) {
 					line.classList.add("is-on");
 					if (i >= 4) return;
 					spreadGoal[i] = 1;
-					audio.drip(stains[i * 4], -config.hub.geometry.water, stains[i * 4 + 1], 1.6);
+					audio.drip(stains[i * 4], -hall.geometry.water, stains[i * 4 + 1], 1.6);
 				}, at),
 			);
 			timers.push(window.setTimeout(() => line.classList.add("is-gone"), at + CODA_LINE_MS - 250));
@@ -2350,31 +2698,9 @@ function start(withSound: boolean) {
 	look.addEventListener("keydown", () => (turning = false));
 
 	// ─── Hint ───────────────────────────────────────────────────────────────
-	let hasInteracted = false;
-	/** Once the camera has settled, what the room has to say. */
-	function showActHint(after: number) {
-		const room = current;
-		window.setTimeout(() => current === room && !busy && sayOnce("hint"), after);
-	}
-	function showHint() {
-		if (hasInteracted) return;
-		const coarse = matchMedia("(pointer: coarse)").matches;
-		hint.textContent = coarse ? "Swipe to look around · Tap a painting to step inside" : "Drag to look around · Select a painting to step inside";
-		hint.hidden = false;
-		hint.classList.remove("is-faded");
-		window.clearTimeout(hintTimer);
-		hintTimer = window.setTimeout(() => hint.classList.add("is-faded"), 7000);
-	}
-	function interacted() {
-		if (hasInteracted || !entered) return;
-		hasInteracted = true;
-		window.setTimeout(() => hint.classList.add("is-faded"), 1200);
-	}
-	view.onInteract = interacted;
-
 	// ─── Entering ───────────────────────────────────────────────────────────
 	const first = load(current);
-	const v0 = current === "hub" ? config.hub.view : roomBySlug[current].view;
+	const v0 = viewFor(current);
 	view.set({ yaw: v0.yaw * DEG, pitch: v0.pitch * DEG, zoom: zoomFor(current) });
 	view.locked = true;
 	updateDocument(current);
@@ -2420,7 +2746,6 @@ function start(withSound: boolean) {
 	function playPrologue(opening: Entrance): Promise<void> {
 		visit.set("prologue", "seen");
 		const lines = [...prologueEl.querySelectorAll<HTMLElement>(".prologue-line")];
-		holding = true;
 		view.set({ pitch: view.pitch + opening.pitch * DEG });
 		prologueEl.hidden = false;
 		live.textContent = lines.map((l) => l.textContent!.trim()).join(" ");
@@ -2441,7 +2766,6 @@ function start(withSound: boolean) {
 					window.setTimeout(() => (prologueEl.hidden = true), 1000);
 				}, 1300);
 				view.set({ pitch: view.pitch - opening.pitch * DEG });
-				holding = false;
 				resolve();
 			};
 			const onKey = (e: KeyboardEvent) => {
@@ -2472,7 +2796,7 @@ function start(withSound: boolean) {
 			root.classList.remove("is-intro");
 			for (const el of behindIntro) el.inert = false;
 		};
-		const opening = wantsPrologue() ? config.hub.opening : undefined;
+		const opening = wantsPrologue() ? { ...config.hub.opening!, pitch: hall.openingPitch ?? config.hub.opening!.pitch } : undefined;
 		// without a prologue the controls come in at once, over the still image if the scene is slow to load
 		if (!opening) reveal();
 		await first.catch(() => {});
@@ -2487,11 +2811,9 @@ function start(withSound: boolean) {
 		}
 		view.locked = false;
 		look.focus({ preventScroll: true });
-		if (current === "hub") window.setTimeout(showHint, opening ? 1800 : 0);
-		showActHint(3200);
 		markVisited(current);
 		needsRender = true;
-		wake();
+		wake(true);
 		window.setTimeout(() => upgrade(current), 3000);
 	}
 

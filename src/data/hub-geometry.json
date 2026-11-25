@@ -14,7 +14,8 @@
       "distance": 5.65,
       "width": 2.5294,
       "height": 1.7,
-      "centerY": 0.34
+      "centerY": 0.34,
+      "nameTop": 0.62
     },
     {
       "id": "rain",
@@ -27,7 +28,8 @@
       "distance": 5.65,
       "width": 1.3994,
       "height": 2.0,
-      "centerY": 0.34
+      "centerY": 0.34,
+      "nameTop": 0.62
     },
     {
       "id": "stillness",
@@ -40,7 +42,8 @@
       "distance": 5.625,
       "width": 2.2493,
       "height": 2.0,
-      "centerY": 0.34
+      "centerY": 0.34,
+      "nameTop": 0.62
     },
     {
       "id": "moonlight",
@@ -53,7 +56,8 @@
       "distance": 5.625,
       "width": 2.4916,
       "height": 1.85,
-      "centerY": 0.34
+      "centerY": 0.34,
+      "nameTop": 0.62
     }
   ]
 }

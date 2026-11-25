@@ -4,10 +4,11 @@
  * here). Flat colour and a thin key line, as in the print.
  *
  * At rest they stand where Hiroshige caught them. Each party has its own
- * clock: `state[i]` is how many seconds party i has been running.
+ * clock: `state[i]` is how many seconds party i has been running. The one after
+ * the last party's is how long the raft has been on its way.
  */
 
-import { Press, curve, lerp, smooth, type Drawing, type P, type Place } from "./press.ts";
+import { Press, curve, lerp, smooth, type Drawing, type P, type Place, anchorsOf, pack } from "./press.ts";
 
 // ─── Layout, as in blender/scripts/rain.py (metres; the eye over the origin) ──
 
@@ -107,6 +108,8 @@ export function bearing(i: number, seconds: number): [number, number] {
 
 /** Anchors of group FIRST + i belong to party i and are in metres about its feet; group 0 is fixed. */
 const FIRST = 1;
+const RAFT = 60, POLE = 4;
+const RAFT_AT = [-15, 74] as const;
 const BODY = 0, LEG_A = 1, LEG_B = 2, CLOTH = 3;
 
 const KEY = 0.017; // width of the key line, metres
@@ -271,7 +274,8 @@ export function draw(): Drawing {
 		press.fill([...hull, ...keel.reverse()], PAPER_DARK);
 	}
 	{
-		const [rx, ry] = [-15, 74];
+		press.group = RAFT;
+		const [rx, ry] = RAFT_AT;
 		const at = (a: number, b: number, z = 0.2): P => project(rx + 0.94 * a + 0.34 * b, ry - 0.34 * a + 0.94 * b, z);
 		for (let k = 0; k < 7; k++) {
 			const b = (k - 3) * 0.55, l0 = -8 - rnd() * 1.6, l1 = 8 + rnd() * 4;
@@ -293,7 +297,9 @@ export function draw(): Drawing {
 		const hat = curve([q(-0.5, -1.55), q(-0.1, -1.86), q(0.32, -1.56), q(-0.1, -1.48)], 3, true);
 		press.fill(hat, INK, 1.2);
 		press.fill(hat, STRAW);
-		press.stroke([q(-0.2, -1.2), q(-1.0, -0.2), q(-2.4, 0.9)], TIMBER_DARK, () => 2.6);
+		const hand = q(-0.2, -1.2);
+		press.stroke([hand, q(-1.0, -0.2), q(-2.4, 0.9)], TIMBER_DARK, () => 2.6, press.anchor(hand[0], hand[1], POLE));
+		press.group = 0;
 	}
 
 	// — the far railing, the boards, the people, the near railing —
@@ -319,13 +325,28 @@ export function draw(): Drawing {
 	return press.finish();
 }
 
+/** How far along the river the raft is (m): poled out, and carried back by the stream. */
+const drift = (seconds: number) => 7.5 * Math.sin(seconds * 0.075) + 0.5 * Math.sin(seconds * 1.5);
+
+/** Where a point marked on the print (degrees) has gone after the raft has been on its way for `seconds`. */
+export function carry(id: string, yaw: number, pitch: number, seconds: number): [number, number] {
+	if (id !== "raft") return [yaw, pitch];
+	const to = (d: number) => project(RAFT_AT[0] + 0.94 * d, RAFT_AT[1] - 0.34 * d, 0.2);
+	const a = to(0), b = to(drift(seconds));
+	const y = Math.asinh(Math.tan(pitch * DEG)) / DEG - (b[1] - a[1]) / PLACE.scale;
+	return [yaw + (b[0] - a[0]) / PLACE.scale, Math.atan(Math.sinh(y * DEG)) / DEG];
+}
+
 // ─── Time ─────────────────────────────────────────────────────────────────────
 
-/** Every vertex, in sheet pixels, when party i has been running for state[i] seconds. */
-export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
+/** Where every anchor hangs, in sheet pixels, when party i has been running for state[i] seconds. */
+export function hang(d: Drawing, state: ArrayLike<number>, out: Float32Array): Float32Array {
 	const { x: X, y: Y, group, grow, seed } = d.anchors;
 	const n = X.length;
-	const tx = new Float32Array(n), ty = new Float32Array(n), c = new Float32Array(n), s = new Float32Array(n);
+	// all that an anchor does: where it is, and how what hangs from it is turned and sized
+	const { tx, ty, c, s } = anchorsOf(d);
+	s.fill(0);
+	c.fill(0);
 	const at = PARTIES.map((p, i) => {
 		const along = place(p, state[i] ?? 0);
 		const [x, y, z] = onBridge(along, p.t);
@@ -335,8 +356,20 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 		const ends = smooth(0, 3, along - RUN_FROM) * smooth(0, 3, RUN_TO - along);
 		return { px, py, m: perMetre(x, y, z) * (p.size ?? 1.4) * ends, slope: Math.atan2(qy - py, qx - px) };
 	});
+	const river = state[PARTIES.length] ?? 0;
+	const raftFrom = project(RAFT_AT[0], RAFT_AT[1], 0.2), d1 = drift(river);
+	const raftTo = project(RAFT_AT[0] + 0.94 * d1, RAFT_AT[1] - 0.34 * d1, 0.2);
+	const bob = 0.7 * Math.sin(river * 1.1);
 	for (let i = 0; i < n; i++) {
 		const g = group[i];
+		if (g === RAFT) {
+			tx[i] = X[i] + raftTo[0] - raftFrom[0];
+			ty[i] = Y[i] + raftTo[1] - raftFrom[1] + (river ? bob + 0.006 * (X[i] - raftFrom[0]) * Math.sin(river * 0.8) : 0);
+			const lean = grow[i] === POLE ? 0.24 * Math.sin(river * 1.5) : 0;
+			c[i] = Math.cos(lean);
+			s[i] = Math.sin(lean);
+			continue;
+		}
 		if (g < FIRST) {
 			tx[i] = X[i];
 			ty[i] = Y[i];
@@ -359,12 +392,5 @@ export function pose(d: Drawing, state: ArrayLike<number>, out: Float32Array): F
 		c[i] = Math.cos(turn) * m;
 		s[i] = Math.sin(turn) * m;
 	}
-	const { vertexAnchor, offset } = d;
-	for (let v = 0, k = 0; v < vertexAnchor.length; v++, k += 2) {
-		const i = vertexAnchor[v];
-		const ox = offset[k], oy = offset[k + 1];
-		out[k] = tx[i] + c[i] * ox - s[i] * oy;
-		out[k + 1] = ty[i] + s[i] * ox + c[i] * oy;
-	}
-	return out;
+	return pack(d, out);
 }

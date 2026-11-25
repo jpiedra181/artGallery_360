@@ -107,7 +107,7 @@
 					"960": "scenes/rain/still-960.webp",
 					"1920": "scenes/rain/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRsIAAABXRUJQVlA4ILYAAACQBQCdASogABQAPsFKn0unpCKht/qoAPAYCWwAnTLqL/4Jo/BejMWe6mK/hlPLflQeojWmoAD+nvXj/jzBtszJtV8sUxHEboECy2W2K+ZgvOm/5Avy5pL6RT16eh9UcKYScao+0ajSIJX+2e93H+k+GJsffnOb7uN22PTPP1Ii75iRkFmB5s29vwRJjmqW1DdTUlwAuhBSiXBv+s9cFlRrptdGbillILqKFFD2fJqoUp2167QAAA=="
+				"lqip": "data:image/webp;base64,UklGRr4AAABXRUJQVlA4ILIAAADQBQCdASogABQAPslUpUunpKOhsBgMAPAZCWwAnTLsTU7SDv5GnYSs4vx7+Kb62/+RX4kQ9E4AAP67W4bHZM8qdUF6rmU7oO8n5rIksY4DJV4rz0hZ6JPMjj4qFY6qEcGXnqF9BoJLc3KxtdTYkwt0NsAiLtPFWXonDvtDGLVEXArx0V5vIgq+ZauRVgzEu0kyU/zZ694YwkksIa7NoRBqljrgp8KKuqUwEb6yYde6AkAA"
 			},
 			"depth": {
 				"url": "scenes/rain/depth.webp",
@@ -156,16 +156,16 @@
 			"tiers": {
 				"8k": {
 					"avif": "scenes/moonlight/pano-8k.avif",
-					"bytes": 1130851
+					"bytes": 1138698
 				},
 				"4k": {
 					"avif": "scenes/moonlight/pano-4k.avif",
-					"bytes": 550328,
+					"bytes": 564308,
 					"webp": "scenes/moonlight/pano-4k.webp"
 				},
 				"2k": {
 					"avif": "scenes/moonlight/pano-2k.avif",
-					"bytes": 172542,
+					"bytes": 177696,
 					"webp": "scenes/moonlight/pano-2k.webp"
 				}
 			},
@@ -183,11 +183,49 @@
 					"960": "scenes/moonlight/still-960.webp",
 					"1920": "scenes/moonlight/still-1920.webp"
 				},
-				"lqip": "data:image/webp;base64,UklGRroAAABXRUJQVlA4IK4AAABwBQCdASogABQAPtFUokuoJKMhsAgBABoJQBUioOhXOFZKwHmooK6p5uXHSTBH4sW0yitgANypob5PQE06yCnU5U0RIVFnrBQYzq3Xputy/bSo5KUCKMM6sEwV4/Y0QpWz9T9zEnSai6eN5bX6HikKZ+rVVFKt52Fig+zY8/n5eZHR1m9pR+4KXBSEgUP8ZRAwgdBHPwnpfCYANeTA92hBMBKUyv11PG0qp4OhgAA="
+				"lqip": "data:image/webp;base64,UklGRrgAAABXRUJQVlA4IKwAAABwBQCdASogABQAPtFUokuoJKMhsAgBABoJQBUeg9LVG4am9KCGK6pobqu/r4AFvt32J5oAANypob5PQE06yCnU5U0RIVFnrBQYzq3Xputy/bSo5IU2hQkjm5S6AiB7fvrzR4jel2o2k9wkpWaMTNg6yI5V77OVAoTmpsLqitPEcunEbLpmFlKyXHyqpPtUFGLWOWmOdb3159WGJHAO2VUqwvnPZiUFLBT0ZTAA"
 			},
 			"depth": {
 				"url": "scenes/moonlight/depth.webp",
 				"near": 1.341
+			}
+		},
+		"hub_tall": {
+			"tiers": {
+				"8k": {
+					"avif": "scenes/hub_tall/pano-8k.avif",
+					"bytes": 259395
+				},
+				"4k": {
+					"avif": "scenes/hub_tall/pano-4k.avif",
+					"bytes": 180550,
+					"webp": "scenes/hub_tall/pano-4k.webp"
+				},
+				"2k": {
+					"avif": "scenes/hub_tall/pano-2k.avif",
+					"bytes": 55826,
+					"webp": "scenes/hub_tall/pano-2k.webp"
+				}
+			},
+			"mask": "scenes/hub_tall/mask.webp",
+			"still": {
+				"widths": [
+					720,
+					1200
+				],
+				"avif": {
+					"720": "scenes/hub_tall/still-720.avif",
+					"1200": "scenes/hub_tall/still-1200.avif"
+				},
+				"webp": {
+					"720": "scenes/hub_tall/still-720.webp",
+					"1200": "scenes/hub_tall/still-1200.webp"
+				},
+				"lqip": "data:image/webp;base64,UklGRqgBAABXRUJQVlA4IJwBAACQCQCdASogAEUAPsVWnkunpSKhszVd+PAYiWcAyn709aaRIjoB5HH8OoSvUQYOJwclCv9SIuhhZH5ORMC5xLN02XK35gOraRonFwiDjSCx9FpgWsoAAP792tnBKCHBJ++CXXnL6aNWGPjSFlxZ59JN71JeCdD/iAbZkCyqhYeZvhAfzt2rcQuuDyso+O+hYUKxuNDEOm1fiOWTNVWMOgSnoWBIt8yxJOPd6f55/n3k9ywHIMqs5R/bFMomnUD8v+KWI3IniJIytBNX+gnwLNFa3MXv7alxpdAfuYKmStBF4osc33D+irwRUX09ZlN6ScQMnnbChd1lM1tNwBPOsMHgPuG43VnXhvpJKx9Sap70qiBkZ5u/vNjtg4sjW2HbTv1yW5eyXerMAveE/7fgDQpoUpaxDeUjRALExtThE6u4k4LCtUIzt4wwPdXcBwgf1e3/fNPdcpwfyuMa3sw1RHLlgfHIJnc+vqZQtwiNUBmixGfbBRJT12SPKXHeSrvmrGOClkoKxEOlJjwSFGjyTZBzr8k9+dh+dEimAAAA"
+			},
+			"depth": {
+				"url": "scenes/hub_tall/depth.webp",
+				"near": 1.58
 			}
 		}
 	},

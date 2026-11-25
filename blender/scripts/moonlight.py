@@ -397,13 +397,14 @@ def rowboat(col, coll):
         warm = np.clip(-v, 0, 1)
         c = c * (light * gain * 0.8)[:, None] + col.pal.pick("fire", count) * (0.16 * warm * np.abs(v) ** 3)[:, None] + col.pal.pick("haze", count) * (0.1 * np.clip(v, 0, 1) ** 4)[:, None]
         put(hull(uu, np.repeat(v[:, None], K, 1)), w, c)
-    for sg in (-1, 1):  # the rails, lit on top
-        for count, w, name, z in ((160, 0.085, "wood", 0.02), (90, 0.04, "haze", 0.045)):
+    for sg in (-1, 1):  # the rails: wood, worn, its edge wandering as a loaded brush does, and touches of light along it
+        for count, w, name, z, value, gain, stray in ((210, 0.1, "wood", 0.015, 0.45, 0.62, 0.035), (120, 0.06, "wood", 0.03, 0.75, 0.85, 0.03), (26, 0.032, "wood", 0.045, 0.95, 1.25, 0.012), (12, 0.026, "haze", 0.05, 0.6, 0.8, 0.01)):
             u = rng.random(count)
-            uu = np.clip(u[:, None] + np.linspace(-0.05, 0.05, K), 0, 0.998)
+            uu = np.clip(u[:, None] + np.linspace(-0.5, 0.5, K) * rng.uniform(0.05, 0.13, count)[:, None], 0, 0.998)
             p = hull(uu, np.full_like(uu, sg * 1.0))
-            p[..., 2] += z
-            put(p, w, col.pal.pick(name, count, 0.6) * (0.95 if name == "wood" else 0.62))
+            p[..., 0] += sg * rng.normal(0, stray, count)[:, None] + sg * 0.02 * np.sin(uu * 37 + rng.random(count)[:, None] * 6)
+            p[..., 2] += z + rng.normal(0, stray * 0.6, count)[:, None]
+            put(p, w * rng.uniform(0.6, 1.25, count), col.pal.pick(name, count, value) * gain, 0.85)
     for y, z, d in ((1.35, 0.3, 0.26), (-0.75, 0.3, 0.3)):  # thwarts
         u0 = (y + 2.1) / 5.2
         half = float(hull(np.array(u0), np.array(1.0))[0])

@@ -54,6 +54,8 @@ export interface FrameState {
 	drips: Float32Array; // 8 × vec4
 	/** What rides the water of the scene: 7 × (yaw, pitch of its waterline, half width, amplitude). */
 	rocks: Float32Array;
+	/** Where the pointer keeps the rain off: yaw, height over the horizon (tan), how much. */
+	shelter: Float32Array;
 	/** Pigment in the water of the gallery: 4 × (x, z, radius, strength), 4 × linear rgb, and how far it glows. */
 	stains: Float32Array;
 	stainInks: Float32Array;
@@ -211,7 +213,7 @@ export class PanoRenderer {
 		const names = [
 			"uPano", "uMask", "uDepth", "uRot", "uRotOther", "uEye", "uIsB",
 			"uAspect", "uTanHalf", "uTanQuarter", "uStereo", "uTime", "uMix", "uRipple", "uCenter", "uInk", "uClose",
-			"uDrips", "uRock",
+			"uDrips", "uRock", "uShelter",
 			"uMatch", "uMatchB", "uMatchPlane", "uMatchY", "uMatchGrid",
 			"uArt", "uStain", "uStainInk", "uStainGlow",
 			"uSheet", "uSheetRect", "uSheetOn",
@@ -366,6 +368,7 @@ export class PanoRenderer {
 		gl.uniform1f(L.uClose, f.close ? 1 : 0);
 		gl.uniform4fv(L.uDrips, f.drips);
 		gl.uniform4fv(L.uRock, f.rocks);
+		gl.uniform4fv(L.uShelter, f.shelter);
 		const m = crossing ? f.match : null;
 		gl.uniform1f(L.uMatch, m?.amount ?? 0);
 		if (m) {
