@@ -11,8 +11,6 @@ mask pass (R channel), and stains it with the pigments of the rooms visited.
 Mask pass
   R  water surface
 (Painting hover/hit-testing is analytic in the viewer, from hub-geometry.json.)
-
-hub_tall.py hangs the same room for tall screens.
 """
 
 import math
@@ -328,8 +326,6 @@ def build(preview=True):
             "width": round(w, 4),
             "height": round(h, 4),
             "centerY": round(hang - EYE, 4),
-            # top of the line its name is lettered on, over the water
-            "nameTop": round(names, 3),
         })
 
         # Ceiling spot aimed at the canvas centre

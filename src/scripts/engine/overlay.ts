@@ -38,6 +38,14 @@ void main() {
 }
 `;
 
+/** A drawing is only read once made: made ahead, while nothing else is going on, it costs the way in nothing. */
+const drawings = new WeakMap<Sheet, Drawing>();
+export function drawingOf(sheet: Sheet): Drawing {
+	let d = drawings.get(sheet);
+	if (!d) drawings.set(sheet, (d = sheet.draw()));
+	return d;
+}
+
 const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 const nextFrame = () => new Promise<number>((r) => requestAnimationFrame(r));
 
@@ -76,7 +84,7 @@ export class Overlay {
 		];
 		this.width = width;
 		this.height = Math.round((width * (PLACE.bottom - PLACE.top)) / (PLACE.right - PLACE.left));
-		this.drawing = sheet.draw();
+		this.drawing = drawingOf(sheet);
 		this.rows = Math.ceil(this.drawing.anchors.x.length / 256);
 		this.hung = new Float32Array(this.rows * 256 * 4);
 	}

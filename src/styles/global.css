@@ -1113,6 +1113,7 @@ html.immersive body {
 
 .intro-actions .btn {
 	min-height: 3.25rem;
+	min-width: 11rem;
 	padding-inline: 1.4rem;
 	font-size: var(--step-0);
 }
@@ -1312,16 +1313,6 @@ html.immersive body {
 
 .spot[data-side="right"] {
 	text-align: right;
-}
-
-/* in two rows the words stand in the narrow band between one frame and the next */
-.spots[data-hang="tall"] .spot {
-	padding: 0.1em 0.36em 0.3em;
-	line-height: 1;
-}
-
-.spots[data-hang="tall"] .spot-artist {
-	display: none;
 }
 
 /* with no pointer to light them up, they are underlined as any words one can press */
@@ -2603,6 +2594,13 @@ html:not(.immersive) .poi-card {
 
 @media (max-width: 22.5em) {
 	.wordmark-room {
+		display: none;
+	}
+}
+
+/* a phone gets the name, one line and the way in: the reading pages are in the menu inside */
+@media (max-width: 40em), (max-height: 30em) and (orientation: landscape) {
+	.immersive :is(.intro-links, .intro-bill, .intro-hint) {
 		display: none;
 	}
 }

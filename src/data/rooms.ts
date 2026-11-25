@@ -135,8 +135,6 @@ export const hub = {
 	} satisfies SceneEffects,
 	/** Two paintings whole, and the others coming into view at the sides. */
 	view: { yaw: 0, pitch: -3, zoom: 1.24 },
-	/** Tall screens have a hang of their own, in two rows (blender/scripts/hub_tall.py): it opens just wide enough for all four. */
-	tall: { view: { yaw: 0, pitch: 5, zoom: 1 }, openingPitch: -36 },
 	/** First steps into the gallery: up from the reflection in the water to the painting. */
 	entrance: { yaw: 0, pitch: -17, dolly: 0.7, seconds: 5 } satisfies Entrance,
 	/** The same after the prologue, which is read looking down at the water. */

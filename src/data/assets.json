@@ -189,44 +189,6 @@
 				"url": "scenes/moonlight/depth.webp",
 				"near": 1.341
 			}
-		},
-		"hub_tall": {
-			"tiers": {
-				"8k": {
-					"avif": "scenes/hub_tall/pano-8k.avif",
-					"bytes": 259395
-				},
-				"4k": {
-					"avif": "scenes/hub_tall/pano-4k.avif",
-					"bytes": 180550,
-					"webp": "scenes/hub_tall/pano-4k.webp"
-				},
-				"2k": {
-					"avif": "scenes/hub_tall/pano-2k.avif",
-					"bytes": 55826,
-					"webp": "scenes/hub_tall/pano-2k.webp"
-				}
-			},
-			"mask": "scenes/hub_tall/mask.webp",
-			"still": {
-				"widths": [
-					720,
-					1200
-				],
-				"avif": {
-					"720": "scenes/hub_tall/still-720.avif",
-					"1200": "scenes/hub_tall/still-1200.avif"
-				},
-				"webp": {
-					"720": "scenes/hub_tall/still-720.webp",
-					"1200": "scenes/hub_tall/still-1200.webp"
-				},
-				"lqip": "data:image/webp;base64,UklGRqgBAABXRUJQVlA4IJwBAACQCQCdASogAEUAPsVWnkunpSKhszVd+PAYiWcAyn709aaRIjoB5HH8OoSvUQYOJwclCv9SIuhhZH5ORMC5xLN02XK35gOraRonFwiDjSCx9FpgWsoAAP792tnBKCHBJ++CXXnL6aNWGPjSFlxZ59JN71JeCdD/iAbZkCyqhYeZvhAfzt2rcQuuDyso+O+hYUKxuNDEOm1fiOWTNVWMOgSnoWBIt8yxJOPd6f55/n3k9ywHIMqs5R/bFMomnUD8v+KWI3IniJIytBNX+gnwLNFa3MXv7alxpdAfuYKmStBF4osc33D+irwRUX09ZlN6ScQMnnbChd1lM1tNwBPOsMHgPuG43VnXhvpJKx9Sap70qiBkZ5u/vNjtg4sjW2HbTv1yW5eyXerMAveE/7fgDQpoUpaxDeUjRALExtThE6u4k4LCtUIzt4wwPdXcBwgf1e3/fNPdcpwfyuMa3sw1RHLlgfHIJnc+vqZQtwiNUBmixGfbBRJT12SPKXHeSrvmrGOClkoKxEOlJjwSFGjyTZBzr8k9+dh+dEimAAAA"
-			},
-			"depth": {
-				"url": "scenes/hub_tall/depth.webp",
-				"near": 1.58
-			}
 		}
 	},
 	"art": {

@@ -85,6 +85,7 @@ const NO_SHEET = [0, 1, 0, 1];
 const NO_EYE = new Float32Array([0, 0, 0, 1]);
 
 const nextFrame = () => new Promise<number>((r) => requestAnimationFrame(r));
+const PHONE = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
 
 interface Program {
 	program: WebGLProgram;
@@ -113,6 +114,11 @@ export class PanoRenderer {
 	art: WebGLTexture | null = null;
 	private renderScale = 1;
 	private pixelRatio = 1;
+	/** CSS size of the canvas, given by whoever watches it (reading it on every frame forces a layout). */
+	private cssWidth = 0;
+	private cssHeight = 0;
+	/** Scaled down for a moment, on top of the adaptive scale (a crossing on a phone). */
+	momentScale = 1;
 
 	constructor(canvas: HTMLCanvasElement) {
 		this.canvas = canvas;
@@ -248,7 +254,8 @@ export class PanoRenderer {
 		gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
 		gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
 
-		const rows = opts.stripRows ?? Math.max(128, Math.round((1 << 22) / width)); // ≈16 MB per strip
+		// ≈16 MB per strip; 4 on a phone, whose driver copies more slowly
+		const rows = Math.min(opts.stripRows ?? Infinity, Math.max(128, Math.round((PHONE ? 1 << 20 : 1 << 22) / width)));
 		if (rows >= height) {
 			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, width, height, format, gl.UNSIGNED_BYTE, bitmap);
 		} else {
@@ -297,11 +304,19 @@ export class PanoRenderer {
 		this.renderScale = scale;
 	}
 
+	setSize(width: number, height: number) {
+		this.cssWidth = width;
+		this.cssHeight = height;
+	}
+
 	/** Resize the drawing buffer; returns true if it changed. */
 	resize(): boolean {
-		this.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-		const w = Math.max(1, Math.round(this.canvas.clientWidth * this.pixelRatio * this.renderScale));
-		const h = Math.max(1, Math.round(this.canvas.clientHeight * this.pixelRatio * this.renderScale));
+		// a phone's screen is dense enough that a painting needs no more than one and a half pixels to its point
+		this.pixelRatio = Math.min(window.devicePixelRatio || 1, PHONE ? 1.5 : 2);
+		if (!this.cssWidth) this.setSize(this.canvas.clientWidth, this.canvas.clientHeight);
+		const scale = this.pixelRatio * this.renderScale * this.momentScale;
+		const w = Math.max(1, Math.round(this.cssWidth * scale));
+		const h = Math.max(1, Math.round(this.cssHeight * scale));
 		if (this.canvas.width !== w || this.canvas.height !== h) {
 			this.canvas.width = w;
 			this.canvas.height = h;

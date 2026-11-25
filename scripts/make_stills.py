@@ -14,7 +14,6 @@ import sys
 
 import cv2
 import numpy as np
-from math import atan, pi, radians, tan
 
 sys.path.insert(0, os.path.dirname(__file__))
 from drawing import hang  # noqa: E402
@@ -35,29 +34,6 @@ VIEWS = {
     "moonlight": (0, 4, 92),
 }
 
-# the gallery for tall screens, as a phone opens on it: pitch, zoom (hallZoom in app.ts), and the tallest shape of phone
-TALL = {"hub_tall": (5, 1.0)}
-TALL_SIZE = (1200, 2600)
-TALL_SOFTEN = 0.62
-
-
-def tall_view(pano, pitch, zoom):
-    """The viewer's own projection (engine/math.ts): part straight, part stereographic."""
-    w, h = TALL_SIZE
-    fov = min(min(2 * atan(tan(radians(38)) * h / w), radians(122)) * zoom, radians(125))
-    t = min(max((fov - radians(85)) / radians(40), 0), 1)
-    stereo = max(t * t * (3 - 2 * t) * 0.75, TALL_SOFTEN)
-    x, y = np.meshgrid(((np.arange(w) + 0.5) / w * 2 - 1) * w / h, 1 - (np.arange(h) + 0.5) / h * 2)
-    r = np.hypot(x, y)
-    theta = (1 - stereo) * np.arctan(r * tan(fov / 2)) + stereo * 2 * np.arctan(r * tan(fov / 4))
-    s = np.sin(theta) / np.maximum(r, 1e-6)
-    x, y, z = x * s, y * s, np.cos(theta)
-    c, n = np.cos(radians(pitch)), np.sin(radians(pitch))
-    y, z = y * c + z * n, z * c - y * n
-    ph, pw = pano.shape[:2]
-    u = (np.arctan2(x, z) / (2 * pi) + 0.5) * pw - 0.5
-    v = (0.5 - np.arcsin(np.clip(y, -1, 1)) / pi) * ph - 0.5
-    return cv2.remap(pano, u.astype(np.float32), v.astype(np.float32), cv2.INTER_AREA, borderMode=cv2.BORDER_WRAP)
 
 
 def load(scene):
@@ -98,10 +74,6 @@ def main(scenes):
             continue
         if scene in ("wave", "rain"):
             pano = hang(pano, os.path.join(RENDERS, scene))  # what moves is drawn, not rendered
-        if scene in TALL:
-            cv2.imwrite(os.path.join(RENDERS, scene, "still.png"), tall_view(pano, *TALL[scene]))
-            print(f"{scene}: tall still written")
-            continue
         yaw, pitch, fov = VIEWS[scene]
         still = perspective(pano, yaw, pitch, fov, 1920, 1200)
         cv2.imwrite(os.path.join(RENDERS, scene, "still.png"), still)
@@ -111,4 +83,4 @@ def main(scenes):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:] or [*VIEWS, *TALL])
+    main(sys.argv[1:] or list(VIEWS))

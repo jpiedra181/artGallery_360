@@ -34,6 +34,7 @@ export class Soundscape {
 	private wet!: GainNode;
 	private reverb!: ConvolverNode;
 	private buffers!: { white: AudioBuffer; pink: AudioBuffer; brown: AudioBuffer };
+	private made: Promise<void> = Promise.resolve();
 	private running: Running | null = null;
 	private scene: SoundId = "hub";
 	enabled = false;
@@ -45,7 +46,10 @@ export class Soundscape {
 		if (session) session.type = "playback";
 		if (!this.ctx) this.create();
 		const ctx = this.ctx!;
-		if (ctx.state !== "running") await ctx.resume();
+		// resumed inside the tap that asked for it, before anything is awaited
+		const resumed = ctx.state !== "running" ? ctx.resume() : Promise.resolve();
+		await this.made;
+		await resumed;
 		this.enabled = true;
 		const t = ctx.currentTime;
 		this.master.gain.cancelScheduledValues(t);
@@ -146,7 +150,7 @@ export class Soundscape {
 		env.gain.exponentialRampToValueAtTime(0.22, t + seconds * peak);
 		env.gain.exponentialRampToValueAtTime(0.0001, t + seconds + 0.4);
 		n.connect(bp).connect(env).connect(out);
-		n.start(t, rand(0, 4));
+		n.start(t, rand(0, 3.5));
 		n.stop(t + seconds + 0.5);
 
 		// the body of the water: a low note falling away (in) or rising (out)
@@ -330,12 +334,18 @@ export class Soundscape {
 		this.wet = ctx.createGain();
 		this.wet.gain.value = 0.35;
 		this.reverb.connect(this.wet).connect(this.master);
-		this.buffers = {
-			white: this.noise("white"),
-			pink: this.noise("pink"),
-			brown: this.noise("brown"),
-		};
-		this.reverb.buffer = this.impulse(3.2, 2.6);
+		// some 20 seconds of noise to compute: one piece between frames, so that the way in does not stall on it
+		this.made = (async () => {
+			const between = () => new Promise<void>((r) => ("requestIdleCallback" in window ? requestIdleCallback(() => r(), { timeout: 120 }) : setTimeout(r, 16)));
+			const made: Partial<Record<"white" | "pink" | "brown", AudioBuffer>> = {};
+			for (const kind of ["white", "pink", "brown"] as const) {
+				await between();
+				made[kind] = this.noise(kind);
+			}
+			this.buffers = made as Soundscape["buffers"];
+			await between();
+			this.reverb.buffer = this.impulse(3.2, 2.6);
+		})();
 		ctx.listener.positionX?.setValueAtTime(0, 0);
 		// a phone call or another app takes the sound away; the next touch brings it back
 		const wake = () => {
@@ -347,7 +357,7 @@ export class Soundscape {
 
 	private noise(kind: "white" | "pink" | "brown") {
 		const ctx = this.ctx!;
-		const length = ctx.sampleRate * 6;
+		const length = ctx.sampleRate * 4;
 		const buf = ctx.createBuffer(2, length, ctx.sampleRate);
 		for (let ch = 0; ch < 2; ch++) {
 			const d = buf.getChannelData(ch);
@@ -401,7 +411,7 @@ export class Soundscape {
 		const s = this.ctx!.createBufferSource();
 		s.buffer = this.buffers[kind];
 		s.loop = true;
-		s.start(this.ctx!.currentTime, rand(0, 5));
+		s.start(this.ctx!.currentTime, rand(0, 3.5));
 		return s;
 	}
 
@@ -492,7 +502,7 @@ export class Soundscape {
 		ne.gain.setValueAtTime(level * 0.5, t);
 		ne.gain.exponentialRampToValueAtTime(0.0001, t + 0.015);
 		n.connect(bp).connect(ne).connect(out);
-		n.start(t, rand(0, 5));
+		n.start(t, rand(0, 3.5));
 		n.stop(t + 0.03);
 	}
 
@@ -507,7 +517,7 @@ export class Soundscape {
 		env.gain.linearRampToValueAtTime(level, when + 0.001);
 		env.gain.exponentialRampToValueAtTime(0.0001, when + length);
 		n.connect(bp).connect(env).connect(this.panner(...pos, 1.5, true)).connect(bus);
-		n.start(when, rand(0, 5));
+		n.start(when, rand(0, 3.5));
 		n.stop(when + length + 0.02);
 	}
 
@@ -534,7 +544,7 @@ export class Soundscape {
 		env.gain.exponentialRampToValueAtTime(level, t + attack);
 		env.gain.exponentialRampToValueAtTime(0.0001, t + attack + release);
 		n.connect(lp).connect(env).connect(this.panner(...pos, 6)).connect(bus);
-		n.start(t, rand(0, 4));
+		n.start(t, rand(0, 3.5));
 		n.stop(t + attack + release + 0.1);
 	}
 

@@ -8,7 +8,6 @@
 import Icon from "./Icon.astro";
 import assets from "../data/assets.json";
 import hubGeometry from "../data/hub-geometry.json";
-import hubTallGeometry from "../data/hub-tall-geometry.json";
 import registration from "../data/registration.json";
 import { credits, finale, hub, prologue, rooms, site, type RoomSlug } from "../data/rooms";
 
@@ -35,7 +34,6 @@ const srcset = (set: Record<string, string>) =>
 const current = route === "hub" ? null : rooms.find((r) => r.slug === route)!;
 const posterScene = scenes[route] ?? scenes.hub;
 const poster = posterScene?.still ?? null;
-const posterTall = route === "hub" ? (scenes.hub_tall?.still ?? null) : null;
 
 const artAlt: Record<RoomSlug, string> = {
 	wave: "Woodblock print: a towering blue wave curls over three long boats, its crest breaking into claw-like foam; Mount Fuji, small and snow-capped, sits in the distance.",
@@ -55,11 +53,8 @@ const clientConfig = {
 		opening: hub.opening,
 		returning: hub.returning,
 		pigment: hub.pigment,
-		// two hangs of the same room: four walls in a row, and two rows for tall screens
-		halls: {
-			wide: { scene: "hub", view: hub.view, geometry: hubGeometry },
-			tall: { scene: "hub_tall", view: hub.tall.view, openingPitch: hub.tall.openingPitch, geometry: hubTallGeometry },
-		},
+		view: hub.view,
+		geometry: hubGeometry,
 	},
 	rooms: rooms.map((r) => ({
 		slug: r.slug,
@@ -90,12 +85,6 @@ const clientConfig = {
 			{
 				poster && (
 					<picture class="poster" id="poster">
-						{posterTall && (
-							<>
-								<source media="(max-aspect-ratio: 17/20)" type="image/avif" srcset={srcset(posterTall.avif)} sizes="100vw" />
-								<source media="(max-aspect-ratio: 17/20)" type="image/webp" srcset={srcset(posterTall.webp)} sizes="100vw" />
-							</>
-						)}
 						<source type="image/avif" srcset={srcset(poster.avif)} sizes="100vw" />
 						<source type="image/webp" srcset={srcset(poster.webp)} sizes="100vw" />
 						<img
@@ -256,8 +245,7 @@ const clientConfig = {
 				<div class="intro-enter">
 					<!-- shown from the first paint in immersive mode (no layout shift); hidden in the document -->
 					<div class="intro-actions" id="intro-actions">
-						<button class="btn btn-primary" type="button" data-enter="sound">Enter with sound</button>
-						<button class="btn btn-quiet" type="button" data-enter="silent">Enter in silence</button>
+						<button class="btn btn-primary" type="button" data-enter>Enter</button>
 					</div>
 					<div class="intro-progress" id="intro-progress">
 						<div
