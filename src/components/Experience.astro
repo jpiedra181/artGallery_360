@@ -140,6 +140,49 @@ const clientConfig = {
 			</ul>
 		</nav>
 
+		<!-- The label of the painting in front, as a museum hangs one beside each work, with what can be done from
+		     here: step inside it, or go on to the next. The script shows the one for the painting in view. -->
+		<section class="room hall" id="hall" data-route="hub" hidden={route !== "hub"} aria-label="The painting in front of you">
+			<div class="room-card hall-card">
+				{
+					rooms.map((room, i) => {
+						const prev = rooms[(i + rooms.length - 1) % rooms.length];
+						const next = rooms[(i + 1) % rooms.length];
+						return (
+							<div class="hall-label" data-room={room.slug} style={`--pigment: ${room.pigment}`} hidden={i !== 0}>
+								<p class="room-no">
+									<span>
+										Room {room.numeral} — {room.theme}
+									</span>
+									<span class="swatch" aria-hidden="true" />
+								</p>
+								<p class="room-title">{room.title}</p>
+								<p class="room-by">
+									{room.artist}, {room.date}
+								</p>
+								<div class="room-actions hall-actions">
+									<a class="btn btn-primary hall-enter" href={href(room.slug)} data-nav={room.slug}>
+										<span>
+											Step inside<span class="sr-only"> {room.title}</span>
+										</span>
+										<Icon name="arrow-right" />
+									</a>
+									<span class="hall-turn">
+										<button class="btn btn-quiet" type="button" data-hall-step="-1" aria-label={`Previous painting: ${prev.theme}`}>
+											<Icon name="arrow-left" />
+										</button>
+										<button class="btn btn-quiet" type="button" data-hall-step="1" aria-label={`Next painting: ${next.theme}`}>
+											<Icon name="arrow-right" />
+										</button>
+									</span>
+								</div>
+							</div>
+						);
+					})
+				}
+			</div>
+		</section>
+
 		<!-- one click or tap per step, for anyone who cannot drag or pinch. Folded behind one button so the
 		     view stays clear; the script shows that button in immersive mode and remembers whether the pad is open -->
 		<div class="look-pad" id="look-pad" role="region" aria-label="Look and zoom controls" hidden>

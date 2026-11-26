@@ -58,6 +58,8 @@ export interface Entrance {
 	pitch: number;
 	dolly: number;
 	seconds: number;
+	/** How much wider than the opening view it starts (1, or left out: as wide). */
+	zoom?: number;
 }
 
 export interface Room {

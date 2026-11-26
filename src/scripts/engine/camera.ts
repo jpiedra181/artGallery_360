@@ -59,6 +59,11 @@ export class ViewController implements ViewState {
 	/** When true, user input is ignored (scripted camera moves). */
 	locked = false;
 	onInteract: (() => void) | null = null;
+	/**
+	 * Where a drag let go should come to rest, given the heading when the finger went down, the heading now
+	 * and the speed of the fling (rad/s): a yaw, or null to let it glide freely. The pitch eases to `pitch`.
+	 */
+	snap: ((from: number, yaw: number, speed: number) => { yaw: number; pitch: number } | null) | null = null;
 
 	private el: HTMLElement;
 	private vyaw = 0;
@@ -70,6 +75,8 @@ export class ViewController implements ViewState {
 	private keyHold = 0;
 	private gyro: { offset: number | null; alpha: number; beta: number; gamma: number; ready: boolean } | null = null;
 	private dirty = true;
+	private downYaw = 0;
+	private settle: { yaw: number; pitch: number } | null = null;
 
 	constructor(el: HTMLElement) {
 		this.el = el;
@@ -111,6 +118,7 @@ export class ViewController implements ViewState {
 		if (v.pitch !== undefined) this.pitch = clamp(v.pitch, MIN_PITCH, MAX_PITCH);
 		if (v.zoom !== undefined) this.zoom = v.zoom;
 		this.vyaw = this.vpitch = 0;
+		this.settle = null;
 		// with motion control on, a scripted move re-aims the heading (as dragging does)
 		// instead of being pulled back to where the device points
 		if (this.gyro) this.gyro.offset = null;
@@ -119,6 +127,7 @@ export class ViewController implements ViewState {
 
 	stop() {
 		this.vyaw = this.vpitch = 0;
+		this.settle = null;
 		this.pointers.clear();
 		this.pinch = null;
 		this.keys.clear();
@@ -142,7 +151,23 @@ export class ViewController implements ViewState {
 			changed = true;
 		}
 
-		if (this.pointers.size === 0 && (Math.abs(this.vyaw) > 1e-4 || Math.abs(this.vpitch) > 1e-4)) {
+		if (this.settle && this.pointers.size === 0) {
+			// a spring, critically damped, that takes over the fling where the finger left it
+			const w = 8.5;
+			const off = angleDelta(this.yaw, this.settle.yaw);
+			const offP = this.settle.pitch - this.pitch;
+			this.vyaw += (w * w * off - 2 * w * this.vyaw) * dt;
+			this.vpitch += (w * w * offP - 2 * w * this.vpitch) * dt;
+			this.yaw += this.vyaw * dt;
+			this.pitch += this.vpitch * dt;
+			if (Math.abs(off) < 2e-4 && Math.abs(offP) < 2e-4 && Math.abs(this.vyaw) < 2e-3 && Math.abs(this.vpitch) < 2e-3) {
+				this.yaw += off;
+				this.pitch += offP;
+				this.vyaw = this.vpitch = 0;
+				this.settle = null;
+			}
+			changed = true;
+		} else if (this.pointers.size === 0 && (Math.abs(this.vyaw) > 1e-4 || Math.abs(this.vpitch) > 1e-4)) {
 			this.yaw += this.vyaw * dt;
 			this.pitch += this.vpitch * dt;
 			const decay = Math.exp(-dt * 3.2);
@@ -219,6 +244,8 @@ export class ViewController implements ViewState {
 		this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 		this.vyaw = this.vpitch = 0;
 		this.samples = [];
+		if (this.pointers.size === 1) this.downYaw = this.settle?.yaw ?? this.yaw;
+		this.settle = null;
 		if (this.pointers.size === 2) {
 			const [a, b] = [...this.pointers.values()];
 			this.pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.zoom };
@@ -262,6 +289,15 @@ export class ViewController implements ViewState {
 				const sp = this.samples.reduce((s, v) => s + v.dp, 0);
 				this.vyaw = clamp(sy / Math.max(span, 0.016), -6, 6);
 				this.vpitch = clamp(sp / Math.max(span, 0.016), -4, 4);
+			}
+		}
+		if (this.pointers.size === 0 && this.snap && !this.gyro && !this.locked) {
+			this.settle = this.snap(this.downYaw, this.yaw, this.vyaw);
+			// the spring starts from the fling across, not up or down
+			if (this.settle) {
+				this.vpitch = 0;
+				// and no faster than lands without going past
+				this.vyaw = clamp(this.vyaw, -2.5, 2.5);
 			}
 		}
 		this.samples = [];

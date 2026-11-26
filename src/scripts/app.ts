@@ -22,6 +22,7 @@ import {
 	rotation,
 	screenRay,
 	radiansPerPixel,
+	stereoFor,
 	toWorld,
 	type Projection,
 	type Vec3,
@@ -57,6 +58,8 @@ interface Entrance {
 	pitch: number;
 	dolly: number; // metres travelled forwards
 	seconds: number;
+	/** How much wider than the opening view it starts (1: as wide). */
+	zoom?: number;
 }
 
 interface RoomConfig {
@@ -327,6 +330,8 @@ function start(withSound: boolean) {
 	let lookH = look.clientHeight;
 	const spots = $$<HTMLAnchorElement>(".spot");
 	const spotsNav = $("#spots");
+	const hall = $("#hall");
+	const hallLabels = $$(".hall-label");
 	const intro = $("#intro");
 	const hint = $("#hint");
 	const live = $("#live");
@@ -412,9 +417,9 @@ function start(withSound: boolean) {
 
 	const reduced = () => reducedMotionQuery.matches;
 	/** How close a scene opens (1 is the widest comfortable view). */
-	const zoomFor = (id: SceneId) => (id === "hub" ? config.hub.view.zoom : (viewFor(id).zoom ?? 1));
+	const zoomFor = (id: SceneId) => (id === "hub" ? hallZoom() : (viewFor(id).zoom ?? 1));
 	/** Where one looks on coming into a scene. */
-	const viewFor = (id: SceneId) => (id === "hub" ? config.hub.view : (isTall() && roomBySlug[id].tall) || roomBySlug[id].view);
+	const viewFor = (id: SceneId) => (id === "hub" ? hallView() : (isTall() && roomBySlug[id].tall) || roomBySlug[id].view);
 	const href = (id: SceneId) => (id === "hub" ? config.base : `${config.base}${id}/`);
 	const sceneTitle = (id: SceneId) => (id === "hub" ? config.hub.title : `Room ${roomBySlug[id].numeral} — ${roomBySlug[id].theme}`);
 
@@ -1020,7 +1025,8 @@ function start(withSound: boolean) {
 		sway.x += (sway.goalX - sway.x) * k;
 		sway.y += (sway.goalY - sway.y) * k;
 		updateInvitation(dt);
-		const hoverTarget = current !== "hub" || trans ? 0 : hovered ? 1 : invited ? invitedLight : 0;
+		const hoverTarget = current !== "hub" || trans ? 0 : hovered ? 1 : invited || picked ? invitedLight : 0;
+		updateHall();
 		const hoverChanging = Math.abs(hoverAmount - hoverTarget) > 0.001;
 		hoverAmount += (hoverTarget - hoverAmount) * Math.min(1, dt * (hovered ? 8 : 3));
 
@@ -1396,6 +1402,127 @@ function start(withSound: boolean) {
 	/** Half the width of the frame of a painting (m). */
 	const frameHalf = (g: PaintingGeometry) => g.width / 2 + (g.centerY - Math.tan(g.frameBottom * DEG) * config.hub.geometry.room - g.height / 2);
 
+	// ─── Standing in front of a painting ────────────────────────────────────
+	// A wide screen holds the four paintings at once. A tall one could only hold them small, so there the
+	// visitor stands in front of one at a time, close, as in a museum: a swipe turns to the next and comes
+	// to rest on it, and its label at the foot says what it is and that one can step inside.
+	/** The paintings in the order they hang, left to right. */
+	const hung = [...config.hub.geometry.paintings].sort((a, b) => a.yaw - b.yaw);
+	/** How much of the width of a tall screen the widest frame takes. */
+	const HALL_ACROSS = 0.84;
+	/** Beyond this from the nearest painting (radians), a swipe is free to look round the rest of the room. */
+	const HALL_REACH = 32 * DEG;
+	/** Chosen with the label's arrows on a wide screen, where the pointer does not decide. */
+	let picked: RoomSlug | null = null;
+
+	function hallZoom() {
+		if (!isTall()) return config.hub.view.zoom;
+		const a = aspect();
+		const widest = Math.max(...hung.map((g) => Math.atan(frameHalf(g) / g.distance)));
+		const across = (2 * widest) / HALL_ACROSS;
+		return (2 * Math.atan(Math.tan(across / 2) / a)) / ViewController.baseFov(a);
+	}
+
+	/** On a tall screen, the pitch (degrees) that puts the frames and their names between the header and the label. */
+	function hallPitch() {
+		const a = aspect();
+		const { room, water } = config.hub.geometry;
+		const top = Math.max(...hung.map((g) => g.top));
+		const bottom = Math.atan((LETTERS_TOP - water - 2 * LETTERS) / room) / DEG;
+		const fovV = clamp(ViewController.baseFov(a) * hallZoom(), 18 * DEG, 125 * DEG);
+		const proj: Projection = { fovV, stereo: Math.max(stereoFor(fovV), HALL_SOFTEN), aspect: a };
+		const clearTop = barBottom();
+		const card = cardRects.get("hub");
+		const clearBottom = card && card.height ? card.top : lookH * 0.76;
+		const ray = screenRay(0, 1 - (clearTop + clearBottom) / lookH, proj);
+		return (top + bottom) / 2 - Math.atan2(ray[1], Math.hypot(ray[0], ray[2])) / DEG;
+	}
+
+	const firstUnvisited = () => (config.rooms.find((r) => !visited.has(r.slug)) ?? config.rooms[0]).slug;
+
+	/** The painting nearest to a heading, and how far from it (radians). */
+	function frontOf(yaw: number) {
+		let best = hung[0], off = Infinity;
+		for (const g of hung) {
+			const d = Math.abs(angleDelta(yaw, g.yaw * DEG));
+			if (d < off) [best, off] = [g, d];
+		}
+		return { g: best, off };
+	}
+
+	function hallView(): { yaw: number; pitch: number; zoom: number } {
+		if (!isTall()) return config.hub.view;
+		// out of a room, in front of its painting; otherwise the one in front, or the first not yet entered
+		const slug = current !== "hub" ? current : entered ? frontOf(view.yaw).g.id : firstUnvisited();
+		return { yaw: paintingBySlug[slug].yaw, pitch: hallPitch(), zoom: hallZoom() };
+	}
+
+	/** The painting the label is about. */
+	function hallSubject(): RoomSlug {
+		if (isTall()) return frontOf(view.yaw).g.id;
+		return hovered ?? picked ?? invited ?? hoveredLast ?? firstUnvisited();
+	}
+
+	let hallShown: RoomSlug | null = null;
+	function updateHall() {
+		if (current !== "hub" || hall.hidden) return;
+		const slug = hallSubject();
+		if (slug === hallShown) return;
+		// focus stays on the label's arrows as it changes under them
+		const focused = hallLabels.find((l) => l.contains(document.activeElement));
+		const step = focused && (document.activeElement as HTMLElement).dataset.hallStep;
+		hallShown = slug;
+		for (const l of hallLabels) l.hidden = l.dataset.room !== slug;
+		if (step) hallLabels.find((l) => l.dataset.room === slug)?.querySelector<HTMLElement>(`[data-hall-step="${step}"]`)?.focus({ preventScroll: true });
+	}
+
+	// a swipe on a tall screen comes to rest on a painting: the next one if it went far or fast enough
+	view.snap = (from, yaw, speed) => {
+		if (current !== "hub" || busy || trans || !entered || !isTall()) return null;
+		const pitch = hallPitch() * DEG;
+		const rest = (g: PaintingGeometry) => ({ yaw: yaw + angleDelta(yaw, g.yaw * DEG), pitch });
+		// the swipe takes over where the entrance was turning
+		entranceTurns = false;
+		const start = frontOf(from);
+		const landing = yaw + speed * 0.25;
+		if (start.off > HALL_REACH) {
+			const near = frontOf(landing);
+			return near.off < HALL_REACH ? rest(near.g) : null;
+		}
+		const moved = angleDelta(start.g.yaw * DEG, landing);
+		const i = hung.indexOf(start.g) + (Math.abs(moved) > 9 * DEG ? Math.sign(moved) : 0);
+		// past the first or the last, the rest of the room: the door, the dark
+		if (i < 0 || i >= hung.length) return Math.abs(moved) > 30 * DEG ? null : rest(start.g);
+		return rest(hung[i]);
+	};
+
+	/** The label's arrows: turn to the painting before or after, round the room. */
+	function stepHall(by: number) {
+		if (current !== "hub" || busy || !entered) return;
+		const i = hung.findIndex((g) => g.id === hallSubject());
+		const g = hung[(i + by + hung.length) % hung.length];
+		if (isTall()) {
+			turnTo({ yaw: view.yaw + angleDelta(view.yaw, g.yaw * DEG), pitch: hallPitch() * DEG, zoom: zoomFor("hub") }, 0.9);
+			return;
+		}
+		picked = hoveredLast = g.id;
+		prefetchScene(g.id);
+		wantArt(g.id);
+		bringIntoView(g.yaw * DEG, g.frameBottom * DEG);
+	}
+	for (const b of $$<HTMLButtonElement>("[data-hall-step]")) b.addEventListener("click", () => stepHall(Number(b.dataset.hallStep)));
+
+	// turning the phone: from one painting close to the four at once, and back
+	let wasTall = isTall();
+	window.addEventListener("resize", () => {
+		const tall = isTall();
+		if (tall === wasTall) return;
+		wasTall = tall;
+		if (current !== "hub" || busy || !entered) return;
+		const v = hallView();
+		turnTo({ yaw: view.yaw + angleDelta(view.yaw, v.yaw * DEG), pitch: v.pitch * DEG, zoom: v.zoom }, 0.6);
+	});
+
 	/** Where 3D transforms are drawn without their perspective (WebKit with no compositing), they come out askew. */
 	const hasPerspective = (() => {
 		const probe = document.createElement("div");
@@ -1462,7 +1589,7 @@ function start(withSound: boolean) {
 			const cx = whole ? (q[0]![0] + q[2]![0]) / 2 : -1, cy = whole ? (q[0]![1] + q[2]![1]) / 2 : -1;
 			s.dataset.visible = String(whole && cx > -0.1 * w && cx < 1.1 * w && cy > -40 && cy < h + 40);
 			if (whole) s.style.transform = toQuad(size.w, size.h, q as [number, number][]);
-			s.classList.toggle("is-hot", (hovered ?? invited) === s.dataset.room);
+			s.classList.toggle("is-hot", (hovered ?? picked ?? invited) === s.dataset.room);
 		}
 	}
 
@@ -1490,6 +1617,7 @@ function start(withSound: boolean) {
 		look.classList.toggle("is-pointing", !!slug);
 		if (!slug) return;
 		hoveredLast = slug;
+		picked = null;
 		prefetchScene(slug);
 		wantArt(slug);
 	}
@@ -1504,7 +1632,25 @@ function start(withSound: boolean) {
 	const invite = { phase: "wait" as "wait" | "turn" | "lit" | "gap", t: 0, next: 0, slug: null as RoomSlug | null };
 	/** Seconds of quiet before the first, how long each is lit, the pause between, and how fast the view turns (1/s). */
 	const INVITE = { after: 2.6, lit: 1.4, gap: 0.9, turn: 0.55 };
+	let lastFront: RoomSlug | null = null;
 	function updateInvitation(dt: number) {
+		if (isTall()) {
+			// in front of one painting at a time: that one is lit, and its detail comes in, but not while turning
+			const free = current === "hub" && !busy && !trans && entered && !down && finale.hidden && !endCoda;
+			const front = free ? frontOf(view.yaw) : null;
+			invited = front && front.off < 12 * DEG ? front.g.id : null;
+			if (invited) {
+				hoveredLast = invited;
+				wantArt(invited);
+				if (invited !== lastFront) prefetchScene(invited);
+				lastFront = invited;
+			}
+			return;
+		}
+		if (picked) {
+			invited = null;
+			return;
+		}
 		const now = performance.now();
 		if (current !== "hub" || busy || trans || !entered || !motion || hovered || down || !finale.hidden || endCoda || reduced()) quietSince = now;
 		if (now - quietSince < 50) {
@@ -1640,10 +1786,11 @@ function start(withSound: boolean) {
 	// added to the view in steps, so dragging during it simply joins in.
 	let entranceToken = 0;
 	let entranceTurns = false;
+	let entranceZooms = false;
 
 	/** A scripted turn or a navigation takes over the direction; the last of the travel still plays out. */
 	function holdEntrance() {
-		entranceTurns = false;
+		entranceTurns = entranceZooms = false;
 	}
 
 	/**
@@ -1654,13 +1801,15 @@ function start(withSound: boolean) {
 	function startEntrance(e: Entrance | undefined, heading: number) {
 		const token = ++entranceToken;
 		dolly = 0;
-		entranceTurns = false;
+		entranceTurns = entranceZooms = false;
 		if (!e || !motion || reduced()) return;
 		dollyDir = [Math.sin(heading), 0, Math.cos(heading)];
-		entranceTurns = true;
+		entranceTurns = entranceZooms = true;
 		let left = 1;
 		view.yaw += e.yaw * DEG;
 		view.pitch += e.pitch * DEG;
+		const zoomBy = Math.log(e.zoom ?? 1);
+		view.zoom *= Math.exp(zoomBy);
 		dolly = e.dolly;
 		// quick while the scene is still opening, then a long, soft landing
 		animate(e.seconds, (t) => 1 - Math.pow(1 - t, 2.5), (t) => {
@@ -1670,6 +1819,9 @@ function start(withSound: boolean) {
 				view.yaw += e.yaw * DEG * (now - left);
 				view.pitch += e.pitch * DEG * (now - left);
 			}
+			// coming closer is a step forwards, in steps too: a pinch on the way joins in, and a swipe that
+			// takes over the direction leaves it to come the rest of the way
+			if (entranceZooms) view.zoom *= Math.exp(zoomBy * (now - left));
 			left = now;
 			dolly = e.dolly * now;
 		});
@@ -1987,10 +2139,11 @@ function start(withSound: boolean) {
 		if (target === current) return;
 		busy = true;
 		cancelTurn();
+		picked = null;
 		root.classList.remove("is-arriving");
 		root.classList.add("is-moving");
 		closeFinale(false);
-		spotsNav.inert = true;
+		spotsNav.inert = hall.inert = true;
 		setHovered(null);
 		closeAllDetails();
 		setPoi(null);
@@ -2041,7 +2194,7 @@ function start(withSound: boolean) {
 			window.clearTimeout(arrivingTimer);
 			arrivingTimer = window.setTimeout(() => root.classList.remove("is-arriving"), 1700);
 		}
-		spotsNav.inert = false;
+		spotsNav.inert = hall.inert = false;
 		updateDocument(arrived);
 		audio.setScene(soundFor(arrived));
 		needsRender = true;
@@ -2198,7 +2351,9 @@ function start(withSound: boolean) {
 		fxB = fxFor("hub");
 		const fromRot = rotation(mark.yaw * DEG, mark.pitch * DEG);
 		// back in the gallery, the camera steps away from the painting it came out of
-		await blend("hub", fromRot, { yaw: g.yaw * DEG, pitch: g.pitch * DEG }, config.hub.returning, 2.1, fit, zoomFor("hub"), { close: true, through: from });
+		// on a tall screen it stays in front of it, with its label under it
+		const pitch = isTall() ? hallPitch() : g.pitch;
+		await blend("hub", fromRot, { yaw: g.yaw * DEG, pitch: pitch * DEG }, config.hub.returning, 2.1, fit, zoomFor("hub"), { close: true, through: from });
 		view.set({ zoom: zoomFor("hub") });
 		view.locked = false;
 	}
@@ -2233,7 +2388,7 @@ function start(withSound: boolean) {
 			room ? `Room ${room.numeral}, ${room.theme}: 360° view inside ${room.title}` : `${config.hub.title}: 360° view of the gallery`,
 		);
 		hubSection.hidden = id !== "hub";
-		spotsNav.hidden = id !== "hub";
+		spotsNav.hidden = hall.hidden = id !== "hub";
 		for (const s of roomSections) s.hidden = s.dataset.route !== id;
 		for (const a of $$<HTMLAnchorElement>(".guide-rooms a")) {
 			if (a.dataset.nav === id) a.setAttribute("aria-current", "page");
@@ -2507,7 +2662,8 @@ function start(withSound: boolean) {
 		hint.hidden = true;
 		if (motion && !reduced()) playCoda();
 		else {
-			view.set({ yaw: config.hub.view.yaw * DEG, pitch: config.hub.view.pitch * DEG, zoom: zoomFor("hub") });
+			const home = hallView();
+			view.set({ yaw: home.yaw * DEG, pitch: home.pitch * DEG, zoom: home.zoom });
 			showClosing();
 		}
 	}
@@ -2535,17 +2691,19 @@ function start(withSound: boolean) {
 		live.textContent = lines.map((l) => l.textContent!.trim()).join(" ");
 		downpour = time + 22;
 		nextDrip = time;
-		const move = (yaw: number, pitch: number, seconds: number) => {
+		const move = (yaw: number, pitch: number, zoom: number, seconds: number) => {
 			const y0 = view.yaw, p0 = view.pitch, z0 = view.zoom;
 			const dy = angleDelta(y0, yaw * DEG);
 			return animate(seconds, easeInOutSine, (t) => {
 				if (token !== turnToken) return;
 				view.yaw = y0 + dy * t;
 				view.pitch = lerp(p0, pitch * DEG, t);
-				view.zoom = lerp(z0, zoomFor("hub"), t);
+				view.zoom = lerp(z0, zoom, t);
 			});
 		};
-		move(config.hub.view.yaw, -30, 4.6);
+		// down to the water wide, where the four colours meet; back up to the painting in front
+		const home = hallView();
+		move(home.yaw, -30, config.hub.view.zoom, 4.6);
 		const timers: number[] = [];
 		const finish = () => {
 			if (endCoda !== finish) return;
@@ -2558,7 +2716,7 @@ function start(withSound: boolean) {
 			window.setTimeout(() => (coda.hidden = true), 950);
 			busy = false;
 			if (current !== "hub") return;
-			move(config.hub.view.yaw, config.hub.view.pitch, 5).then(() => {
+			move(home.yaw, home.pitch, home.zoom, 5).then(() => {
 				if (token === turnToken) view.locked = false;
 			});
 			window.setTimeout(() => {
@@ -2672,7 +2830,7 @@ function start(withSound: boolean) {
 	function playPrologue(opening: Entrance): Promise<void> {
 		visit.set("prologue", "seen");
 		const lines = [...prologueEl.querySelectorAll<HTMLElement>(".prologue-line")];
-		view.set({ pitch: view.pitch + opening.pitch * DEG, yaw: view.yaw + opening.yaw * DEG });
+		view.set({ pitch: view.pitch + opening.pitch * DEG, yaw: view.yaw + opening.yaw * DEG, zoom: view.zoom * (opening.zoom ?? 1) });
 		prologueEl.hidden = false;
 		live.textContent = lines.map((l) => l.textContent!.trim()).join(" ");
 		$("#prologue-skip").focus({ preventScroll: true });
@@ -2691,7 +2849,7 @@ function start(withSound: boolean) {
 					prologueEl.classList.add("is-leaving");
 					window.setTimeout(() => (prologueEl.hidden = true), 1000);
 				}, 1300);
-				view.set({ pitch: view.pitch - opening.pitch * DEG, yaw: view.yaw - opening.yaw * DEG });
+				view.set({ pitch: view.pitch - opening.pitch * DEG, yaw: view.yaw - opening.yaw * DEG, zoom: view.zoom / (opening.zoom ?? 1) });
 				resolve();
 			};
 			const onKey = (e: KeyboardEvent) => {
@@ -2722,8 +2880,9 @@ function start(withSound: boolean) {
 			root.classList.remove("is-intro");
 			for (const el of behindIntro) el.inert = false;
 		};
-		// a narrow screen holds two of the four paintings: coming in, the view goes along the walls to them
-		const along = (e: Entrance | undefined) => (e && isTall() ? { ...e, yaw: SWEEP } : e);
+		// a tall screen stands in front of one painting: coming in, the view goes along the walls, wide, and
+		// comes up to it
+		const along = (e: Entrance | undefined) => (e && isTall() ? { ...e, yaw: SWEEP, zoom: config.hub.view.zoom / hallZoom() } : e);
 		const opening = wantsPrologue() ? along(config.hub.opening) : undefined;
 		// while the prologue is read; without it, once the camera has come in
 		window.setTimeout(prepareDrawings, opening ? 1200 : 6500);
